@@ -1,0 +1,772 @@
+/*
+ * Obsidian Music's stylesheet: Apple's Liquid Glass design language
+ * (Human Interface Guidelines, WWDC25 "Meet Liquid Glass" and "Get to know
+ * the new design system"), applied to a Windows desktop app.
+ *
+ * - Glass is the navigation layer only (sidebar, toolbar, player, menus),
+ *   floating above content; content itself never gets glass, and glass is
+ *   never stacked on glass.
+ * - Shapes are capsules or concentric: an inner radius is its container's
+ *   radius minus the padding between them.
+ * - Hierarchy comes from layout and type, not decoration: bolder,
+ *   left-aligned titles, title-case section headers, generous rows.
+ * - It adapts: Windows' "Transparency effects" off, contrast themes and
+ *   reduced motion are all honoured, plus Apple's Clear / Tinted choice.
+ *
+ * SF Pro is licensed for Apple platforms only; Inter (with its optical-size
+ * axis, so large titles use the Display cut) is the closest open typeface.
+ */
+@layer theme, base, components, utilities;
+
+@import 'tailwindcss/theme.css' layer(theme);
+@import 'tailwindcss/utilities.css' layer(utilities);
+
+@custom-variant hover (&:hover);
+
+:root {
+  color-scheme: dark;
+  --font-family: 'Inter Variable', 'Inter', 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
+
+  /* Type scale (font: weight size/line-height), after Apple's macOS styles. */
+  --header-emphasized: 700 32px / 38px var(--font-family);
+  --large-title-emphasized: 700 26px / 32px var(--font-family);
+  --title-1-emphasized: 700 22px / 28px var(--font-family);
+  --title-2: 400 17px / 22px var(--font-family);
+  --title-2-emphasized: 650 17px / 22px var(--font-family);
+  --title-3: 400 15px / 20px var(--font-family);
+  --title-3-emphasized: 600 15px / 20px var(--font-family);
+  --body: 400 13px / 17px var(--font-family);
+  --body-emphasized: 600 13px / 17px var(--font-family);
+  --body-reduced: 400 14px / 20px var(--font-family);
+  --callout: 400 12px / 16px var(--font-family);
+  --callout-medium: 500 12px / 16px var(--font-family);
+  --callout-emphasized: 600 12px / 16px var(--font-family);
+  --subhead-emphasized: 600 11px / 14px var(--font-family);
+  --footnote: 400 11px / 14px var(--font-family);
+
+  /* Layout. The sidebar floats, inset from the window's edges. */
+  --nav-width: 248px;
+  --inset: 8px;
+  --content-left: calc(var(--nav-width) + var(--inset) * 2);
+  --nav-rail: 60px;
+  --titlebar-height: 44px;
+  --body-gutter: 36px;
+  --player-pill-height: 60px;
+  --player-bottom-offset: 16px;
+  --side-panel-width: 330px;
+
+  /* Concentric radii: inner = outer − padding (sidebar 20 − inset 8 = items 12). */
+  --radius-panel: 20px;
+  --radius-control: 12px;
+  --radius-card: 18px;
+  --radius-artwork-small: 6px;
+  --radius-artwork-medium: 8px;
+  --radius-artwork-large: 12px;
+  --radius-nav-item: 12px;
+  --radius-track-row: 10px;
+
+  /* Motion: Apple's springy ease-outs. */
+  --ease-out-panel: cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-spring: cubic-bezier(0.34, 1.36, 0.64, 1);
+  --duration-panel: 0.35s;
+
+  /* Colour: the dark appearance. */
+  --pageBG: #0e0e10;
+  --pageBG-rgb: 14 14 16;
+  --systemPrimary: #ffffffeb;
+  --systemSecondary: #ffffffa3;
+  --systemTertiary: #ffffff66;
+  --systemQuaternary: #ffffff1a;
+  --systemQuinary: #ffffff0d;
+
+  --keyColor: #fa586a;
+  --keyColor-rgb: 250 88 106;
+  --keyColorBG: #fa233b;
+
+  --labelDivider: #ffffff17;
+  --navSidebarSelectedState: #ffffff1a;
+  --tracklistHoverColor: #ffffff0f;
+  --genericJoeColor: #2a2a2d;
+  --modalScrimColor: #00000080;
+  --searchBarBorderColor: #ffffff1f;
+  --button-pill-color: #000000;
+  --button-pill-background-color: #ffffffeb;
+  --dialogShadowColor: #0000008c;
+  --headerMaterial: #0e0e10cc;
+
+  --containerInnerStroke: #ffffff;
+  --containerInnerStrokeAlpha: 0.1;
+  --skeleton-fill: #ffffff12;
+  --skeleton-shimmer: #ffffff14;
+
+  /*
+   * Liquid Glass, regular variant (dark). "Clear" is thinner, for controls
+   * over bright media; menus and sidebars are "thicker" (larger elements
+   * scatter more light and cast deeper shadows).
+   */
+  --glass-fill: rgb(38 38 42 / 0.4);
+  --glass-fill-thick: rgb(40 40 44 / 0.6);
+  --glass-fill-clear: rgb(255 255 255 / 0.1);
+  --glass-blur: 20px;
+  --glass-blur-thick: 36px;
+  --glass-saturate: 1.9;
+  --glass-rim: rgb(255 255 255 / 0.32);
+  --glass-rim-soft: rgb(255 255 255 / 0.07);
+  --glass-shadow: 0 8px 28px rgb(0 0 0 / 0.32), 0 1px 3px rgb(0 0 0 / 0.22);
+  --glass-shadow-thick: 0 18px 48px rgb(0 0 0 / 0.42), 0 2px 6px rgb(0 0 0 / 0.25);
+  --glassMaterialBackground: var(--glass-fill);
+  --menuBG: var(--glass-fill-thick);
+}
+
+/* Compact sidebar: pages start after the icon rail; the full sidebar opens over them. */
+[data-sidebar='compact'] {
+  --content-left: calc(var(--nav-rail) + var(--inset) * 2);
+}
+
+/* Apple's "Tinted" Liquid Glass (iOS/macOS 26.1): frostier, more opaque. */
+[data-glass='tinted'] {
+  --glass-fill: rgb(30 30 33 / 0.78);
+  --glass-fill-thick: rgb(32 32 36 / 0.88);
+  --glass-fill-clear: rgb(28 28 31 / 0.62);
+  --glass-rim: rgb(255 255 255 / 0.22);
+}
+
+/* Windows: Settings › Personalisation › Colours › Transparency effects off. */
+@media (prefers-reduced-transparency: reduce) {
+  :root {
+    --glass-fill: rgb(32 32 36 / 0.96);
+    --glass-fill-thick: rgb(34 34 38 / 0.98);
+    --glass-fill-clear: rgb(30 30 34 / 0.92);
+    --glass-blur: 0px;
+    --glass-blur-thick: 0px;
+  }
+}
+
+/* Increased contrast: predominantly black, with a contrasting border. */
+@media (prefers-contrast: more) {
+  :root {
+    --glass-fill: #000000f2;
+    --glass-fill-thick: #000000;
+    --glass-fill-clear: #000000e6;
+    --glass-rim: #ffffffb3;
+    --glass-rim-soft: #ffffff80;
+    --systemSecondary: #ffffffcc;
+    --systemTertiary: #ffffff99;
+    --labelDivider: #ffffff55;
+  }
+}
+
+/* Track-row density (Settings › Layout). */
+:root {
+  --row-h: 56px;
+  --row-art: 40px;
+}
+[data-density='compact'] {
+  --row-h: 44px;
+  --row-art: 32px;
+}
+
+/* The full-screen player: labels for a dark, coloured backdrop. */
+[data-immersive] {
+  --keyColor: #ffffff;
+  --keyColor-rgb: 255 255 255;
+  --systemPrimary: #ffffffeb;
+  --systemSecondary: #ffffffa3;
+  --systemTertiary: #ffffff70;
+  --systemQuaternary: #ffffff2e;
+  --systemQuinary: #ffffff1a;
+}
+
+@theme {
+  --spacing: 4px;
+  --ease-*: initial;
+  --ease-in: ease-in;
+  --ease-out: ease-out;
+  --ease-in-out: ease-in-out;
+  --default-transition-timing-function: ease;
+  --default-transition-duration: 0.15s;
+
+  --breakpoint-*: initial;
+  --breakpoint-md: 1100px;
+  --breakpoint-lg: 1400px;
+
+  --background-image-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+
+  --animate-*: initial;
+  --animate-menu-in: menu-in 0.32s cubic-bezier(0.34, 1.36, 0.64, 1);
+  --animate-slide-in: slide-in var(--duration-panel) var(--ease-out-panel) forwards;
+  --animate-fade: fade 0.15s ease-out;
+  --animate-fade-in: fade-in 0.4s ease;
+  --animate-enter: enter 0.3s var(--ease-out-panel);
+  --animate-toast: toast 0.45s cubic-bezier(0.34, 1.36, 0.64, 1);
+  --animate-spin: spin 1s linear infinite;
+  --animate-shimmer: shimmer 1.6s ease-in-out infinite;
+  --animate-eq: eq 0.9s ease-in-out infinite alternate;
+  --animate-rise: rise 0.6s var(--ease-out-panel) both;
+  --animate-pop: pop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+  --animate-glyph: glyph 0.32s cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* Content arriving: up from a little below, as it settles into place. */
+  @keyframes rise {
+    from {
+      opacity: 0;
+      transform: translateY(14px) scale(0.985);
+    }
+  }
+  /* The heart: a quick swell past full size, then settling. */
+  @keyframes pop {
+    30% {
+      transform: scale(1.35);
+    }
+    60% {
+      transform: scale(0.9);
+    }
+  }
+  /* Play ⇄ pause: the new glyph grows in where the old one was. */
+  @keyframes glyph {
+    from {
+      opacity: 0;
+      transform: scale(0.55) rotate(-8deg);
+    }
+  }
+
+  @keyframes menu-in {
+    from {
+      opacity: 0;
+      transform: scale(0.82);
+    }
+    40% {
+      opacity: 1;
+    }
+  }
+  @keyframes slide-in {
+    from {
+      transform: translateX(100%);
+    }
+  }
+  @keyframes fade {
+    from {
+      opacity: 0;
+    }
+  }
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+    }
+  }
+  @keyframes enter {
+    from {
+      opacity: 0;
+      transform: scale(1.02);
+    }
+  }
+  @keyframes toast {
+    from {
+      opacity: 0;
+      transform: translateY(12px) scale(0.98);
+    }
+  }
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+  @keyframes shimmer {
+    to {
+      transform: translateX(100%);
+    }
+  }
+  @keyframes backdrop-drift {
+    from {
+      transform: translate(-50%, -50%) rotate(0deg) scale(1);
+    }
+    50% {
+      transform: translate(-50%, -50%) rotate(180deg) scale(1.15);
+    }
+    to {
+      transform: translate(-50%, -50%) rotate(360deg) scale(1);
+    }
+  }
+  @keyframes eq {
+    from {
+      transform: scaleY(0.25);
+    }
+    to {
+      transform: scaleY(1);
+    }
+  }
+}
+
+@theme inline {
+  --color-*: initial;
+  --color-transparent: transparent;
+  --color-current: currentColor;
+  --color-white: #fff;
+  --color-black: #000;
+  --color-page: var(--pageBG);
+  --color-primary: var(--systemPrimary);
+  --color-secondary: var(--systemSecondary);
+  --color-tertiary: var(--systemTertiary);
+  --color-quaternary: var(--systemQuaternary);
+  --color-quinary: var(--systemQuinary);
+  --color-key: var(--keyColor);
+  --color-key-bg: var(--keyColorBG);
+  --color-divider: var(--labelDivider);
+  --color-glass: var(--glassMaterialBackground);
+  --color-header-material: var(--headerMaterial);
+  --color-nav-selected: var(--navSidebarSelectedState);
+  --color-tracklist-hover: var(--tracklistHoverColor);
+  --color-joe: var(--genericJoeColor);
+  --color-scrim: var(--modalScrimColor);
+  --color-search-border: var(--searchBarBorderColor);
+  --color-pill: var(--button-pill-color);
+  --color-pill-bg: var(--button-pill-background-color);
+  --color-menu: var(--menuBG);
+  --color-skeleton: var(--skeleton-fill);
+  --color-skeleton-shimmer: var(--skeleton-shimmer);
+
+  --radius-*: initial;
+  --radius-panel: var(--radius-panel);
+  --radius-control: var(--radius-control);
+  --radius-card: var(--radius-card);
+  --radius-artwork-sm: var(--radius-artwork-small);
+  --radius-artwork-md: var(--radius-artwork-medium);
+  --radius-artwork-lg: var(--radius-artwork-large);
+  --radius-nav: var(--radius-nav-item);
+  --radius-row: var(--radius-track-row);
+  --radius-pill: 1000px;
+  --radius-full: 9999px; /* a capsule on any shape (50% would make bars into ellipses) */
+
+  --ease-panel: var(--ease-out-panel);
+
+  --shadow-*: initial;
+  --shadow-glass: var(--glass-shadow);
+  --shadow-dialog: 0 20px 60px var(--dialogShadowColor);
+  --shadow-art: 0 8px 30px #00000073;
+
+  --type-header-emphasized: var(--header-emphasized);
+  --type-large-title-emphasized: var(--large-title-emphasized);
+  --type-title-1-emphasized: var(--title-1-emphasized);
+  --type-title-2: var(--title-2);
+  --type-title-2-emphasized: var(--title-2-emphasized);
+  --type-title-3: var(--title-3);
+  --type-title-3-emphasized: var(--title-3-emphasized);
+  --type-body: var(--body);
+  --type-body-emphasized: var(--body-emphasized);
+  --type-body-reduced: var(--body-reduced);
+  --type-callout: var(--callout);
+  --type-callout-medium: var(--callout-medium);
+  --type-callout-emphasized: var(--callout-emphasized);
+  --type-subhead-emphasized: var(--subhead-emphasized);
+  --type-footnote: var(--footnote);
+}
+
+/* `type-body` (a token) or `type-[700_19px/24px]` (a one-off), as the font shorthand. */
+@utility type-* {
+  --tw-sort: font-family;
+  font: --value(--type-*);
+  font: --value([*]) var(--font-family);
+}
+
+/*
+ * Liquid Glass. Elements using these must be positioned (relative, absolute
+ * or fixed): the specular rim is drawn by ::after.
+ *
+ *   glass            regular: bars, the player, small controls
+ *   glass-thick      larger surfaces (sidebar, menus, dialogs): more blur, deeper shadow
+ *   glass-clear      over bright media (the full-screen player), with its own dimming
+ *   glass-prominent  the one primary action, tinted with the accent
+ */
+@utility glass {
+  isolation: isolate;
+  background-color: var(--glass-fill);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate)) brightness(1.06);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate)) brightness(1.06);
+  /* Depth like a drop of liquid: light pooling under the top edge, a soft caustic
+     glow in the lower body (never a hard line), and the shadow beneath. */
+  box-shadow:
+    inset 0 10px 18px -14px rgb(255 255 255 / 0.22),
+    inset 0 -12px 20px -16px rgb(255 255 255 / 0.14),
+    var(--glass-shadow);
+  &::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    padding: 1px;
+    /* The specular rim: light catching the top-left edge, fading round the body. */
+    background: linear-gradient(180deg, var(--glass-rim) 0%, var(--glass-rim-soft) 34%, transparent 62%, rgb(255 255 255 / 0.05) 100%);
+    -webkit-mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+    mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+  }
+}
+
+@utility glass-thick {
+  isolation: isolate;
+  background-color: var(--glass-fill-thick);
+  -webkit-backdrop-filter: blur(var(--glass-blur-thick)) saturate(var(--glass-saturate)) brightness(1.04);
+  backdrop-filter: blur(var(--glass-blur-thick)) saturate(var(--glass-saturate)) brightness(1.04);
+  box-shadow: inset 0 12px 22px -16px rgb(255 255 255 / 0.16), inset 0 -14px 24px -18px rgb(255 255 255 / 0.1), var(--glass-shadow-thick);
+  &::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    padding: 1px;
+    background: linear-gradient(180deg, var(--glass-rim) 0%, var(--glass-rim-soft) 26%, transparent 60%, rgb(255 255 255 / 0.04) 100%);
+    -webkit-mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+    mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+  }
+}
+
+@utility glass-clear {
+  isolation: isolate;
+  background-color: var(--glass-fill-clear);
+  -webkit-backdrop-filter: blur(8px) saturate(1.25) brightness(1.16);
+  backdrop-filter: blur(8px) saturate(1.25) brightness(1.16);
+  /* Mostly light, not shadow: a lit top edge, a faint inner glow, a soft drop. */
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.22),
+    inset 0 0 14px rgb(255 255 255 / 0.05),
+    0 4px 16px rgb(0 0 0 / 0.14);
+  &::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    padding: 1px;
+    background: linear-gradient(180deg, rgb(255 255 255 / 0.5), rgb(255 255 255 / 0.1) 35%, transparent 62%, rgb(255 255 255 / 0.08));
+    -webkit-mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+    mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+  }
+}
+
+/* Tinted glass: the accent mapped through the glass, as coloured glass does. */
+@utility glass-prominent {
+  isolation: isolate;
+  color: #fff;
+  background-color: rgb(var(--keyColor-rgb) / 0.82);
+  -webkit-backdrop-filter: blur(16px) saturate(1.6);
+  backdrop-filter: blur(16px) saturate(1.6);
+  box-shadow: 0 6px 22px rgb(var(--keyColor-rgb) / 0.32), 0 1px 3px rgb(0 0 0 / 0.25);
+  &::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    padding: 1px;
+    background: linear-gradient(180deg, rgb(255 255 255 / 0.6), rgb(255 255 255 / 0.12) 40%, transparent 64%, rgb(255 255 255 / 0.1));
+    -webkit-mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+    mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+  }
+}
+
+/*
+ * Elastic glass (lib/motion.ts sets the vars): the element leans toward a nearby
+ * pointer, stretches along that direction, squishes under a press, and springs
+ * back with an overshoot. Uses `transform`, so Tailwind's translate/scale
+ * utilities (separate properties) still compose with it.
+ */
+@utility elastic {
+  transform: translate(var(--ex, 0px), var(--ey, 0px)) scale(var(--esx, 1), var(--esy, 1));
+  transition-property: transform, translate, scale, background-color, color, opacity, box-shadow !important;
+  transition-duration: 0.5s, 0.3s, 0.25s, 0.2s, 0.2s, 0.3s, 0.2s !important;
+  transition-timing-function: cubic-bezier(0.175, 0.885, 0.32, 1.45), var(--ease-spring), var(--ease-spring), ease, ease, ease, ease !important;
+}
+
+/* Rows and tiles rise in one after another when a page opens (index in --i). */
+@utility stagger {
+  animation: var(--animate-rise);
+  animation-delay: calc(min(var(--i, 0), 14) * 28ms);
+}
+
+/*
+ * "The material illuminates from within" on interaction: a soft light under
+ * the pointer (--glow-x/--glow-y are set by lib/glass.ts on [data-glow]).
+ */
+@utility glow {
+  &::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0;
+    background: radial-gradient(circle 70px at var(--glow-x, 50%) var(--glow-y, 50%), rgb(255 255 255 / 0.16), transparent 70%);
+    transition: opacity 0.25s ease;
+  }
+  &:hover::before {
+    opacity: 1;
+  }
+  &:active::before {
+    opacity: 1;
+    background: radial-gradient(circle 110px at var(--glow-x, 50%) var(--glow-y, 50%), rgb(255 255 255 / 0.26), transparent 75%);
+  }
+}
+
+/*
+ * The scroll edge effect: where content scrolls beneath floating controls it
+ * progressively blurs and fades, instead of meeting a hard bar.
+ */
+@utility scroll-edge-top {
+  -webkit-backdrop-filter: blur(14px) saturate(1.4);
+  backdrop-filter: blur(14px) saturate(1.4);
+  background: linear-gradient(to bottom, rgb(var(--pageBG-rgb) / 0.75), rgb(var(--pageBG-rgb) / 0));
+  -webkit-mask-image: linear-gradient(to bottom, #000 35%, transparent);
+  mask-image: linear-gradient(to bottom, #000 35%, transparent);
+}
+
+@utility scroll-edge-bottom {
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  background: linear-gradient(to top, rgb(var(--pageBG-rgb) / 0.7), rgb(var(--pageBG-rgb) / 0));
+  -webkit-mask-image: linear-gradient(to top, #000 30%, transparent);
+  mask-image: linear-gradient(to top, #000 30%, transparent);
+}
+
+/* Apple's tight headline tracking (Inter runs a touch wider than SF Pro). */
+@utility tracking-apple {
+  letter-spacing: -0.022em;
+}
+
+@utility artwork-stroke {
+  &::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    box-shadow:
+      inset 0.5px 0.5px 0 var(--containerInnerStroke),
+      inset 0.5px -0.5px 0 var(--containerInnerStroke),
+      inset -0.5px 0.5px 0 var(--containerInnerStroke),
+      inset -0.5px -0.5px 0 var(--containerInnerStroke);
+    opacity: var(--containerInnerStrokeAlpha);
+  }
+}
+
+/* Window dragging (frameless window): drag regions and the controls inside them. */
+@utility app-drag {
+  -webkit-app-region: drag;
+  app-region: drag;
+}
+@utility app-no-drag {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
+@utility no-scrollbar {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@layer base {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+  html,
+  body {
+    margin: 0;
+    height: 100%;
+    overflow: hidden;
+  }
+  body {
+    font: var(--body);
+    letter-spacing: -0.006em;
+    font-optical-sizing: auto;
+    font-feature-settings: 'cv11' 0, 'calt' 1;
+    color: var(--systemPrimary);
+    background-color: var(--pageBG);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    overscroll-behavior: none;
+    user-select: none;
+  }
+  #root {
+    height: 100%;
+  }
+  h1,
+  h2,
+  h3 {
+    letter-spacing: -0.018em;
+  }
+  h1,
+  h2,
+  h3,
+  p,
+  ul,
+  ol,
+  figure {
+    margin: 0;
+    padding: 0;
+  }
+  ul,
+  ol {
+    list-style: none;
+  }
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
+  button {
+    font: inherit;
+    color: inherit;
+    background: none;
+    border: 0;
+    padding: 0;
+    margin: 0;
+    cursor: default;
+  }
+  button:disabled {
+    cursor: default;
+  }
+  input,
+  textarea {
+    font: inherit;
+    color: inherit;
+    user-select: text;
+  }
+  img {
+    display: block;
+    max-width: 100%;
+    -webkit-user-drag: none;
+  }
+  svg {
+    flex-shrink: 0;
+  }
+  ::selection {
+    background-color: rgb(var(--keyColor-rgb) / 0.35);
+  }
+  :focus {
+    outline: none;
+  }
+  /* macOS's focus ring: a soft halo in the accent colour. */
+  :focus-visible {
+    outline: 3px solid rgb(var(--keyColor-rgb) / 0.55);
+    outline-offset: 1px;
+  }
+
+  /* Thin, quiet scrollbars, as Chromium on Windows draws them otherwise wide and grey. */
+  ::-webkit-scrollbar {
+    width: 12px;
+    height: 12px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background-color: #ffffff26;
+    border: 3px solid transparent;
+    border-radius: 999px;
+    background-clip: content-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: #ffffff40;
+  }
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+/*
+ * View transitions (lib/motion.ts): the page crossfades and rises, while shared
+ * elements — the now-playing artwork, the sidebar's selection — travel to their
+ * new place on a spring-like curve.
+ */
+::view-transition-group(*) {
+  animation-duration: 0.42s;
+  animation-timing-function: cubic-bezier(0.32, 0.72, 0, 1);
+}
+::view-transition-old(page) {
+  animation: 0.16s ease-in both vt-out;
+}
+::view-transition-new(page) {
+  animation: 0.42s cubic-bezier(0.32, 0.72, 0, 1) both vt-in;
+}
+::view-transition-group(np-art) {
+  animation-duration: 0.55s;
+  animation-timing-function: cubic-bezier(0.32, 0.86, 0.12, 1.04);
+}
+::view-transition-old(np-art),
+::view-transition-new(np-art) {
+  height: 100%;
+  object-fit: cover;
+  animation-duration: 0.3s;
+}
+::view-transition-group(nav-selection) {
+  animation-duration: 0.5s;
+  animation-timing-function: cubic-bezier(0.34, 1.3, 0.64, 1);
+}
+@keyframes vt-out {
+  to {
+    opacity: 0;
+  }
+}
+@keyframes vt-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
+  }
+}
+
+/*
+ * Motion everywhere (all of it stops with Windows' "Animation effects" off):
+ * - Buttons give under a press, then spring back.
+ * - Sections rise into place as they scroll into view (scroll-driven, no JS).
+ * - Menu items cascade in after the menu springs open.
+ */
+:where(button, [role='button']):not(:disabled):active {
+  scale: 0.965;
+}
+:where(button, [role='button']) {
+  transition: scale 0.32s var(--ease-spring), background-color 0.2s ease, color 0.2s ease, opacity 0.2s ease;
+}
+@supports (animation-timeline: view()) {
+  .reveal {
+    animation: reveal linear both;
+    animation-timeline: view();
+    animation-range: entry 0% entry 45%;
+  }
+}
+@keyframes reveal {
+  from {
+    opacity: 0;
+    transform: translateY(26px) scale(0.98);
+  }
+}
+.menu-item {
+  animation: rise 0.34s var(--ease-out-panel) both;
+  animation-delay: calc(40ms + min(var(--i, 0), 12) * 18ms);
+}
+
+/* Form fields never show the browser's default inset border (it read as a white line under glass). */
+:where(input, textarea, select) {
+  border-style: solid;
+  border-width: 0;
+}

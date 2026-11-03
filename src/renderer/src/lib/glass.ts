@@ -1,0 +1,199 @@
+/*
+ * Liquid Glass behaviours that CSS alone can't do.
+ *
+ * Lensing: "the primary way Liquid Glass visually defines itself", bending
+ * light at the element's curved edges. Chromium accepts SVG filters in
+ * backdrop-filter, so a displacement map shaped like the element's rounded
+ * rectangle refracts whatever is behind it, strongest at the rim. Apple asks
+ * for glass effects to be used sparingly; this one is kept to the floating
+ * controls (the player capsule, the full-screen transport).
+ *
+ * Glow: "when you interact with Liquid Glass, the material illuminates from
+ * within" — a light that follows the pointer inside elements with `.glow`.
+ */
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type RefObject } from 'react';
+
+const supportsLens = typeof CSS !== 'undefined' && CSS.supports('backdrop-filter', 'url(#x)');
+const reducedTransparency = typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-transparency: reduce)') : null;
+
+let defs: SVGDefsElement | null = null;
+function svgDefs(): SVGDefsElement {
+  if (defs) return defs;
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('width', '0');
+  svg.setAttribute('height', '0');
+  svg.setAttribute('aria-hidden', 'true');
+  svg.style.position = 'absolute';
+  defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+  svg.appendChild(defs);
+  document.body.appendChild(svg);
+  return defs;
+}
+
+/** Signed distance from a point to a rounded rectangle's edge (negative inside). */
+function sdf(px: number, py: number, w: number, h: number, r: number): number {
+  const qx = Math.abs(px - w / 2) - (w / 2 - r);
+  const qy = Math.abs(py - h / 2) - (h / 2 - r);
+  return Math.hypot(Math.max(qx, 0), Math.max(qy, 0)) + Math.min(Math.max(qx, qy), 0) - r;
+}
+
+/**
+ * The displacement map: neutral grey inside, and within `band` px of the edge
+ * a vector pointing back into the shape, so the rim gathers light from inside
+ * like the curved edge of a lens.
+ */
+function lensMap(w: number, h: number, radius: number, band: number): string {
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d')!;
+  const img = ctx.createImageData(w, h);
+  const r = Math.min(radius, w / 2, h / 2);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const d = -sdf(x + 0.5, y + 0.5, w, h, r);
+      let nx = 0;
+      let ny = 0;
+      let s = 0;
+      if (d > 0 && d < band) {
+        const gx = sdf(x + 1.5, y + 0.5, w, h, r) - sdf(x - 0.5, y + 0.5, w, h, r);
+        const gy = sdf(x + 0.5, y + 1.5, w, h, r) - sdf(x + 0.5, y - 0.5, w, h, r);
+        const len = Math.hypot(gx, gy) || 1;
+        nx = gx / len;
+        ny = gy / len;
+        s = (1 - d / band) ** 2.2;
+      }
+      const i = (y * w + x) * 4;
+      img.data[i] = 128 + nx * s * 127;
+      img.data[i + 1] = 128 + ny * s * 127;
+      img.data[i + 2] = 128;
+      img.data[i + 3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  return canvas.toDataURL();
+}
+
+let lensCount = 0;
+
+/**
+ * Real refraction for a floating glass control. Returns the style to put on
+ * the element (a backdrop-filter with the lens first, then the frosting), or
+ * nothing where the platform or the person's settings say otherwise.
+ */
+export function useLiquidLens(ref: RefObject<HTMLElement | null>, options: { radius?: number; band?: number; strength?: number; blur?: number; key?: unknown } = {}): CSSProperties | undefined {
+  const { radius, band = 18, strength = 46, blur = 14, key } = options;
+  const [id] = useState(() => `lens-${++lensCount}`);
+  const [ready, setReady] = useState(false);
+  const [reduce, setReduce] = useState(reducedTransparency?.matches ?? false);
+  const filterRef = useRef<SVGFilterElement | null>(null);
+
+  useEffect(() => {
+    if (!reducedTransparency) return;
+    const onChange = () => setReduce(reducedTransparency.matches);
+    reducedTransparency.addEventListener('change', onChange);
+    return () => reducedTransparency.removeEventListener('change', onChange);
+  }, []);
+
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el || !supportsLens || reduce) return;
+    const ns = 'http://www.w3.org/2000/svg';
+    const filter = document.createElementNS(ns, 'filter');
+    filter.setAttribute('id', id);
+    filter.setAttribute('x', '0');
+    filter.setAttribute('y', '0');
+    filter.setAttribute('width', '100%');
+    filter.setAttribute('height', '100%');
+    filter.setAttribute('color-interpolation-filters', 'sRGB');
+    const image = document.createElementNS(ns, 'feImage');
+    image.setAttribute('result', 'map');
+    image.setAttribute('preserveAspectRatio', 'none');
+    // Chromatic aberration, as real glass and liquid-glass-react do: each colour channel
+    // bends by a slightly different amount, so the rim picks up a faint prism fringe.
+    // In the middle the map is neutral, so all three line up and the image stays clean.
+    const channel = (scale: number, row: string, result: string) => {
+      const d = document.createElementNS(ns, 'feDisplacementMap');
+      d.setAttribute('in', 'SourceGraphic');
+      d.setAttribute('in2', 'map');
+      d.setAttribute('scale', String(scale));
+      d.setAttribute('xChannelSelector', 'R');
+      d.setAttribute('yChannelSelector', 'G');
+      d.setAttribute('result', `${result}-d`);
+      const m = document.createElementNS(ns, 'feColorMatrix');
+      m.setAttribute('in', `${result}-d`);
+      m.setAttribute('type', 'matrix');
+      m.setAttribute('values', `${row} 0 0 0 1 0`);
+      m.setAttribute('result', result);
+      return [d, m];
+    };
+    const blend = (a: string, b: string, result?: string) => {
+      const n = document.createElementNS(ns, 'feBlend');
+      n.setAttribute('in', a);
+      n.setAttribute('in2', b);
+      n.setAttribute('mode', 'screen');
+      if (result) n.setAttribute('result', result);
+      return n;
+    };
+    filter.append(
+      image,
+      ...channel(strength * 1.06, '1 0 0 0 0 0 0 0 0 0 0 0 0 0 0', 'r'),
+      ...channel(strength, '0 0 0 0 0 0 1 0 0 0 0 0 0 0 0', 'g'),
+      ...channel(strength * 0.94, '0 0 0 0 0 0 0 0 0 0 0 0 1 0 0', 'b'),
+      blend('g', 'b', 'gb'),
+      blend('r', 'gb'),
+    );
+    svgDefs().appendChild(filter);
+    filterRef.current = filter;
+
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let last = '';
+    const build = () => {
+      const w = Math.round(el.offsetWidth);
+      const h = Math.round(el.offsetHeight);
+      if (!w || !h) return;
+      const key = `${w}x${h}`;
+      if (key === last) return;
+      last = key;
+      const r = radius ?? parseFloat(getComputedStyle(el).borderTopLeftRadius) ?? h / 2;
+      image.setAttribute('width', String(w));
+      image.setAttribute('height', String(h));
+      image.setAttribute('href', lensMap(w, h, Math.min(r, h / 2), band));
+      setReady(true);
+    };
+    build();
+    const observer = new ResizeObserver(() => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(build, 120);
+    });
+    observer.observe(el);
+    return () => {
+      observer.disconnect();
+      if (timer) clearTimeout(timer);
+      filter.remove();
+      setReady(false);
+    };
+  }, [ref, id, radius, band, strength, reduce, key]);
+
+  if (!ready || reduce || !supportsLens) return undefined;
+  const value = `url(#${id}) blur(${blur}px) saturate(1.9) brightness(1.06)`;
+  return { backdropFilter: value, WebkitBackdropFilter: value } as CSSProperties;
+}
+
+/** The pointer light inside `.glow` elements. Installed once for the whole app. */
+export function installGlassGlow() {
+  let current: HTMLElement | null = null;
+  window.addEventListener(
+    'pointermove',
+    (event) => {
+      const el = (event.target as Element | null)?.closest?.('.glow') as HTMLElement | null;
+      if (current && current !== el) current = null;
+      if (!el) return;
+      current = el;
+      const r = el.getBoundingClientRect();
+      el.style.setProperty('--glow-x', `${event.clientX - r.left}px`);
+      el.style.setProperty('--glow-y', `${event.clientY - r.top}px`);
+    },
+    { passive: true },
+  );
+}

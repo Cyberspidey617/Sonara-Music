@@ -1,0 +1,32 @@
+appId: com.obsidian.music.pc
+productName: Obsidian Music
+copyright: Obsidian Music for PC — GPL-3.0-or-later
+directories:
+  output: dist
+  buildResources: build
+# Everything (YouTube.js, React, am-lyrics) is bundled by electron-vite: no node_modules ship.
+files:
+  - out/**/*
+  - package.json
+extraResources:
+  - from: resources
+    to: .
+    filter: ['**/*']
+asar: true
+npmRebuild: false
+win:
+  icon: build/icon.ico
+  executableName: ObsidianMusic
+  artifactName: ObsidianMusic-${version}-${arch}-portable.${ext}
+  # An installer (NSIS; on Linux it needs Wine with 32-bit support) and a portable zip.
+  target:
+    - target: nsis
+    - target: zip
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: always
+  createStartMenuShortcut: true
+  shortcutName: Obsidian Music
+  artifactName: ObsidianMusic-Setup-${version}-${arch}.${ext}
