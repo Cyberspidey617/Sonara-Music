@@ -1,6 +1,7 @@
 import { useDownloads } from '@/state/downloads';
 import { Clock, Download, HardDrive, HardDriveDownload, Heart, House, ListMusic, Plus, Search, Settings } from 'lucide-react';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { useLiquidLens } from '@/lib/glass';
 import { useLibrary } from '@/state/library';
 import { openContextMenu } from '@/state/menu';
 import { go, useNav, type Route } from '@/state/nav';
@@ -18,6 +19,9 @@ function Selection() {
 /** Labels fade and slide in as the rail opens. */
 const label_ = 'min-w-0 truncate transition-[opacity,translate] duration-300 ease-(--ease-out-panel) group-data-[collapsed]/nav:pointer-events-none group-data-[collapsed]/nav:-translate-x-1 group-data-[collapsed]/nav:opacity-0';
 const iconBox = 'inline-grid size-6 flex-none place-items-center text-secondary group-aria-[current=page]:text-key';
+/** The opened sidebar's frosting: the thick glass, blurred 1.6× more (the Glass blur setting still scales it). */
+const FROSTED_FILTER = 'blur(calc(var(--glass-blur-thick) * 1.6)) saturate(var(--glass-saturate)) brightness(1.04)';
+const FROSTED: CSSProperties = { backdropFilter: FROSTED_FILTER, WebkitBackdropFilter: FROSTED_FILTER };
 
 function NavItem({ route, label, icon, active }: { route: Route; label: string; icon: ReactNode; active: boolean }) {
   return (
@@ -53,6 +57,11 @@ export function Sidebar() {
   // After you pick something it closes, and stays closed until the pointer leaves and comes back.
   const [picked, setPicked] = useState(false);
   const expanded = mode === 'expanded' || ((hover || focused) && !picked);
+  // Collapsed, the rail is the same liquid glass as the pebble player (refraction at its rim);
+  // opened, it frosts over, blurring the page behind it more.
+  const nav = useRef<HTMLElement>(null);
+  const lens = useLiquidLens(nav, { band: 20, strength: 44, blur: 18, key: expanded });
+  const glassStyle = expanded ? FROSTED : lens;
   const header = (text: string) => (
     <div className="relative mt-5 h-7">
       <h2 className={`absolute inset-x-0 top-0 px-2.5 py-1 type-callout-emphasized whitespace-nowrap text-tertiary transition-opacity duration-200 ${expanded ? 'opacity-100' : 'opacity-0'}`}>{text}</h2>
@@ -63,7 +72,9 @@ export function Sidebar() {
   return (
     // A pane of glass floating above the content, inset from the window's edges.
     <nav
-      className={`group/nav glass-thick absolute top-(--inset) bottom-(--inset) left-(--inset) z-[45] flex flex-col overflow-hidden rounded-panel transition-[width,box-shadow] duration-[450ms] ease-(--ease-out-panel) ${expanded ? 'w-(--nav-width)' : 'w-(--nav-rail)'} ${mode === 'compact' && expanded ? 'shadow-[0_24px_70px_rgb(0_0_0/0.55),0_2px_8px_rgb(0_0_0/0.3)]' : ''}`}
+      ref={nav}
+      style={glassStyle}
+      className={`group/nav ${expanded ? 'glass-thick' : 'glass'} absolute top-(--inset) bottom-(--inset) left-(--inset) z-[45] flex flex-col overflow-hidden rounded-panel transition-[width,box-shadow] duration-[450ms] ease-(--ease-out-panel) ${expanded ? 'w-(--nav-width)' : 'w-(--nav-rail)'} ${mode === 'compact' && expanded ? 'shadow-[0_24px_70px_rgb(0_0_0/0.55),0_2px_8px_rgb(0_0_0/0.3)]' : ''}`}
       data-collapsed={expanded ? undefined : ''}
       aria-label="Main"
       onPointerEnter={() => mode === 'compact' && intent(true)}
@@ -89,10 +100,11 @@ export function Sidebar() {
       onFocus={(e) => (e.target as Element).matches(':focus-visible') && setFocused(true)}
       onBlur={(e) => !e.currentTarget.contains(e.relatedTarget as Node) && setFocused(false)}
     >
-      <div className="app-drag flex h-[60px] flex-none items-end px-[18px] pb-3">
-        <button className="app-no-drag inline-flex items-center gap-2" onClick={() => go({ name: 'home' })} aria-label="Obsidian, Home">
-          <LogoMark size={24} className="flex-none text-[#f0c27b]" />
-          <span className={`type-[700_19px/24px] tracking-[-0.01em] ${label_}`}>Obsidian</span>
+      {/* On macOS the traffic lights sit above the logo. */}
+      <div className="app-drag flex h-[60px] flex-none items-end px-[18px] pb-3 [[data-platform=mac]_&]:h-[84px]">
+        <button className="app-no-drag inline-flex items-center gap-2" onClick={() => go({ name: 'home' })} aria-label="Sonara, Home">
+          <LogoMark size={24} className="flex-none text-key transition-colors duration-500" />
+          <span className={`type-[700_19px/24px] tracking-[0.12em] ${label_}`}>SONARA</span>
         </button>
       </div>
       <div className="no-scrollbar min-h-0 flex-1 overflow-y-auto px-2 pt-2">

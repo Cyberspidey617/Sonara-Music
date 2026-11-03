@@ -35,7 +35,7 @@ let file = '';
 let config: Config | null = null;
 let lastError: string | undefined;
 
-const CLIENT = 'ObsidianMusic';
+const CLIENT = 'Sonara';
 const API_VERSION = '1.16.1';
 
 export function openServer(dir: string) {

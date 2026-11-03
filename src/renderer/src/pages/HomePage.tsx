@@ -9,6 +9,8 @@ import { PlayGlyph } from '@/components/icons';
 import { ShelfRow, ShelfView } from '@/components/Shelf';
 import { ErrorState, ShelfSkeleton } from '@/components/States';
 import { Lockup } from '@/components/Lockup';
+import { trackMenu } from '@/components/trackActions';
+import { openContextMenu } from '@/state/menu';
 
 function greeting(): string {
   const h = new Date().getHours();
@@ -40,12 +42,13 @@ function QuickTiles() {
       art: <Artwork url={t.thumbnail} size={56} radius="sm" className="size-14 flex-none rounded-r-none" />,
       open: () => usePlayer.getState().startRadio(t),
       play: () => usePlayer.getState().startRadio(t),
+      menu: () => trackMenu(t, { fromHistory: true }),
     })),
   ];
   return (
     <div className="mb-10 grid grid-cols-1 gap-3 px-(--body-gutter) @min-[560px]/page:grid-cols-2 @min-[1080px]/page:grid-cols-3 @min-[1500px]/page:grid-cols-4">
       {tiles.map((tile, i) => (
-        <div key={tile.key} style={{ "--i": i } as CSSProperties} className="group glow stagger relative flex h-14 cursor-pointer items-center gap-3 overflow-hidden rounded-[12px] bg-white/[0.07] pr-3 transition-[background-color,scale] duration-300 hover:bg-white/[0.12] active:scale-[0.98]" onClick={tile.open}>
+        <div key={tile.key} style={{ "--i": i } as CSSProperties} className="group glow stagger relative flex h-14 cursor-pointer items-center gap-3 overflow-hidden rounded-[12px] bg-white/[0.07] pr-3 transition-[background-color,scale] duration-300 hover:bg-white/[0.12] active:scale-[0.98]" onClick={tile.open} onContextMenu={'menu' in tile ? (e) => openContextMenu(e, tile.menu()) : undefined}>
           {tile.art}
           <span className="min-w-0 flex-1 truncate type-title-3-emphasized">{tile.title}</span>
           {tile.play && (
@@ -84,7 +87,7 @@ export function HomePage() {
         >
           {history.slice(0, 20).map((t) => (
             <div key={t.videoId} className="flex-none snap-start">
-              <Lockup lockup={{ kind: 'song', id: t.videoId, title: t.title, subtitle: t.artists.map((a) => a.name).join(', '), thumbnail: t.thumbnail, track: t }} size={150} />
+              <Lockup lockup={{ kind: 'song', id: t.videoId, title: t.title, subtitle: t.artists.map((a) => a.name).join(', '), thumbnail: t.thumbnail, track: t }} size={150} fromHistory />
             </div>
           ))}
         </ShelfRow>

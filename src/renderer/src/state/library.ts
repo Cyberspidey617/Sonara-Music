@@ -12,6 +12,8 @@ interface LibraryState extends LibraryData {
   toggleLike: (track: Track) => boolean;
   likeAll: (tracks: Track[]) => void;
   addToHistory: (track: Track) => void;
+  /** Removes one song from the history; returns a function that puts it back (for Undo). */
+  removeFromHistory: (videoId: string) => () => void;
   clearHistory: () => void;
   createPlaylist: (name: string, tracks?: Track[], sourceId?: string) => string;
   renamePlaylist: (id: string, name: string) => void;
@@ -71,6 +73,23 @@ export const useLibrary = create<LibraryState>((set, get) => {
       const next = [slim(track), ...get().history.filter((t) => t.videoId !== track.videoId)].slice(0, HISTORY_LIMIT);
       set({ history: next });
       save({ history: next });
+    },
+
+    removeFromHistory: (videoId) => {
+      const before = get().history;
+      const index = before.findIndex((t) => t.videoId === videoId);
+      if (index < 0) return () => undefined;
+      const next = before.filter((t) => t.videoId !== videoId);
+      set({ history: next });
+      save({ history: next });
+      return () => {
+        // Played again since: it's already back at the top.
+        const now = get().history;
+        if (now.some((t) => t.videoId === videoId)) return;
+        const restored = [...now.slice(0, index), before[index]!, ...now.slice(index)].slice(0, HISTORY_LIMIT);
+        set({ history: restored });
+        save({ history: restored });
+      };
     },
 
     clearHistory: () => {

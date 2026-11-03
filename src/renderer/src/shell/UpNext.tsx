@@ -1,5 +1,5 @@
 import { Ellipsis, Loader2, Radio, X } from 'lucide-react';
-import { useState } from 'react';
+import { useState, type CSSProperties } from 'react';
 import { Artwork } from '@/components/Artwork';
 import { Equalizer, ExplicitBadge } from '@/components/icons';
 import { trackMenu } from '@/components/trackActions';
@@ -8,13 +8,15 @@ import { useLibrary } from '@/state/library';
 import { openContextMenu, openMenuAt } from '@/state/menu';
 import { usePlayer, type QueueItem } from '@/state/player';
 
-function Row({ item, index, current, playing, onDragStart, onDrop }: { item: QueueItem; index: number; current?: boolean; playing?: boolean; onDragStart?: (i: number) => void; onDrop?: (i: number) => void }) {
+/** A queue row; `order` is its place in the list, so rows rise in one after another when it opens. */
+function Row({ item, index, order = 0, current, playing, onDragStart, onDrop }: { item: QueueItem; index: number; order?: number; current?: boolean; playing?: boolean; onDragStart?: (i: number) => void; onDrop?: (i: number) => void }) {
   const [over, setOver] = useState(false);
   const { track } = item;
   const menu = () => trackMenu(track, current ? {} : { removeFromQueue: () => usePlayer.getState().removeAt(index) });
   return (
     <div
-      className={`group relative flex h-(--row-h) items-center gap-3 rounded-row px-2 hover:bg-tracklist-hover ${over ? 'before:absolute before:inset-x-2 before:-top-px before:h-0.5 before:bg-key' : ''}`}
+      style={{ '--i': order } as CSSProperties}
+      className={`stagger group relative flex h-(--row-h) items-center gap-3 rounded-row px-2 hover:bg-tracklist-hover ${over ? 'before:absolute before:inset-x-2 before:-top-px before:h-0.5 before:bg-key' : ''}`}
       draggable={!current}
       onDragStart={(e) => {
         e.dataTransfer.effectAllowed = 'move';
@@ -99,7 +101,7 @@ export function UpNext() {
             </button>
           </div>
           {mine.map(({ item, i }) => (
-            <Row key={item.uid} item={item} index={i} onDragStart={setDragFrom} onDrop={drop} />
+            <Row key={item.uid} item={item} index={i} order={i - index} onDragStart={setDragFrom} onDrop={drop} />
           ))}
         </>
       )}
@@ -109,7 +111,7 @@ export function UpNext() {
             <Radio size={12} /> Autoplay {radioLoading && <Loader2 size={12} className="animate-spin" />}
           </h3>
           {auto.map(({ item, i }) => (
-            <Row key={item.uid} item={item} index={i} onDragStart={setDragFrom} onDrop={drop} />
+            <Row key={item.uid} item={item} index={i} order={i - index} onDragStart={setDragFrom} onDrop={drop} />
           ))}
         </>
       )}

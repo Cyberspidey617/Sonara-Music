@@ -13,6 +13,9 @@ installGlassGlow();
 installElasticGlass();
 initDownloads();
 
+// macOS draws its own window buttons (top-left); Windows and Linux use the app's (shell/WindowControls).
+document.documentElement.dataset.platform = /Mac/.test(navigator.platform) ? 'mac' : /Linux/.test(navigator.platform) ? 'linux' : 'windows';
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <App />

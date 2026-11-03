@@ -58,47 +58,71 @@ function LyricsTools({ kind }: { kind: 'indic' | 'online' | 'none' | null }) {
   const tr = useLibrary((s) => s.settings.lyricsTranslation);
   const to = useLibrary((s) => s.settings.lyricsTranslateTo) || 'en';
   const busy = useLyricsBusy((s) => s.busy);
+  const noPronunciation = useLyricsBusy((s) => s.noPronunciation);
+  const noTranslation = useLyricsBusy((s) => s.noTranslation);
   const set = useLibrary.getState().updateSettings;
   const name = TRANSLATE_LANGUAGES.find((l) => l.code === to)?.name ?? to;
-  const btn = 'relative flex h-8 items-center gap-1.5 rounded-pill px-3 type-callout-emphasized transition-colors disabled:opacity-40';
+  const btn = 'group/tool relative flex h-8 items-center gap-1.5 rounded-pill px-3 type-callout-emphasized transition-colors';
+  // On: filled with the accent. A second click turns it off again.
+  const state = (active: boolean) => (active ? 'bg-key text-(--onKeyColor)' : 'text-secondary hover:bg-white/10 hover:text-primary');
+  // Kept hoverable when unavailable (a disabled button gets no hover), so it can say why.
+  const latinOnly = kind === 'none';
+  const pronunciationHint = latinOnly ? 'These lyrics are already in Latin letters, so there’s no pronunciation to add.' : on && noPronunciation ? 'Pronunciation isn’t available for these lyrics.' : null;
+  const translationHint = tr && noTranslation ? `No ${name} translation for these lyrics: they may already be in ${name}, or translation can’t be reached right now.` : null;
   return (
-    <div className="glass-clear pointer-events-auto absolute top-2 right-3 z-10 flex animate-rise items-center gap-0.5 rounded-pill p-[3px]">
+    <div className="glass pointer-events-auto absolute top-2 right-3 z-10 flex animate-rise items-center gap-0.5 rounded-pill p-[3px]">
       <button
-        className={`${btn} ${on ? 'bg-white/90 text-black' : 'text-secondary hover:bg-white/10 hover:text-primary'}`}
+        className={`${btn} ${latinOnly ? 'cursor-default text-secondary opacity-40' : state(on)}`}
         aria-pressed={on}
-        disabled={kind === 'none'}
-        title={kind === 'none' ? 'These lyrics are already in Latin letters' : 'Pronunciation: how to sing it, in Latin letters'}
-        onClick={() => set({ lyricsPronunciation: !on })}
+        aria-disabled={latinOnly || undefined}
+        title={pronunciationHint ? undefined : on ? 'Pronunciation is on: click to turn it off' : 'Pronunciation: how to sing it, in Latin letters'}
+        onClick={() => !latinOnly && set({ lyricsPronunciation: !on })}
       >
         <Speech size={15} /> Pronunciation
+        {pronunciationHint && <Hint text={pronunciationHint} />}
       </button>
+      {/* Translate opens the list of languages; "Off" turns translation off. */}
       <button
-        className={`${btn} ${tr ? 'bg-white/90 text-black' : 'text-secondary hover:bg-white/10 hover:text-primary'}`}
+        className={`${btn} ${state(tr)}`}
         aria-pressed={tr}
-        title={`Translate to ${name}`}
-        onClick={() => set({ lyricsTranslation: !tr })}
-      >
-        {busy ? <Loader2 size={15} className="animate-spin" /> : <Languages size={15} />} {name}
-      </button>
-      <button
-        className="relative grid size-8 place-items-center rounded-full text-secondary hover:bg-white/10 hover:text-primary"
-        aria-label="Translation language"
-        title="Translation language"
+        aria-haspopup="menu"
+        title={translationHint ? undefined : tr ? `Translating to ${name}: pick another language, or Off` : 'Translate the lyrics'}
         onClick={(e) =>
           openMenuAt(
             e.currentTarget,
-            [{ header: 'Translate lyrics to' }, ...TRANSLATE_LANGUAGES.map((l) => ({ label: l.name, hint: l.code === to ? '✓' : undefined, onSelect: () => set({ lyricsTranslateTo: l.code, lyricsTranslation: true }) }))],
+            [
+              { header: 'Translate lyrics to' },
+              { label: 'Off', hint: tr ? undefined : '✓', onSelect: () => set({ lyricsTranslation: false }) },
+              { separator: true },
+              ...TRANSLATE_LANGUAGES.map((l) => ({ label: l.name, hint: tr && l.code === to ? '✓' : undefined, onSelect: () => set({ lyricsTranslateTo: l.code, lyricsTranslation: true }) })),
+            ],
             'below-end',
           )
         }
       >
-        <ChevronDown size={15} />
+        {busy ? <Loader2 size={15} className="animate-spin" /> : <Languages size={15} />} {tr ? name : 'Translate'}
+        <ChevronDown size={14} className="-mr-1 opacity-70" />
+        {translationHint && <Hint text={translationHint} />}
       </button>
     </div>
   );
 }
 
-const useLyricsBusy = create<{ busy: boolean }>(() => ({ busy: false }));
+/** A note under a lyric tool, shown while it's hovered. */
+function Hint({ text }: { text: string }) {
+  return (
+    <span
+      role="tooltip"
+      className="pointer-events-none absolute top-full right-0 z-20 mt-2 w-max max-w-[260px] rounded-[10px] px-3 py-2 text-left type-callout text-primary opacity-0 shadow-[0_8px_24px_rgb(0_0_0/0.45)] transition-opacity duration-150 group-hover/tool:opacity-100"
+      style={{ backgroundColor: 'var(--dialog-fill)' }}
+    >
+      {text}
+    </span>
+  );
+}
+
+/** Whether the latest pass found nothing to show: no pronunciation, or no translation. */
+const useLyricsBusy = create<{ busy: boolean; noPronunciation: boolean; noTranslation: boolean }>(() => ({ busy: false, noPronunciation: false, noTranslation: false }));
 
 /** Adds pronunciation and translations to lines, as the settings ask. */
 async function withAlternates(lines: string[], wantRoman: boolean, wantTrans: boolean, to: string): Promise<{ roman: string[]; trans: string[] }> {
@@ -108,6 +132,8 @@ async function withAlternates(lines: string[], wantRoman: boolean, wantTrans: bo
       wantRoman ? romanizeLines(lines) : Promise.resolve([] as string[]),
       wantTrans ? translateLines(lines, to).catch(() => [] as string[]) : Promise.resolve([] as string[]),
     ]);
+    const empty = (list: string[]) => !list.some((line) => line.trim());
+    useLyricsBusy.setState({ noPronunciation: wantRoman && empty(roman), noTranslation: wantTrans && empty(trans) });
     return { roman, trans };
   } finally {
     useLyricsBusy.setState({ busy: false });
@@ -218,6 +244,9 @@ function SyncedLyrics({ track, full, onMissing }: { track: Track; full: boolean;
   useEffect(() => {
     const el = element.current as unknown as { lyrics?: LyricLine[]; showRomanization: boolean; showTranslation: boolean } | null;
     if (!el || !loaded) return;
+    // Turning one off hides it at once, without waiting for the other to be worked out.
+    if (!wantRoman) el.showRomanization = false;
+    if (!wantTrans) el.showTranslation = false;
     let alive = true;
     const texts = loaded.map((l) => l.text.map((x) => x.text).join(''));
     void withAlternates(texts, wantRoman && kind !== 'none', wantTrans, to).then(({ roman, trans }) => {

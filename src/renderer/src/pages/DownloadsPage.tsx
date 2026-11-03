@@ -45,7 +45,7 @@ function Row({ d, index }: { d: DownloadItem; index: number }) {
           </>
         )}
         {d.state === 'error' && (
-          <button className={small} title="Retry" aria-label="Retry" onClick={() => startDownload([d.track], d.quality)}>
+          <button className={small} title="Retry" aria-label="Retry" onClick={() => startDownload([d.track], d.quality === 'lossless' ? 'best' : d.quality)}>
             <RotateCw size={16} />
           </button>
         )}

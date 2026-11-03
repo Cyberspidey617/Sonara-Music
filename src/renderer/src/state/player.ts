@@ -13,7 +13,7 @@ import { artworkAtPixels, largeArtwork } from '@/lib/artwork';
 import { artistLine, uid } from '@/lib/format';
 import { streamUrl } from '@/lib/stream';
 import { useLibrary } from './library';
-import { toast, useUi } from './ui';
+import { toast } from './ui';
 
 export type RepeatMode = 'off' | 'all' | 'one';
 export type Status = 'idle' | 'loading' | 'playing' | 'paused' | 'error';
@@ -101,6 +101,8 @@ for (const deck of decks) {
   deck.crossOrigin = 'anonymous';
 }
 attachEqualizer(decks);
+/** Both decks, for listeners that only read the sound (the waveform); playback stays here. */
+export const audioDecks: readonly HTMLAudioElement[] = decks;
 
 const activeDeck = () => decks[active]!;
 const idleIndex = () => 1 - active;
@@ -230,6 +232,23 @@ function reportPlayback() {
 
 // ---- Queue helpers ---------------------------------------------------------------------
 
+/**
+ * The songs played before the current one, most recent last: Previous returns to them, whatever
+ * the queue now holds (shuffled, unshuffled, or replaced by a new list).
+ */
+const played: QueueItem[] = [];
+let nowPlaying: QueueItem | null = null;
+let goingBack = false;
+
+/** Called whenever a song becomes the current one. */
+function becameCurrent(entry: QueueItem) {
+  if (!goingBack && nowPlaying && nowPlaying.uid !== entry.uid) {
+    played.push(nowPlaying);
+    if (played.length > 200) played.shift();
+  }
+  nowPlaying = entry;
+}
+
 function nextIndex(natural: boolean): number | null {
   const { queue, index, repeat } = usePlayer.getState();
   if (natural && repeat === 'one') return index;
@@ -295,6 +314,7 @@ function load(index: number, autoplay = true) {
   const deck = activeDeck();
   if (deck.currentTime > 0.1) deck.currentTime = 0;
   applyVolume();
+  becameCurrent(entry);
   usePlayer.setState({ index, status: autoplay ? 'loading' : 'paused', error: null, position: 0, duration: track.duration ?? 0, playingAs: null });
   if (autoplay) {
     deck.play().catch((error: unknown) => {
@@ -308,7 +328,6 @@ function load(index: number, autoplay = true) {
   void readLoudness(active, track);
   maybeFillRadio();
   persistSoon();
-  if (autoplay && settings().immersiveOnPlay && !useUi.getState().fullScreen) useUi.getState().setFullScreen(true);
 }
 
 /** Loads the next track onto the idle deck, so the change is instant. */
@@ -353,6 +372,7 @@ function startCrossfade(ni: number, seconds: number) {
     }
   }, 50);
   fading = { timer };
+  becameCurrent(entry);
   const track = entry.track;
   usePlayer.setState({ index: ni, status: 'playing', error: null, position: 0, duration: track.duration ?? 0 });
   updateMediaSession(track);
@@ -380,11 +400,8 @@ function onEnded() {
     reportPlayback();
     return;
   }
-  if (ni === usePlayer.getState().index) {
-    activeDeck().currentTime = 0;
-    void activeDeck().play();
-    return;
-  }
+  // Repeat one (ni is this song): loaded again from the start, which works for every source;
+  // rewinding a stream that has ended doesn't always.
   load(ni, true);
 }
 
@@ -516,6 +533,7 @@ export function restoreQueue() {
     const saved = JSON.parse(raw) as { queue: QueueItem[]; index: number; position: number; shuffle: boolean; repeat: RepeatMode };
     if (!Array.isArray(saved.queue) || !saved.queue[saved.index]) return;
     usePlayer.setState({ queue: saved.queue, index: saved.index, shuffle: !!saved.shuffle, repeat: saved.repeat ?? 'off' });
+    nowPlaying = saved.queue[saved.index]!;
     const track = saved.queue[saved.index]!.track;
     const deck = activeDeck();
     deck.src = streamUrl(track, settings().quality);
@@ -671,12 +689,31 @@ export const usePlayer = create<PlayerState>((set, get) => ({
   },
 
   previous: () => {
-    const { index } = get();
-    if (getPlayhead() > 3 || index <= 0) {
+    const { index, queue } = get();
+    if (getPlayhead() > 3) {
       get().seek(0);
       return;
     }
-    load(index - 1, true);
+    // The song played before this one, wherever it is in the queue now.
+    const back = played.pop();
+    if (!back) {
+      if (index <= 0) get().seek(0);
+      else load(index - 1, true);
+      return;
+    }
+    let at = queue.findIndex((q) => q.uid === back.uid);
+    if (at < 0) {
+      // No longer in the queue (a new list replaced it): back just before the current song.
+      set({ queue: [...queue.slice(0, index), back, ...queue.slice(index)] });
+      if (preloaded) resetDeck(preloaded.deck);
+      at = index;
+    }
+    goingBack = true;
+    try {
+      load(at, true);
+    } finally {
+      goingBack = false;
+    }
   },
 
   seek: (seconds) => {
@@ -721,6 +758,18 @@ export const usePlayer = create<PlayerState>((set, get) => ({
   cycleRepeat: () => {
     const order: RepeatMode[] = ['off', 'all', 'one'];
     const repeat = order[(order.indexOf(get().repeat) + 1) % order.length]!;
+    if (repeat === 'all') {
+      // Repeat all loops the songs you chose: the radio autoplay added after them, not yet played, goes.
+      // A radio (one song you picked, the rest autoplay) keeps its list and loops that.
+      const { queue, index, original } = get();
+      const chosen = queue.filter((q) => !q.auto).length;
+      const kept = chosen > 1 ? queue.filter((q, i) => i <= index || !q.auto) : queue;
+      if (kept.length !== queue.length) {
+        const keep = new Set(kept.map((q) => q.uid));
+        set({ queue: kept, original: original ? original.filter((q) => keep.has(q.uid)) : null });
+        radioFor = null;
+      }
+    }
     set({ repeat });
     if (preloaded) resetDeck(preloaded.deck);
     if (repeat === 'off') maybeFillRadio();

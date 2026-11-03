@@ -1,4 +1,4 @@
-import { ArrowDown, Check, CircleAlert, Gauge, HardDriveDownload, Music2, Smartphone } from 'lucide-react';
+import { ArrowDown, Check, CircleAlert, Gauge, HardDriveDownload, Smartphone } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import type { DownloadQuality, Track } from '@shared/types';
 import { downloadTracks, startDownload, useDownloads } from '@/state/downloads';
@@ -10,7 +10,6 @@ const OPTIONS: { value: DownloadQuality; title: string; detail: string; kbps: nu
   { value: 'best', title: 'Best', detail: 'YouTube’s highest quality, saved untouched · Opus ~160 kbps · .webm', kbps: 160, icon: <Gauge size={18} /> },
   { value: 'compatible', title: 'Compatible', detail: 'Opens in every player, car and phone · AAC 128 kbps · .m4a', kbps: 128, icon: <Smartphone size={18} /> },
   { value: 'small', title: 'Data Saver', detail: 'Smallest files · Opus ~64 kbps · .webm', kbps: 64, icon: <ArrowDown size={18} /> },
-  { value: 'lossless', title: 'Lossless', detail: 'FLAC/WAV from your own folders or server, when it has the song', kbps: 1000, icon: <Music2 size={18} /> },
 ];
 
 const mb = (bytes: number) => (bytes >= 1e9 ? `${(bytes / 1e9).toFixed(1)} GB` : `${Math.max(0.1, bytes / 1e6).toFixed(bytes < 1e7 ? 1 : 0)} MB`);
@@ -36,12 +35,12 @@ export function DownloadChooser({ tracks, onDone }: { tracks: Track[]; onDone: (
             className={`stagger relative flex items-center gap-3.5 rounded-[16px] px-4 py-3 text-left transition-[background-color,box-shadow] duration-200 ${quality === o.value ? 'bg-white/[0.14] shadow-[inset_0_0_0_1.5px_rgb(var(--keyColor-rgb)/0.9)]' : 'bg-white/[0.05] hover:bg-white/[0.09]'}`}
             onClick={() => setQuality(o.value)}
           >
-            <span className={`grid size-9 flex-none place-items-center rounded-full ${quality === o.value ? 'bg-key text-white' : 'bg-white/10 text-secondary'}`}>{o.icon}</span>
+            <span className={`grid size-9 flex-none place-items-center rounded-full ${quality === o.value ? 'bg-key text-(--onKeyColor)' : 'bg-white/10 text-secondary'}`}>{o.icon}</span>
             <span className="flex min-w-0 flex-1 flex-col">
               <span className="type-body-emphasized text-primary">{o.title}</span>
               <span className="type-callout text-secondary">{o.detail}</span>
             </span>
-            <span className="flex-none type-callout-medium text-tertiary tabular-nums">{o.value === 'lossless' ? '≈ ' + mb(seconds * 110_000) : '≈ ' + mb((seconds * o.kbps * 1000) / 8)}</span>
+            <span className="flex-none type-callout-medium text-tertiary tabular-nums">{'≈ ' + mb((seconds * o.kbps * 1000) / 8)}</span>
           </button>
         ))}
       </div>
@@ -76,7 +75,7 @@ export function DownloadStatus({ videoId, size = 16, className = '' }: { videoId
   if (!d) return null;
   if (d.state === 'done')
     return (
-      <span className={`inline-grid flex-none animate-glyph place-items-center rounded-full bg-key text-white ${className}`} style={{ width: size, height: size }} title={`Downloaded · ${d.format?.codec ?? ''}`} aria-label="Downloaded">
+      <span className={`inline-grid flex-none animate-glyph place-items-center rounded-full bg-key text-(--onKeyColor) ${className}`} style={{ width: size, height: size }} title={`Downloaded · ${d.format?.codec ?? ''}`} aria-label="Downloaded">
         <ArrowDown size={size * 0.68} strokeWidth={3} />
       </span>
     );

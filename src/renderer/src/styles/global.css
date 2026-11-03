@@ -27,23 +27,6 @@
   color-scheme: dark;
   --font-family: 'Inter Variable', 'Inter', 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
 
-  /* Type scale (font: weight size/line-height), after Apple's macOS styles. */
-  --header-emphasized: 700 32px / 38px var(--font-family);
-  --large-title-emphasized: 700 26px / 32px var(--font-family);
-  --title-1-emphasized: 700 22px / 28px var(--font-family);
-  --title-2: 400 17px / 22px var(--font-family);
-  --title-2-emphasized: 650 17px / 22px var(--font-family);
-  --title-3: 400 15px / 20px var(--font-family);
-  --title-3-emphasized: 600 15px / 20px var(--font-family);
-  --body: 400 13px / 17px var(--font-family);
-  --body-emphasized: 600 13px / 17px var(--font-family);
-  --body-reduced: 400 14px / 20px var(--font-family);
-  --callout: 400 12px / 16px var(--font-family);
-  --callout-medium: 500 12px / 16px var(--font-family);
-  --callout-emphasized: 600 12px / 16px var(--font-family);
-  --subhead-emphasized: 600 11px / 14px var(--font-family);
-  --footnote: 400 11px / 14px var(--font-family);
-
   /* Layout. The sidebar floats, inset from the window's edges. */
   --nav-width: 248px;
   --inset: 8px;
@@ -54,16 +37,6 @@
   --player-pill-height: 60px;
   --player-bottom-offset: 16px;
   --side-panel-width: 330px;
-
-  /* Concentric radii: inner = outer − padding (sidebar 20 − inset 8 = items 12). */
-  --radius-panel: 20px;
-  --radius-control: 12px;
-  --radius-card: 18px;
-  --radius-artwork-small: 6px;
-  --radius-artwork-medium: 8px;
-  --radius-artwork-large: 12px;
-  --radius-nav-item: 12px;
-  --radius-track-row: 10px;
 
   /* Motion: Apple's springy ease-outs. */
   --ease-out-panel: cubic-bezier(0.32, 0.72, 0, 1);
@@ -82,6 +55,8 @@
   --keyColor: #fa586a;
   --keyColor-rgb: 250 88 106;
   --keyColorBG: #fa233b;
+  /* Text and glyphs on an accent fill: white, or near-black when the accent is light (Mono, Lime…). */
+  --onKeyColor: #ffffff;
 
   --labelDivider: #ffffff17;
   --navSidebarSelectedState: #ffffff1a;
@@ -107,8 +82,6 @@
   --glass-fill: rgb(38 38 42 / 0.4);
   --glass-fill-thick: rgb(40 40 44 / 0.6);
   --glass-fill-clear: rgb(255 255 255 / 0.1);
-  --glass-blur: 20px;
-  --glass-blur-thick: 36px;
   --glass-saturate: 1.9;
   --glass-rim: rgb(255 255 255 / 0.32);
   --glass-rim-soft: rgb(255 255 255 / 0.07);
@@ -116,6 +89,47 @@
   --glass-shadow-thick: 0 18px 48px rgb(0 0 0 / 0.42), 0 2px 6px rgb(0 0 0 / 0.25);
   --glassMaterialBackground: var(--glass-fill);
   --menuBG: var(--glass-fill-thick);
+  /* Dialogs hold controls and text to read, so they're nearly solid: the theme's page colour, slightly lifted. */
+  --dialog-fill: color-mix(in srgb, rgb(var(--pageBG-rgb) / 0.94) 91%, rgb(255 255 255 / 0.94));
+}
+
+/*
+ * Values computed from the appearance settings (font, corners, glass blur). Settings' live
+ * preview sets the same inputs on a .theme-scope element, so they resolve again inside it.
+ */
+:root,
+.theme-scope {
+  /* Type scale (font: weight size/line-height), after Apple's macOS styles. */
+  --header-emphasized: 700 32px / 38px var(--font-family);
+  --large-title-emphasized: 700 26px / 32px var(--font-family);
+  --title-1-emphasized: 700 22px / 28px var(--font-family);
+  --title-2: 400 17px / 22px var(--font-family);
+  --title-2-emphasized: 650 17px / 22px var(--font-family);
+  --title-3: 400 15px / 20px var(--font-family);
+  --title-3-emphasized: 600 15px / 20px var(--font-family);
+  --body: 400 13px / 17px var(--font-family);
+  --body-emphasized: 600 13px / 17px var(--font-family);
+  --body-reduced: 400 14px / 20px var(--font-family);
+  --callout: 400 12px / 16px var(--font-family);
+  --callout-medium: 500 12px / 16px var(--font-family);
+  --callout-emphasized: 600 12px / 16px var(--font-family);
+  --subhead-emphasized: 600 11px / 14px var(--font-family);
+  --footnote: 400 11px / 14px var(--font-family);
+
+  /* Concentric radii: inner = outer − padding (sidebar 20 − inset 8 = items 12). */
+  /* Scaled together by Settings › Appearance › Corners (--corner-scale), so they stay concentric. */
+  --radius-panel: calc(20px * var(--corner-scale, 1));
+  --radius-control: calc(12px * var(--corner-scale, 1));
+  --radius-card: calc(18px * var(--corner-scale, 1));
+  --radius-artwork-small: calc(6px * var(--corner-scale, 1));
+  --radius-artwork-medium: calc(8px * var(--corner-scale, 1));
+  --radius-artwork-large: calc(12px * var(--corner-scale, 1));
+  --radius-nav-item: calc(12px * var(--corner-scale, 1));
+  --radius-track-row: calc(10px * var(--corner-scale, 1));
+
+  /* Settings › Appearance › Glass blur scales these (--glass-blur-scale). */
+  --glass-blur: calc(20px * var(--glass-blur-scale, 1));
+  --glass-blur-thick: calc(36px * var(--glass-blur-scale, 1));
 }
 
 /* Compact sidebar: pages start after the icon rail; the full sidebar opens over them. */
@@ -156,20 +170,18 @@
   }
 }
 
-/* Track-row density (Settings › Layout). */
+/* Track-row height (Settings › Layout sets both from its slider). */
 :root {
   --row-h: 56px;
   --row-art: 40px;
-}
-[data-density='compact'] {
-  --row-h: 44px;
-  --row-art: 32px;
 }
 
 /* The full-screen player: labels for a dark, coloured backdrop. */
 [data-immersive] {
   --keyColor: #ffffff;
   --keyColor-rgb: 255 255 255;
+  /* The accent is white here, so text on accent fills (lyric tools…) turns dark. */
+  --onKeyColor: #111114;
   --systemPrimary: #ffffffeb;
   --systemSecondary: #ffffffa3;
   --systemTertiary: #ffffff70;
@@ -424,8 +436,8 @@
 @utility glass-clear {
   isolation: isolate;
   background-color: var(--glass-fill-clear);
-  -webkit-backdrop-filter: blur(8px) saturate(1.25) brightness(1.16);
-  backdrop-filter: blur(8px) saturate(1.25) brightness(1.16);
+  -webkit-backdrop-filter: blur(calc(8px * var(--glass-blur-scale, 1))) saturate(1.25) brightness(1.16);
+  backdrop-filter: blur(calc(8px * var(--glass-blur-scale, 1))) saturate(1.25) brightness(1.16);
   /* Mostly light, not shadow: a lit top edge, a faint inner glow, a soft drop. */
   box-shadow:
     inset 0 1px 0 rgb(255 255 255 / 0.22),
@@ -449,8 +461,8 @@
   isolation: isolate;
   color: #fff;
   background-color: rgb(var(--keyColor-rgb) / 0.82);
-  -webkit-backdrop-filter: blur(16px) saturate(1.6);
-  backdrop-filter: blur(16px) saturate(1.6);
+  -webkit-backdrop-filter: blur(calc(16px * var(--glass-blur-scale, 1))) saturate(1.6);
+  backdrop-filter: blur(calc(16px * var(--glass-blur-scale, 1))) saturate(1.6);
   box-shadow: 0 6px 22px rgb(var(--keyColor-rgb) / 0.32), 0 1px 3px rgb(0 0 0 / 0.25);
   &::after {
     content: '';
@@ -521,12 +533,13 @@
   mask-image: linear-gradient(to bottom, #000 35%, transparent);
 }
 
+/* Kept light: a soft fade under the player, so songs stay readable as they scroll down to it. */
 @utility scroll-edge-bottom {
-  -webkit-backdrop-filter: blur(12px);
-  backdrop-filter: blur(12px);
-  background: linear-gradient(to top, rgb(var(--pageBG-rgb) / 0.7), rgb(var(--pageBG-rgb) / 0));
-  -webkit-mask-image: linear-gradient(to top, #000 30%, transparent);
-  mask-image: linear-gradient(to top, #000 30%, transparent);
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
+  background: linear-gradient(to top, rgb(var(--pageBG-rgb) / 0.45), rgb(var(--pageBG-rgb) / 0));
+  -webkit-mask-image: linear-gradient(to top, #000 20%, transparent);
+  mask-image: linear-gradient(to top, #000 20%, transparent);
 }
 
 /* Apple's tight headline tracking (Inter runs a touch wider than SF Pro). */
@@ -558,6 +571,37 @@
 @utility app-no-drag {
   -webkit-app-region: no-drag;
   app-region: no-drag;
+}
+
+/*
+ * Sideways rows run under the sidebar: scrolled cards pass behind its glass and fade out
+ * across it (gone before the window's edge, so nothing peeks out beside it). Where there's
+ * more to the right, they fade out there too (72 px), the fade growing as you scroll.
+ */
+@property --shelf-fade-end {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
+@utility shelf-fade {
+  --shelf-fade-end: 0px;
+  -webkit-mask-image: linear-gradient(to right, transparent var(--inset), #000 var(--content-left), #000 calc(100% - var(--shelf-fade-end)), transparent 100%);
+  mask-image: linear-gradient(to right, transparent var(--inset), #000 var(--content-left), #000 calc(100% - var(--shelf-fade-end)), transparent 100%);
+  transition: --shelf-fade-end 0.5s var(--ease-out-panel);
+  &[data-fade-end] {
+    --shelf-fade-end: 72px;
+  }
+}
+@utility shelf-edge {
+  width: 56px;
+  -webkit-backdrop-filter: blur(calc(6px * var(--glass-blur-scale, 1)));
+  backdrop-filter: blur(calc(6px * var(--glass-blur-scale, 1)));
+  -webkit-mask-image: linear-gradient(to right, #000, transparent);
+  mask-image: linear-gradient(to right, #000, transparent);
+  &[data-end] {
+    -webkit-mask-image: linear-gradient(to left, #000, transparent);
+    mask-image: linear-gradient(to left, #000, transparent);
+  }
 }
 
 @utility no-scrollbar {
@@ -655,22 +699,29 @@
     outline-offset: 1px;
   }
 
-  /* Thin, quiet scrollbars, as Chromium on Windows draws them otherwise wide and grey. */
+  /*
+   * Thin scrollbars in the theme, as Chromium on Windows draws them otherwise wide and grey.
+   * Like Apple's overlay scrollbars they stay out of sight until you point at what scrolls.
+   */
   ::-webkit-scrollbar {
-    width: 12px;
-    height: 12px;
+    width: 10px;
+    height: 10px;
   }
   ::-webkit-scrollbar-track {
     background: transparent;
   }
   ::-webkit-scrollbar-thumb {
-    background-color: #ffffff26;
+    background-color: transparent;
     border: 3px solid transparent;
     border-radius: 999px;
     background-clip: content-box;
   }
-  ::-webkit-scrollbar-thumb:hover {
-    background-color: #ffffff40;
+  :hover::-webkit-scrollbar-thumb {
+    background-color: color-mix(in srgb, rgb(var(--keyColor-rgb)) 45%, rgb(255 255 255 / 0.25));
+  }
+  ::-webkit-scrollbar-thumb:hover,
+  ::-webkit-scrollbar-thumb:active {
+    background-color: rgb(var(--keyColor-rgb) / 0.85);
   }
   ::-webkit-scrollbar-corner {
     background: transparent;
@@ -711,6 +762,67 @@
   height: 100%;
   object-fit: cover;
   animation-duration: 0.3s;
+}
+/*
+ * Full screen, while lyrics or Up Next open or close (only then are these parts named, so closing the
+ * full-screen player itself stays one crossfade): the player column glides between centre and side,
+ * lyrics fade in from the side, and Up Next rises from below and sinks back down.
+ */
+[data-panel-motion] .np-column {
+  view-transition-name: np-column;
+}
+[data-panel-motion] .np-lyrics {
+  view-transition-name: np-lyrics;
+}
+[data-panel-motion] .np-queue {
+  view-transition-name: np-queue;
+}
+::view-transition-group(np-column) {
+  animation-duration: 0.6s;
+  animation-timing-function: cubic-bezier(0.32, 0.72, 0, 1);
+}
+::view-transition-old(np-column),
+::view-transition-new(np-column) {
+  height: 100%;
+  animation-duration: 0.35s;
+}
+::view-transition-old(np-lyrics) {
+  animation: 0.32s cubic-bezier(0.4, 0, 1, 1) both np-lyrics-out;
+}
+::view-transition-new(np-lyrics) {
+  animation: 0.5s cubic-bezier(0.32, 0.72, 0, 1) 0.08s both np-lyrics-in;
+}
+::view-transition-old(np-queue) {
+  animation: 0.34s cubic-bezier(0.4, 0, 1, 1) both np-queue-out;
+}
+::view-transition-new(np-queue) {
+  animation: 0.6s cubic-bezier(0.32, 0.72, 0, 1) 0.06s both np-queue-in;
+}
+@keyframes np-lyrics-out {
+  to {
+    opacity: 0;
+    transform: translateX(28px) scale(0.98);
+    filter: blur(6px);
+  }
+}
+@keyframes np-lyrics-in {
+  from {
+    opacity: 0;
+    transform: translateX(28px) scale(0.98);
+    filter: blur(6px);
+  }
+}
+@keyframes np-queue-out {
+  to {
+    opacity: 0;
+    transform: translateY(56px);
+  }
+}
+@keyframes np-queue-in {
+  from {
+    opacity: 0;
+    transform: translateY(72px);
+  }
 }
 ::view-transition-group(nav-selection) {
   animation-duration: 0.5s;

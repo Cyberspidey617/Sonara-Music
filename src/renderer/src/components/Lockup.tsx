@@ -1,6 +1,7 @@
 import { Disc3, Ellipsis, ListMusic, Play, Shuffle, User } from 'lucide-react';
 import type { Lockup as LockupData, Track } from '@shared/types';
 import { api, errorMessage } from '@/lib/api';
+import { useLibrary } from '@/state/library';
 import { go } from '@/state/nav';
 import { openContextMenu, openMenuAt, type MenuEntry } from '@/state/menu';
 import { usePlayer } from '@/state/player';
@@ -43,8 +44,8 @@ export async function playLockup(lockup: LockupData, shuffle = false) {
 
 const ICON = { size: 15, strokeWidth: 1.9 };
 
-function lockupMenu(lockup: LockupData): MenuEntry[] {
-  if (lockup.track) return trackMenu(lockup.track);
+function lockupMenu(lockup: LockupData, fromHistory: boolean): MenuEntry[] {
+  if (lockup.track) return trackMenu(lockup.track, { fromHistory });
   return [
     { header: lockup.title },
     { label: 'Play', icon: <Play {...ICON} />, onSelect: () => void playLockup(lockup) },
@@ -59,11 +60,14 @@ function lockupMenu(lockup: LockupData): MenuEntry[] {
 }
 
 /** A square tile (round for artists): artwork, title, subtitle; a play button on hover. */
-export function Lockup({ lockup, size = 180 }: { lockup: LockupData; size?: number }) {
+export function Lockup({ lockup, size: baseSize = 180, fromHistory = false }: { lockup: LockupData; size?: number; fromHistory?: boolean }) {
+  // Settings › Layout › Cover size; 0 (fill a grid cell) stays as it is.
+  const coverScale = useLibrary((s) => s.settings.coverSize ?? 1);
+  const size = Math.round(baseSize * coverScale);
   const artist = lockup.kind === 'artist';
   const video = lockup.kind === 'video';
   return (
-    <div className={`group flex min-w-0 flex-col ${size ? '' : 'w-full'}`} style={size ? { width: size } : undefined} onContextMenu={(e) => openContextMenu(e, lockupMenu(lockup))}>
+    <div className={`group flex min-w-0 flex-col ${size ? '' : 'w-full'}`} style={size ? { width: size } : undefined} onContextMenu={(e) => openContextMenu(e, lockupMenu(lockup, fromHistory))}>
       <div className="relative cursor-pointer transition-[translate,scale] duration-500 ease-(--ease-spring) group-hover:-translate-y-1 group-hover:scale-[1.02] active:scale-[0.98]" onClick={() => openLockup(lockup)}>
         <Artwork url={lockup.thumbnail} size={size || 226} round={artist} kind={artist ? 'artist' : 'music'} className={video ? 'aspect-video w-full' : 'aspect-square w-full'} />
         {!artist && (
@@ -84,7 +88,7 @@ export function Lockup({ lockup, size = 180 }: { lockup: LockupData; size?: numb
               aria-label="More"
               onClick={(e) => {
                 e.stopPropagation();
-                openMenuAt(e.currentTarget, lockupMenu(lockup), 'below-start');
+                openMenuAt(e.currentTarget, lockupMenu(lockup, fromHistory), 'below-start');
               }}
             >
               <Ellipsis size={16} className="relative z-1" />

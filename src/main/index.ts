@@ -39,6 +39,8 @@ protocol.registerSchemesAsPrivileged([
 ]);
 
 app.setAppUserModelId('com.obsidian.music.pc');
+// Renamed to Sonara: keep reading the library from the folder the app has always used.
+app.setPath('userData', path.join(app.getPath('appData'), 'Obsidian Music'));
 // A plain Chrome user agent: some lyric providers refuse "Electron".
 app.userAgentFallback = app.userAgentFallback.replace(/\s?Electron\/[\d.]+/, '').replace(/\s?obsidian-music-pc\/[\d.]+/i, '');
 
@@ -107,7 +109,7 @@ function updateThumbar() {
 
 function updateTray() {
   if (!tray) return;
-  const label = playback.title ? `${playback.title}${playback.artist ? ` — ${playback.artist}` : ''}` : 'Obsidian Music';
+  const label = playback.title ? `${playback.title}${playback.artist ? ` — ${playback.artist}` : ''}` : 'Sonara';
   tray.setToolTip(label.length > 120 ? `${label.slice(0, 117)}…` : label);
   tray.setContextMenu(
     Menu.buildFromTemplate([
@@ -117,7 +119,7 @@ function updateTray() {
       { label: 'Next', click: () => send('next') },
       { label: 'Previous', click: () => send('previous') },
       { type: 'separator' },
-      { label: 'Show Obsidian', click: showWindow },
+      { label: 'Show Sonara', click: showWindow },
       { label: 'Quit', click: () => ((quitting = true), app.quit()) },
     ]),
   );
@@ -132,7 +134,6 @@ function showWindow() {
 
 // ---- The window ----------------------------------------------------------------------
 
-const TITLEBAR = { page: '#00000000', immersive: '#00000000' };
 
 function createWindow() {
   const state = loadWindowState();
@@ -143,11 +144,13 @@ function createWindow() {
     minWidth: 960,
     minHeight: 620,
     show: false,
-    title: 'Obsidian Music',
+    title: 'Sonara',
     backgroundColor: '#0e0e10',
     icon: icon(process.platform === 'win32' ? 'icon.ico' : 'icon.png'),
+    // No system caption buttons: the app draws its own, in the theme (shell/WindowControls).
     titleBarStyle: 'hidden',
-    ...(process.platform !== 'darwin' && { titleBarOverlay: { color: TITLEBAR.page, symbolColor: '#ffffffd9', height: 40 } }),
+    // macOS keeps its own traffic lights (Windows and Linux get the app's buttons instead).
+    ...(process.platform === 'darwin' && { trafficLightPosition: { x: 20, y: 18 } }),
     autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.js'),
@@ -166,6 +169,8 @@ function createWindow() {
   });
   win.on('enter-full-screen', () => win?.webContents.send('app:fullscreen', true));
   win.on('leave-full-screen', () => win?.webContents.send('app:fullscreen', false));
+  win.on('maximize', () => win?.webContents.send('app:maximized', true));
+  win.on('unmaximize', () => win?.webContents.send('app:maximized', false));
   win.on('close', (event) => {
     saveWindowState();
     if (!quitting && getLibrary().settings.closeToTray && tray) {
@@ -394,23 +399,21 @@ function registerIpc() {
 
   ipcMain.on('app:playback-state', (_event, state: PlaybackState) => {
     playback = { playing: !!state?.playing, title: state?.title, artist: state?.artist };
-    if (win) win.setTitle(playback.title ? `${playback.title} — ${playback.artist ?? ''} · Obsidian Music` : 'Obsidian Music');
+    if (win) win.setTitle(playback.title ? `${playback.title} — ${playback.artist ?? ''} · Sonara` : 'Sonara');
     updateThumbar();
     updateTray();
   });
-  ipcMain.on('app:titlebar-theme', (_event, theme: 'page' | 'immersive') => {
-    if (!win || process.platform === 'darwin') return;
-    try {
-      win.setTitleBarOverlay({ color: TITLEBAR[theme] ?? TITLEBAR.page, symbolColor: '#ffffffd9' });
-    } catch {
-      /* older platforms */
-    }
-  });
+  // The app's own window buttons. Closing goes through 'close', so close-to-tray still applies.
+  ipcMain.on('window:minimize', () => win?.minimize());
+  ipcMain.on('window:toggle-maximize', () => win && (win.isMaximized() ? win.unmaximize() : win.maximize()));
+  ipcMain.on('window:close', () => win?.close());
+  handle('window:is-maximized', () => win?.isMaximized() ?? false);
 }
 
 function ensureTray() {
   if (tray || process.platform === 'darwin') return;
-  tray = new Tray(icon(process.platform === 'win32' ? 'icon.ico' : 'icon.png'));
+  // The .ico carries its small sizes; on Linux the 512 px PNG is scaled to the panel.
+  tray = new Tray(process.platform === 'win32' ? icon('icon.ico') : icon('icon.png').resize({ width: 22, quality: 'best' }));
   tray.on('click', showWindow);
   updateTray();
 }
@@ -425,7 +428,7 @@ if (!app.requestSingleInstanceLock()) {
   app.whenReady().then(() => {
     const dataDir = app.getPath('userData');
     configureLog(path.join(dataDir, 'logs'));
-    log.info(`Obsidian Music ${app.getVersion()} on ${process.platform}-${process.arch}, Electron ${process.versions.electron}`);
+    log.info(`Sonara ${app.getVersion()} on ${process.platform}-${process.arch}, Electron ${process.versions.electron}`);
     openStore(dataDir);
     openLibrary(dataDir, (state: LibraryScanState) => win?.webContents.send('music:scan-progress', state));
     openServer(dataDir);

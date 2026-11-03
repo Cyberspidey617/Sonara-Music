@@ -3,3 +3,5 @@ out/
 dist/
 test/*.mjs
 *.log
+
+dist-build.log

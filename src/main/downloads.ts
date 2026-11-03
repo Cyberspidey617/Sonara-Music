@@ -5,18 +5,16 @@
 //   best        YouTube's best: Opus ~160 kbps (.webm), falling back to AAC
 //   compatible  AAC 128 kbps (.m4a), which every player and phone opens
 //   small       Opus ~50–70 kbps (.webm), for saving space
-//   lossless    the original file from your own folders or server (FLAC, WAV…)
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { isYouTubeId, type AudioFormat, type DownloadItem, type DownloadQuality, type StreamInfo, type Track } from '../shared/types';
 import { getEntry } from './library';
 import { log } from './log';
-import { findLosslessMatch } from './lossless';
 import { serveServerSong } from './media';
 import { resolveStream, type ResolvedStream } from './stream';
 
-const ITAGS: Record<Exclude<DownloadQuality, 'lossless'>, number[]> = {
+const ITAGS: Record<DownloadQuality, number[]> = {
   best: [251, 140, 250],
   compatible: [140, 139],
   small: [250, 249, 139],
@@ -153,31 +151,11 @@ async function run(d: DownloadItem, signal: AbortSignal) {
   if (track.source === 'server') return saveResponse(d, await serveServerSong(track.videoId.replace(/^srv_/, ''), null), track.format, signal);
   if (!isYouTubeId(track.videoId)) throw new Error('This song can’t be downloaded.');
 
-  if (d.quality === 'lossless') {
-    const match = await findLosslessMatch({
-      videoId: track.videoId,
-      title: track.title,
-      artist: track.artists.map((a) => a.name).join(', '),
-      duration: track.duration,
-    });
-    if (!match) throw new Error('No lossless copy found. YouTube has no lossless audio: add a folder or server with this song in FLAC, or pick Best.');
-    if (match.source === 'local') {
-      const ext = path.extname(match.entry.path);
-      d.path = targetPath(track, ext);
-      const size = (await fs.promises.stat(match.entry.path)).size;
-      d.total = size;
-      await fs.promises.copyFile(match.entry.path, d.path);
-      d.received = size;
-      d.format = match.format;
-      return;
-    }
-    return saveResponse(d, await serveServerSong(match.id, null), match.format, signal, match.suffix ? `.${match.suffix}` : undefined);
-  }
-
   // YouTube: the chosen format, fetched in pieces, re-resolving if a link expires.
   let stream: ResolvedStream | null = null;
   let lastError = '';
-  for (const itag of ITAGS[d.quality]) {
+  // A lossless copy made by an earlier version is fetched again at Best.
+  for (const itag of ITAGS[d.quality === 'lossless' ? 'best' : d.quality]) {
     try {
       stream = await resolveStream(track.videoId, 'high', { itag, fresh: true });
       break;

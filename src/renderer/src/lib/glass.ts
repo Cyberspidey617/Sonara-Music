@@ -12,6 +12,7 @@
  * within" — a light that follows the pointer inside elements with `.glow`.
  */
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type RefObject } from 'react';
+import { useLibrary } from '@/state/library';
 
 const supportsLens = typeof CSS !== 'undefined' && CSS.supports('backdrop-filter', 'url(#x)');
 const reducedTransparency = typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-transparency: reduce)') : null;
@@ -83,6 +84,8 @@ let lensCount = 0;
  */
 export function useLiquidLens(ref: RefObject<HTMLElement | null>, options: { radius?: number; band?: number; strength?: number; blur?: number; key?: unknown } = {}): CSSProperties | undefined {
   const { radius, band = 18, strength = 46, blur = 14, key } = options;
+  // Settings › Appearance › Glass blur, as a factor of this control's own frosting (the CSS glass scales to match).
+  const blurScale = useLibrary((s) => s.settings.glassBlur ?? 1);
   const [id] = useState(() => `lens-${++lensCount}`);
   const [ready, setReady] = useState(false);
   const [reduce, setReduce] = useState(reducedTransparency?.matches ?? false);
@@ -109,40 +112,14 @@ export function useLiquidLens(ref: RefObject<HTMLElement | null>, options: { rad
     const image = document.createElementNS(ns, 'feImage');
     image.setAttribute('result', 'map');
     image.setAttribute('preserveAspectRatio', 'none');
-    // Chromatic aberration, as real glass and liquid-glass-react do: each colour channel
-    // bends by a slightly different amount, so the rim picks up a faint prism fringe.
-    // In the middle the map is neutral, so all three line up and the image stays clean.
-    const channel = (scale: number, row: string, result: string) => {
-      const d = document.createElementNS(ns, 'feDisplacementMap');
-      d.setAttribute('in', 'SourceGraphic');
-      d.setAttribute('in2', 'map');
-      d.setAttribute('scale', String(scale));
-      d.setAttribute('xChannelSelector', 'R');
-      d.setAttribute('yChannelSelector', 'G');
-      d.setAttribute('result', `${result}-d`);
-      const m = document.createElementNS(ns, 'feColorMatrix');
-      m.setAttribute('in', `${result}-d`);
-      m.setAttribute('type', 'matrix');
-      m.setAttribute('values', `${row} 0 0 0 1 0`);
-      m.setAttribute('result', result);
-      return [d, m];
-    };
-    const blend = (a: string, b: string, result?: string) => {
-      const n = document.createElementNS(ns, 'feBlend');
-      n.setAttribute('in', a);
-      n.setAttribute('in2', b);
-      n.setAttribute('mode', 'screen');
-      if (result) n.setAttribute('result', result);
-      return n;
-    };
-    filter.append(
-      image,
-      ...channel(strength * 1.06, '1 0 0 0 0 0 0 0 0 0 0 0 0 0 0', 'r'),
-      ...channel(strength, '0 0 0 0 0 0 1 0 0 0 0 0 0 0 0', 'g'),
-      ...channel(strength * 0.94, '0 0 0 0 0 0 0 0 0 0 0 0 1 0 0', 'b'),
-      blend('g', 'b', 'gb'),
-      blend('r', 'gb'),
-    );
+    // One displacement for all colours: the rim bends light without splitting it into a prism fringe.
+    const displace = document.createElementNS(ns, 'feDisplacementMap');
+    displace.setAttribute('in', 'SourceGraphic');
+    displace.setAttribute('in2', 'map');
+    displace.setAttribute('scale', String(strength));
+    displace.setAttribute('xChannelSelector', 'R');
+    displace.setAttribute('yChannelSelector', 'G');
+    filter.append(image, displace);
     svgDefs().appendChild(filter);
     filterRef.current = filter;
 
@@ -176,7 +153,7 @@ export function useLiquidLens(ref: RefObject<HTMLElement | null>, options: { rad
   }, [ref, id, radius, band, strength, reduce, key]);
 
   if (!ready || reduce || !supportsLens) return undefined;
-  const value = `url(#${id}) blur(${blur}px) saturate(1.9) brightness(1.06)`;
+  const value = `url(#${id}) blur(${blur * blurScale}px) saturate(1.9) brightness(1.06)`;
   return { backdropFilter: value, WebkitBackdropFilter: value } as CSSProperties;
 }
 

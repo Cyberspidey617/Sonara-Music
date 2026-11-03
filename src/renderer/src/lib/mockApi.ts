@@ -5,7 +5,7 @@
  * generated gradients, so the UI can be checked without network access.
  */
 import type { AlbumPage, ArtistPage, HomeFeed, LibraryData, ObsidianApi, PlaylistPage, SearchResults, Track } from '@shared/types';
-import { DEFAULT_SETTINGS, type DownloadItem } from '@shared/types';
+import { DEFAULT_SETTINGS, migrateSettings, type DownloadItem } from '@shared/types';
 import raw from './mock-data.json';
 
 const PALETTES = [
@@ -73,7 +73,10 @@ export function createMockApi(): ObsidianApi {
   let library: LibraryData = { liked: [], playlists: [], history: [], settings: { ...DEFAULT_SETTINGS } };
   try {
     const saved = localStorage.getItem(LIBRARY_KEY);
-    if (saved) library = { ...library, ...JSON.parse(saved) };
+    if (saved) {
+      const parsed = JSON.parse(saved) as LibraryData;
+      library = { ...library, ...parsed, settings: { ...DEFAULT_SETTINGS, ...migrateSettings((parsed.settings ?? {}) as unknown as Record<string, unknown>) } };
+    }
   } catch {
     /* fresh */
   }
@@ -96,7 +99,7 @@ export function createMockApi(): ObsidianApi {
   return {
     platform: 'browser',
     downloadTracks: async (tracks, quality) => {
-      for (const track of tracks) downloads.set(track.videoId, { videoId: track.videoId, track, quality, state: 'queued', received: 0, total: quality === 'lossless' ? 32e6 : quality === 'small' ? 1.6e6 : 4.2e6, at: Date.now(), format: { codec: quality === 'compatible' ? 'AAC' : 'Opus', lossless: quality === 'lossless', bitrate: quality === 'small' ? 64000 : 160000 } });
+      for (const track of tracks) downloads.set(track.videoId, { videoId: track.videoId, track, quality, state: 'queued', received: 0, total: quality === 'small' ? 1.6e6 : 4.2e6, at: Date.now(), format: { codec: quality === 'compatible' ? 'AAC' : 'Opus', lossless: false, bitrate: quality === 'small' ? 64000 : 160000 } });
       emit();
     },
     cancelDownload: async (id) => void (downloads.delete(id), emit()),
@@ -130,7 +133,11 @@ export function createMockApi(): ObsidianApi {
     },
     openExternal: async (url) => void window.open(url, '_blank'),
     setPlaybackState: () => undefined,
-    setTitleBarTheme: () => undefined,
+    minimizeWindow: () => undefined,
+    toggleMaximizeWindow: () => undefined,
+    closeWindow: () => undefined,
+    isWindowMaximized: async () => false,
+    onMaximizedChange: () => () => undefined,
     toggleFullScreen: async () => {
       if (document.fullscreenElement) await document.exitFullscreen();
       else await document.documentElement.requestFullscreen().catch(() => undefined);

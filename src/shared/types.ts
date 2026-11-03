@@ -138,11 +138,15 @@ export interface LocalPlaylist {
 /** "lossless" plays a matching lossless copy from your folders or server, else YouTube's best. */
 export type AudioQuality = 'lossless' | 'high' | 'normal' | 'low';
 
-export type PageTone = 'obsidian' | 'graphite' | 'black';
+export type PageTone = 'obsidian' | 'graphite' | 'black' | 'midnight' | 'forest' | 'wine' | 'mocha';
 export type LyricsFont = 'inter' | 'dm-sans' | 'system' | 'serif' | 'rounded';
 export type GlassStyle = 'clear' | 'tinted';
 export type Backdrop = 'mesh' | 'artwork' | 'solid';
 export type StartPage = 'home' | 'liked' | 'music' | 'last';
+export type PageBackground = 'plain' | 'gradient' | 'artwork';
+export type PlayerStyle = 'pebble' | 'full';
+/** The pebble waveform's colour: from the playing song, the accent, the lavender gradient, or one you pick. */
+export type WaveColor = 'song' | 'accent' | 'lavender' | 'custom';
 
 export interface Settings {
   quality: AudioQuality;
@@ -152,8 +156,6 @@ export interface Settings {
   volume: number;
   /** Even out loudness between tracks with YouTube's loudness data. */
   normalize: boolean;
-  /** Launch straight into the immersive full-screen player when playback starts. */
-  immersiveOnPlay: boolean;
   closeToTray: boolean;
 
   // Your music (lossless sources)
@@ -168,6 +170,14 @@ export interface Settings {
   ambientGlow: boolean;
   /** Apple's Liquid Glass look: Clear (more transparent) or Tinted (frostier). */
   glassStyle: GlassStyle;
+  /** How strongly glass blurs what's behind it, as a factor of the design's own blur (0 = none). */
+  glassBlur: number;
+  /** Behind the pages: the plain page colour, a gradient in the accent, or the playing artwork blurred. */
+  pageBackground: PageBackground;
+  /** The typeface for the whole app (lyrics have their own). */
+  uiFont: LyricsFont;
+  /** Corner roundness, as a factor of the design's radii (0 = square). */
+  corners: number;
   /** Bumped when a redesign changes defaults that existing settings should pick up. */
   designVersion: number;
 
@@ -189,9 +199,37 @@ export interface Settings {
   backdropMotion: number;
   artworkScale: number;
 
+  // The pebble's waveform
+  waveColor: WaveColor;
+  waveCustomColor: string;
+  waveBars: number;
+  /** Bar width, as a share of each bar's slot. */
+  waveThickness: number;
+  /** How tall the bars reach for the same sound. */
+  waveHeight: number;
+  /** 0 follows the music tightly; 1 glides. */
+  waveSmoothing: number;
+  /** How strongly the bars answer quiet sounds (0.5 is neutral). */
+  waveSensitivity: number;
+  /** Learns each song's loudness as it plays, so quiet songs move and loud ones don't max out. */
+  waveAutoLevel: boolean;
+  /** Balanced: small at the ends, tallest in the middle. Even: one height across. */
+  waveShape: 'balanced' | 'even';
+  /** Mirrored around the centre line, or rising from the bottom. */
+  waveStyle: 'mirrored' | 'rising';
+  /** A soft breathing while paused (otherwise still). */
+  waveIdle: boolean;
+
   // Layout
   zoom: number;
-  compact: boolean;
+  /** Song-list row height in px. */
+  rowHeight: number;
+  /** Artwork size in sideways rows, as a factor of each row's own size. */
+  coverSize: number;
+  /** Pebble: the player rests as a small pebble and opens into the full bar under the pointer. */
+  playerStyle: PlayerStyle;
+  /** The first-run guide was finished or skipped. */
+  guideSeen: boolean;
   startPage: StartPage;
   sidebarSearch: boolean;
   sidebarRecent: boolean;
@@ -231,35 +269,74 @@ export interface LibraryData {
   settings: Settings;
 }
 
+/** Settings saved by earlier versions, in their newer shapes. */
+export function migrateSettings(saved: Record<string, unknown>): Partial<Settings> {
+  const { compact, density, ...rest } = saved;
+  const settings = rest as Partial<Settings> & Record<string, unknown>;
+  // "Compact song lists" (on/off), then three row densities, became a row height.
+  if (typeof settings.rowHeight !== 'number' && (compact === true || typeof density === 'string'))
+    settings.rowHeight = ({ compact: 44, comfortable: 56, spacious: 66 } as Record<string, number>)[compact === true ? 'compact' : String(density)] ?? 56;
+  // Lossless downloads were removed; a saved default of Lossless becomes Best.
+  if (settings.downloadQuality === ('lossless' as string)) settings.downloadQuality = 'best';
+  // Step choices became sliders.
+  const steps: [keyof Settings, Record<string, number>][] = [
+    ['glassBlur', { off: 0, soft: 0.5, default: 1, strong: 1.7 }],
+    ['corners', { sharp: 0.35, default: 1, round: 1.45 }],
+    ['coverSize', { small: 0.82, medium: 1, large: 1.22 }],
+  ];
+  for (const [key, values] of steps) {
+    const value = settings[key];
+    if (typeof value === 'string') settings[key] = (values[value] ?? 1) as never;
+  }
+  return settings;
+}
+
 export const DEFAULT_SETTINGS: Settings = {
   quality: 'high',
   autoplay: true,
   crossfade: 0,
-  volume: 0.8,
-  normalize: true,
-  immersiveOnPlay: false,
+  volume: 1,
+  normalize: false,
   closeToTray: false,
   musicFolders: [],
   accent: '#fa586a',
-  dynamicAccent: false,
-  pageTone: 'obsidian',
-  ambientGlow: false,
+  dynamicAccent: true,
+  pageTone: 'black',
+  ambientGlow: true,
   glassStyle: 'clear',
-  designVersion: 1,
+  glassBlur: 0.1,
+  pageBackground: 'gradient',
+  uiFont: 'inter',
+  corners: 1.2,
+  designVersion: 2,
   lyricsScale: 1,
   lyricsFont: 'inter',
   lyricsAlign: 'left',
   lyricsBlur: true,
   lyricsControls: true,
   lyricsMotion: 'staggered',
-  lyricsPronunciation: false,
-  lyricsTranslation: false,
+  lyricsPronunciation: true,
+  lyricsTranslation: true,
   lyricsTranslateTo: 'en',
-  backdrop: 'mesh',
+  backdrop: 'artwork',
   backdropMotion: 1,
   artworkScale: 1,
-  zoom: 1,
-  compact: false,
+  waveColor: 'song',
+  waveCustomColor: '#a78bfa',
+  waveBars: 30,
+  waveThickness: 0.5,
+  waveHeight: 1,
+  waveSmoothing: 0.5,
+  waveSensitivity: 0.35,
+  waveAutoLevel: true,
+  waveShape: 'balanced',
+  waveStyle: 'mirrored',
+  waveIdle: true,
+  zoom: 1.05,
+  rowHeight: 56,
+  coverSize: 1,
+  playerStyle: 'pebble',
+  guideSeen: false,
   startPage: 'home',
   sidebarSearch: true,
   sidebarRecent: true,
@@ -267,7 +344,7 @@ export const DEFAULT_SETTINGS: Settings = {
   sidebarMode: 'compact',
   downloadFolder: '',
   downloadQuality: 'ask',
-  eq: { enabled: false, preset: 'flat', bands: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0], preamp: 0, autoPreamp: true, mode: 'basic', saved: [] },
+  eq: { enabled: false, preset: 'flat', bands: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0], preamp: 0, autoPreamp: true, mode: 'advanced', saved: [] },
 };
 
 // ---- Your music: folders on this PC and a self-hosted server ---------------
@@ -328,12 +405,14 @@ export interface PlaybackState {
  * What to save. YouTube's own formats are saved as they are (no re-encoding,
  * which could only lose quality); lossless comes from your own files or server.
  */
-export type DownloadQuality = 'best' | 'compatible' | 'small' | 'lossless';
+export type DownloadQuality = 'best' | 'compatible' | 'small';
+/** A download's quality; 'lossless' copies were made by earlier versions and stay listed as such. */
+export type SavedDownloadQuality = DownloadQuality | 'lossless';
 
 export interface DownloadItem {
   videoId: string;
   track: Track;
-  quality: DownloadQuality;
+  quality: SavedDownloadQuality;
   state: 'queued' | 'downloading' | 'done' | 'error';
   received: number;
   total: number;
@@ -374,7 +453,12 @@ export interface ObsidianApi {
   saveLibrary(patch: Partial<LibraryData>): Promise<void>;
   openExternal(url: string): Promise<void>;
   setPlaybackState(state: PlaybackState): void;
-  setTitleBarTheme(theme: 'page' | 'immersive'): void;
+  /** The app's own window buttons (the system's caption buttons are hidden). */
+  minimizeWindow(): void;
+  toggleMaximizeWindow(): void;
+  closeWindow(): void;
+  isWindowMaximized(): Promise<boolean>;
+  onMaximizedChange(handler: (maximized: boolean) => void): () => void;
   toggleFullScreen(): Promise<boolean>;
   onCommand(handler: (command: 'play-pause' | 'next' | 'previous') => void): () => void;
   onFullScreenChange(handler: (fullScreen: boolean) => void): () => void;

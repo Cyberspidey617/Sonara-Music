@@ -1,6 +1,6 @@
 appId: com.obsidian.music.pc
-productName: Obsidian Music
-copyright: Obsidian Music for PC — GPL-3.0-or-later
+productName: Sonara
+copyright: Sonara (based on Obsidian Music for PC) — GPL-3.0-or-later
 directories:
   output: dist
   buildResources: build
@@ -16,8 +16,8 @@ asar: true
 npmRebuild: false
 win:
   icon: build/icon.ico
-  executableName: ObsidianMusic
-  artifactName: ObsidianMusic-${version}-${arch}-portable.${ext}
+  executableName: Sonara
+  artifactName: Sonara-${version}-${arch}-portable.${ext}
   # An installer (NSIS; on Linux it needs Wine with 32-bit support) and a portable zip.
   target:
     - target: nsis
@@ -28,5 +28,28 @@ nsis:
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: always
   createStartMenuShortcut: true
-  shortcutName: Obsidian Music
-  artifactName: ObsidianMusic-Setup-${version}-${arch}.${ext}
+  shortcutName: Sonara
+  artifactName: Sonara-Setup-${version}-${arch}.${ext}
+mac:
+  icon: build/icon.png
+  category: public.app-category.music
+  target:
+    - target: dmg
+  # No Developer ID: ad-hoc signed, so Apple Silicon runs it (first open: right-click › Open).
+  identity: '-'
+  hardenedRuntime: false
+  gatekeeperAssess: false
+  artifactName: Sonara-${version}-mac-${arch}.${ext}
+dmg:
+  title: Sonara ${version}
+linux:
+  icon: build/icon.png
+  category: AudioVideo
+  synopsis: A music player in liquid glass
+  maintainer: Cyberspidey617 <cyberspidey716@gmail.com>
+  target:
+    - target: AppImage
+    - target: deb
+  artifactName: Sonara-${version}-linux-${arch}.${ext}
+# Builds are attached to GitHub Releases by the release workflow, not published by electron-builder.
+publish: null

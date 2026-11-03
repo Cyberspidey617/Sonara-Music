@@ -20,7 +20,15 @@ const api: ObsidianApi = {
   saveLibrary: (patch) => ipcRenderer.invoke('library:save', patch),
   openExternal: (url) => ipcRenderer.invoke('app:open-external', url),
   setPlaybackState: (state) => ipcRenderer.send('app:playback-state', state),
-  setTitleBarTheme: (theme) => ipcRenderer.send('app:titlebar-theme', theme),
+  minimizeWindow: () => ipcRenderer.send('window:minimize'),
+  toggleMaximizeWindow: () => ipcRenderer.send('window:toggle-maximize'),
+  closeWindow: () => ipcRenderer.send('window:close'),
+  isWindowMaximized: () => ipcRenderer.invoke('window:is-maximized'),
+  onMaximizedChange: (handler) => {
+    const listener = (_: unknown, maximized: boolean) => handler(maximized);
+    ipcRenderer.on('app:maximized', listener);
+    return () => ipcRenderer.removeListener('app:maximized', listener);
+  },
   toggleFullScreen: () => ipcRenderer.invoke('app:toggle-fullscreen'),
   dataPath: () => ipcRenderer.invoke('app:data-path'),
   onCommand: (handler) => {

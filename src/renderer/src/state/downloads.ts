@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { DownloadItem, DownloadQuality, Track } from '@shared/types';
+import type { DownloadItem, DownloadQuality, SavedDownloadQuality, Track } from '@shared/types';
 import { api, errorMessage } from '@/lib/api';
 import { useLibrary } from './library';
 import { toast, useUi } from './ui';
@@ -31,7 +31,7 @@ export function initDownloads() {
   });
 }
 
-export const QUALITY_LABEL: Record<DownloadQuality, string> = {
+export const QUALITY_LABEL: Record<SavedDownloadQuality, string> = {
   best: 'Best',
   compatible: 'Compatible',
   small: 'Data Saver',

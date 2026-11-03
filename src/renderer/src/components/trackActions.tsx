@@ -25,7 +25,7 @@ function downloadEntries(track: Track): MenuEntry[] {
 }
 
 /** The actions every track offers, in its "…" menu and on right-click. */
-export function trackMenu(track: Track, extra: { removeFromPlaylist?: () => void; removeFromQueue?: () => void } = {}): MenuEntry[] {
+export function trackMenu(track: Track, extra: { removeFromPlaylist?: () => void; removeFromQueue?: () => void; fromHistory?: boolean } = {}): MenuEntry[] {
   const liked = useLibrary.getState().isLiked(track.videoId);
   const artist = track.artists.find((a) => a.id);
   const entries: MenuEntry[] = [
@@ -70,5 +70,15 @@ export function trackMenu(track: Track, extra: { removeFromPlaylist?: () => void
   });
   if (extra.removeFromPlaylist) entries.push({ label: 'Remove from Playlist', icon: <Trash2 {...ICON} />, destructive: true, onSelect: extra.removeFromPlaylist });
   if (extra.removeFromQueue) entries.push({ label: 'Remove from Queue', icon: <Trash2 {...ICON} />, destructive: true, onSelect: extra.removeFromQueue });
+  if (extra.fromHistory)
+    entries.push({
+      label: 'Remove from Recently Played',
+      icon: <Trash2 {...ICON} />,
+      destructive: true,
+      onSelect: () => {
+        const undo = useLibrary.getState().removeFromHistory(track.videoId);
+        toast('Removed from Recently Played', { label: 'Undo', run: undo });
+      },
+    });
   return entries;
 }

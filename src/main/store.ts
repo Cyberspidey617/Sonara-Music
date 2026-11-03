@@ -2,7 +2,7 @@
 // file in the app's data folder, written atomically and debounced.
 import fs from 'node:fs';
 import path from 'node:path';
-import { DEFAULT_SETTINGS, type LibraryData } from '../shared/types';
+import { DEFAULT_SETTINGS, migrateSettings, type LibraryData } from '../shared/types';
 import { log } from './log';
 
 let file = '';
@@ -19,7 +19,7 @@ export function openStore(dir: string): LibraryData {
         liked: Array.isArray(parsed.liked) ? parsed.liked : [],
         playlists: Array.isArray(parsed.playlists) ? parsed.playlists : [],
         history: Array.isArray(parsed.history) ? parsed.history : [],
-        settings: { ...DEFAULT_SETTINGS, ...(parsed.settings ?? {}) },
+        settings: { ...DEFAULT_SETTINGS, ...migrateSettings((parsed.settings ?? {}) as Record<string, unknown>) },
       };
     }
   } catch (error) {

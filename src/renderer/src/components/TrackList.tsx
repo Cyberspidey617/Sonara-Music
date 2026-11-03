@@ -22,9 +22,11 @@ interface TrackListProps {
   onRemove?: (index: number) => void;
   /** Play just this track and follow it with radio, rather than the list from it. */
   playAsRadio?: boolean;
+  /** The list is the listening history: each song can be removed from it. */
+  fromHistory?: boolean;
 }
 
-export function TrackList({ tracks, numbered = false, showAlbum: wantAlbum = true, source, onRemove, playAsRadio = false }: TrackListProps) {
+export function TrackList({ tracks, numbered = false, showAlbum: wantAlbum = true, source, onRemove, playAsRadio = false, fromHistory = false }: TrackListProps) {
   const showAlbum = wantAlbum && tracks.some((t) => t.album?.name);
   const currentId = usePlayer((s) => s.queue[s.index]?.track.videoId ?? null);
   const playing = usePlayer((s) => s.status === 'playing' || s.status === 'loading');
@@ -62,6 +64,7 @@ export function TrackList({ tracks, numbered = false, showAlbum: wantAlbum = tru
           playing={playing}
           onPlay={play}
           onRemove={onRemove}
+          fromHistory={fromHistory}
         />
       ))}
     </div>
@@ -77,10 +80,11 @@ interface RowProps {
   playing: boolean;
   onPlay: (index: number) => void;
   onRemove?: (index: number) => void;
+  fromHistory: boolean;
 }
 
-const TrackRow = memo(function TrackRow({ track, index, numbered, showAlbum, current, playing, onPlay, onRemove }: RowProps) {
-  const menu = () => trackMenu(track, onRemove ? { removeFromPlaylist: () => onRemove(index) } : {});
+const TrackRow = memo(function TrackRow({ track, index, numbered, showAlbum, current, playing, onPlay, onRemove, fromHistory }: RowProps) {
+  const menu = () => trackMenu(track, { ...(onRemove && { removeFromPlaylist: () => onRemove(index) }), fromHistory });
   return (
     <div
       role="listitem"

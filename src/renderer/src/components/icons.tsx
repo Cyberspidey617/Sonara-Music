@@ -24,16 +24,19 @@ export function PreviousGlyph(props: IconProps) {
   return <NextGlyph {...props} style={{ transform: 'scaleX(-1)', ...props.style }} />;
 }
 
-/** Obsidian's mark: a faceted shard of volcanic glass. */
+/** Sonara's mark: a sonar ring around a waveform, with the ping escaping through its gap. */
 export function LogoMark({ size = 24, className }: { size?: number; className?: string }) {
   return (
     <svg width={size} height={size} viewBox="0 0 64 64" className={className} aria-hidden="true">
-      <path d="M32 3 53 19l-6 39H17l-6-39z" fill="currentColor" opacity=".28" />
-      <path d="M32 3 30 27 11 19z" fill="currentColor" opacity=".95" />
-      <path d="M32 3 53 19 30 27z" fill="currentColor" opacity=".62" />
-      <path d="M11 19l19 8-13 31z" fill="currentColor" opacity=".78" />
-      <path d="M53 19 30 27l17 31z" fill="currentColor" opacity=".42" />
-      <path d="M30 27 17 58h30z" fill="currentColor" opacity=".55" />
+      <circle cx="32" cy="32" r="26" fill="none" stroke="currentColor" strokeWidth="5" strokeLinecap="round" pathLength={100} strokeDasharray="84 16" transform="rotate(62 32 32)" />
+      <circle cx="53.3" cy="46.9" r="4" fill="currentColor" />
+      <g fill="currentColor">
+        <rect x="17.1" y="27" width="4.2" height="10" rx="2.1" opacity=".7" />
+        <rect x="23.5" y="23" width="4.2" height="18" rx="2.1" opacity=".85" />
+        <rect x="29.9" y="18" width="4.2" height="28" rx="2.1" />
+        <rect x="36.3" y="24" width="4.2" height="16" rx="2.1" opacity=".85" />
+        <rect x="42.7" y="28.5" width="4.2" height="7" rx="2.1" opacity=".7" />
+      </g>
     </svg>
   );
 }

@@ -1,4 +1,4 @@
-import { hasViewTransitions } from '@/lib/motion';
+import { hasViewTransitions, transition } from '@/lib/motion';
 import { ChevronDown, Ellipsis, ListMusic, Maximize, MicVocal, Minimize, Plus, Repeat, Repeat1, Shuffle, SlidersVertical, X } from 'lucide-react';
 import { useEffect, useState, type CSSProperties } from 'react';
 import { Artwork } from '@/components/Artwork';
@@ -48,9 +48,10 @@ function Scrubber() {
 
 const round = 'relative grid place-items-center rounded-full transition-[background-color,scale,color] duration-150 enabled:active:scale-90 disabled:opacity-35';
 /** Buttons inside the clear-glass action capsule: glyphs that light up when on. */
-const actionButton = `${round} size-10 text-secondary hover:bg-white/10 hover:text-primary aria-pressed:bg-white/16 aria-pressed:text-primary`;
+// On (Up Next, Lyrics, Equalizer): the glyph lights up with a small dot beneath, as in the player bar; no extra bubble.
+const actionButton = `${round} size-10 text-secondary hover:bg-white/10 hover:text-primary aria-pressed:text-primary aria-pressed:after:absolute aria-pressed:after:bottom-0.5 aria-pressed:after:size-1 aria-pressed:after:rounded-full aria-pressed:after:bg-current`;
 /** A free-standing clear-glass circle (Liquid Glass's clear variant, made for controls over media). */
-const glassCircle = `glass-clear glow elastic ${round} text-primary`;
+const glassCircle = `glass glow elastic ${round} text-primary`;
 
 function Transport() {
   const track = usePlayer((s) => s.queue[s.index]?.track ?? null);
@@ -134,14 +135,7 @@ export function FullScreenPlayer() {
     };
   }, [backdrop, track?.thumbnail]);
 
-  useEffect(() => {
-    api.setTitleBarTheme('immersive');
-    const off = api.onFullScreenChange(setWindowFull);
-    return () => {
-      off();
-      api.setTitleBarTheme('page');
-    };
-  }, []);
+  useEffect(() => api.onFullScreenChange(setWindowFull), []);
 
   useEffect(() => {
     if (!track) setFullScreen(false);
@@ -149,7 +143,15 @@ export function FullScreenPlayer() {
 
   if (!track) return null;
   const column = panel !== null;
-  const toggle = (p: 'lyrics' | 'queue') => setPanel((on) => (on === p ? null : p));
+  // Opening, closing or switching the panel is a view transition: the player column glides between
+  // its places, lyrics fade in from the side and Up Next rises from below. The parts are named only
+  // for this transition, so closing the full-screen player itself stays one clean crossfade.
+  const toggle = (p: 'lyrics' | 'queue') => {
+    const root = document.documentElement;
+    root.dataset.panelMotion = '';
+    transition(() => setPanel((on) => (on === p ? null : p)));
+    window.setTimeout(() => delete root.dataset.panelMotion, 900);
+  };
   const close = () => {
     if (windowFull) void api.toggleFullScreen();
     setFullScreen(false);
@@ -178,7 +180,7 @@ export function FullScreenPlayer() {
       {/* The window's drag strip, with the close and full-screen buttons. */}
       <div className="app-drag absolute inset-x-0 top-0 z-10 flex h-[52px] items-center pl-3">
         {/* Related controls share one piece of glass. */}
-        <div className="glass-clear app-no-drag relative flex items-center gap-0.5 rounded-pill p-[3px]">
+        <div className="glass app-no-drag relative flex items-center gap-0.5 rounded-pill p-[3px]">
         <button className="relative grid size-8 place-items-center rounded-full text-secondary hover:bg-white/12 hover:text-primary" aria-label="Close (Esc)" title="Close (Esc)" onClick={close}>
           <ChevronDown size={22} />
         </button>
@@ -202,7 +204,7 @@ export function FullScreenPlayer() {
             : `grid h-full items-center justify-center gap-x-[clamp(40px,6vw,120px)] px-[clamp(28px,6vw,120px)] pt-14 pb-10 ${column ? 'grid-cols-[var(--col)_minmax(0,760px)]' : 'grid-cols-[var(--col)]'}`
         }
       >
-        <section className={`flex w-(--col) min-w-0 flex-none flex-col ${stacked && column ? 'order-2' : ''}`} aria-label="Player">
+        <section className={`np-column flex w-(--col) min-w-0 flex-none flex-col ${stacked && column ? 'order-2' : ''}`} aria-label="Player">
           {/* A touch smaller while paused. */}
           {/* view-transition-name: the artwork grows out of the mini player's and shrinks back into it. */}
           <div className={`relative mx-auto aspect-square w-(--art) transition-[scale] duration-500 ${stacked && column ? 'hidden' : ''} ease-[cubic-bezier(0.34,1.3,0.64,1)] ${playing ? '' : 'scale-[0.93]'}`} style={{ viewTransitionName: 'np-art' }}>
@@ -243,7 +245,7 @@ export function FullScreenPlayer() {
               <NowPlayingQuality detailed className="mt-1" />
               <SleepCountdown className="type-callout-medium text-tertiary" />
             </div>
-            <LikeButton track={track} size={19} className="glass-clear elastic relative size-10 flex-none rounded-full text-primary aria-pressed:text-key" />
+            <LikeButton track={track} size={19} className="glass elastic relative size-10 flex-none rounded-full text-primary aria-pressed:text-key" />
             <button className={`${glassCircle} size-10 flex-none`} aria-label="More" onClick={(e) => openMenuAt(e.currentTarget, trackMenu(track), 'above-end')}>
               <Ellipsis size={19} className="relative z-1" />
             </button>
@@ -256,7 +258,7 @@ export function FullScreenPlayer() {
               Volume doesn't pop up over anything: the same piece of glass morphs into a slider,
               the way Apple's controls change shape in place, and morphs back when the pointer
               leaves or you press ✕. */}
-          <div className="glass-clear relative mx-auto mt-5 flex h-12 w-full max-w-[400px] items-center rounded-pill p-1" onPointerLeave={() => setVolumeOpen(false)}>
+          <div className="glass relative mx-auto mt-5 flex h-12 w-full max-w-[400px] items-center rounded-pill p-1" onPointerLeave={() => setVolumeOpen(false)}>
             {volumeOpen ? (
               <div key="volume" className="flex w-full animate-fade-in items-center gap-2">
                 <button
@@ -297,12 +299,12 @@ export function FullScreenPlayer() {
         </section>
 
         {panel === 'lyrics' && (
-          <section className={`flex min-h-0 animate-rise ${stacked ? 'order-1 w-full max-w-[620px] flex-1' : 'h-full'}`} aria-label="Lyrics">
+          <section className={`np-lyrics flex min-h-0 ${stacked ? 'order-1 w-full max-w-[620px] flex-1' : 'h-full'}`} aria-label="Lyrics">
             <LyricsView full />
           </section>
         )}
         {panel === 'queue' && (
-          <section className={`flex min-h-0 animate-rise flex-col pt-4 ${stacked ? 'order-1 w-full max-w-[620px] flex-1' : 'h-full'}`} style={{ maskImage: 'linear-gradient(180deg,#000 calc(100% - 80px),transparent)' }} aria-label="Up Next">
+          <section className={`np-queue flex min-h-0 flex-col pt-4 ${stacked ? 'order-1 w-full max-w-[620px] flex-1' : 'h-full'}`} style={{ maskImage: 'linear-gradient(180deg,#000 calc(100% - 80px),transparent)' }} aria-label="Up Next">
             <h2 className="mb-3 px-4 type-title-1-emphasized">Up Next</h2>
             <UpNext />
           </section>

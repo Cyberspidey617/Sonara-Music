@@ -18,7 +18,9 @@ export function MenuLayer() {
       setPosition(null);
       return;
     }
-    const menu = ref.current.getBoundingClientRect();
+    // Layout size, not getBoundingClientRect: the open animation scales the menu down at first,
+    // and measuring it mid-animation would place a tall menu off the bottom of the window.
+    const menu = { width: ref.current.offsetWidth, height: ref.current.offsetHeight };
     const vw = window.innerWidth;
     const vh = window.innerHeight;
     let left = anchor.x;

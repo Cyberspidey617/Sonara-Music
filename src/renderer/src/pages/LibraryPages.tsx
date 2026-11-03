@@ -87,7 +87,7 @@ export function RecentPage() {
         }
       />
       <div className="px-(--body-gutter) pb-10">
-        {history.length ? <TrackList tracks={history} source={{ label: 'Recently Played' }} /> : <EmptyState icon={<Clock size={36} strokeWidth={1.5} />} title="Nothing played yet" body="What you listen to shows up here." />}
+        {history.length ? <TrackList tracks={history} source={{ label: 'Recently Played' }} fromHistory /> : <EmptyState icon={<Clock size={36} strokeWidth={1.5} />} title="Nothing played yet" body="What you listen to shows up here." />}
       </div>
     </Page>
   );

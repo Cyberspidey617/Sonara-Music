@@ -21,7 +21,7 @@ function Modal({ title, children, onClose, width = 420 }: { title: string; child
   }, [onClose]);
   return createPortal(
     <div className="fixed inset-0 z-[9000] grid animate-fade place-items-center bg-scrim" onPointerDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div ref={sheet} role="dialog" aria-modal="true" aria-label={title} className="glass-thick relative max-h-[86vh] max-w-[calc(100vw-32px)] animate-menu-in overflow-hidden rounded-[26px]" style={{ width, ...lens }}>
+      <div ref={sheet} role="dialog" aria-modal="true" aria-label={title} className="glass-thick relative max-h-[86vh] max-w-[calc(100vw-32px)] animate-menu-in overflow-hidden rounded-[26px]" style={{ width, backgroundColor: 'var(--dialog-fill)', ...lens }}>
         <h2 className="relative px-7 pt-6 pb-3 type-[700_20px/26px] tracking-apple">{title}</h2>
         {children}
       </div>
@@ -166,7 +166,8 @@ function AddToPlaylist({ tracks, onClose }: { tracks: import('@shared/types').Tr
   );
 }
 
-const SHORTCUTS: [string, string][] = [
+/** Every keyboard shortcut (the Keyboard Shortcuts dialog, Settings › About, the first-run guide). */
+export const SHORTCUTS: [string, string][] = [
   ['Space', 'Play / pause'],
   ['Ctrl + → / ←', 'Next / previous song'],
   ['→ / ←', 'Seek 5 seconds'],

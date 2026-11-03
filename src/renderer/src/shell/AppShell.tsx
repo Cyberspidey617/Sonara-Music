@@ -17,13 +17,18 @@ import { SearchPage } from '@/pages/SearchPage';
 import { SettingsPage } from '@/pages/SettingsPage';
 import { YourAlbumPage, YourMusicPage } from '@/pages/YourMusicPage';
 import { useAppearance } from '@/lib/appearance';
-import { rgb } from '@/lib/palette';
+import { artworkAtPixels } from '@/lib/artwork';
+import { rgb, type Rgb } from '@/lib/palette';
+import { usePlayer } from '@/state/player';
+import type { PageBackground as PageBackgroundKind } from '@shared/types';
 import { FullScreenPlayer } from './FullScreenPlayer';
 import { LyricsView } from './LyricsView';
 import { PlayerBar } from './PlayerBar';
 import { Sidebar } from './Sidebar';
 import { UpNext } from './UpNext';
 import { useKeyboardShortcuts } from './useKeyboardShortcuts';
+import { WindowControls } from './WindowControls';
+import { FirstRunGuide } from './FirstRunGuide';
 import { Segmented } from '@/components/Segmented';
 
 function RoutePage({ route }: { route: Route }) {
@@ -115,9 +120,33 @@ function SidePanel() {
   );
 }
 
+/** Settings › Appearance › Page background: the plain page colour, a still gradient in the accent, or the playing artwork, blurred. */
+function PageBackground({ kind, accent }: { kind: PageBackgroundKind; accent: Rgb }) {
+  const thumbnail = usePlayer((s) => s.queue[s.index]?.track.thumbnail);
+  if (kind === 'gradient')
+    return (
+      <div
+        className="pointer-events-none absolute inset-0"
+        style={{ background: `radial-gradient(ellipse 85% 60% at 90% -10%, ${rgb(accent, 0.32)}, transparent 70%), radial-gradient(ellipse 70% 55% at -5% 105%, ${rgb(accent, 0.16)}, transparent 70%)` }}
+        aria-hidden="true"
+      />
+    );
+  if (kind === 'artwork' && thumbnail)
+    return (
+      <img
+        key={thumbnail}
+        src={artworkAtPixels(thumbnail, 400)}
+        alt=""
+        className="pointer-events-none absolute inset-0 size-full scale-125 animate-fade-in object-cover opacity-30 blur-[90px] saturate-150"
+        aria-hidden="true"
+      />
+    );
+  return null;
+}
+
 export function AppShell() {
   useKeyboardShortcuts();
-  const { glow } = useAppearance();
+  const { glow, accent, background } = useAppearance();
   const entry = useNav((s) => s.stack[s.index]!);
   const saveScroll = useNav((s) => s.saveScroll);
   const fullScreen = useUi((s) => s.fullScreen);
@@ -139,11 +168,12 @@ export function AppShell() {
   }, [entry.key]);
 
   useEffect(() => {
-    document.title = 'Obsidian Music';
+    document.title = 'Sonara';
   }, []);
 
   return (
     <div className="relative h-full overflow-hidden bg-page">
+      <PageBackground kind={background} accent={accent} />
       {/* Ambient glow: the playing song's colour, softly behind everything. */}
       <div
         className="pointer-events-none absolute inset-0 transition-opacity duration-1000"
@@ -165,13 +195,15 @@ export function AppShell() {
         </div>
       </main>
       {/* Content scrolling beneath the floating player fades out the same way. */}
-      <div className={`scroll-edge-bottom pointer-events-none absolute bottom-0 left-0 z-10 h-[110px] ${sidePanel ? 'right-(--side-panel-width)' : 'right-0'}`} aria-hidden="true" />
+      <div className={`scroll-edge-bottom pointer-events-none absolute bottom-0 left-0 z-10 h-[72px] ${sidePanel ? 'right-(--side-panel-width)' : 'right-0'}`} aria-hidden="true" />
       <SidePanel />
       <PlayerBar />
       {fullScreen && <FullScreenPlayer />}
       <DialogLayer />
       <MenuLayer />
       <Toasts />
+      <FirstRunGuide />
+      <WindowControls />
     </div>
   );
 }

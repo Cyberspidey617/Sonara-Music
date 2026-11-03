@@ -32,10 +32,15 @@ export function ShelfRow({ title, children, action }: { title: string; children:
         <div
           ref={scroller}
           onScroll={update}
-          className="no-scrollbar -ml-(--content-left) flex snap-x snap-mandatory scroll-pl-[calc(var(--content-left)+var(--body-gutter))] gap-5 overflow-x-auto pr-(--body-gutter) pb-2 pl-[calc(var(--content-left)+var(--body-gutter))]"
+          // Cards scrolled sideways pass under the sidebar's glass and fade out across it, gone
+          // before the window's edge; at the other end, where there's more, they fade out softly.
+          data-fade-end={edges.end ? undefined : ''}
+          className="shelf-fade no-scrollbar -ml-(--content-left) flex snap-x snap-mandatory scroll-pl-[calc(var(--content-left)+var(--body-gutter))] gap-5 overflow-x-auto pr-(--body-gutter) pb-2 pl-[calc(var(--content-left)+var(--body-gutter))]"
         >
           {children}
         </div>
+        {/* The liquid edge on the right: what fades out also blurs, like content passing under glass. */}
+        <span aria-hidden="true" data-end className={`shelf-edge pointer-events-none absolute inset-y-0 right-0 transition-opacity duration-500 ${edges.end ? 'opacity-0' : 'opacity-100'}`} />
         {!edges.start && (
           <button
             className="glass glow absolute top-[calc(50%-40px)] left-3 grid size-9 place-items-center rounded-full text-white opacity-0 transition-opacity group-hover/shelf:opacity-100"

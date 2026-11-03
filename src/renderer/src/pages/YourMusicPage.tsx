@@ -142,7 +142,7 @@ export function YourMusicPage({ tab = 'songs' }: { tab?: 'songs' | 'albums' | 's
           <EmptyState
             icon={<HardDrive size={38} strokeWidth={1.4} />}
             title="Add your music folders"
-            body="Point Obsidian at folders of FLAC, WAV, MP3, M4A or Ogg files. They play here in full quality, and with “Lossless when available” on, YouTube songs you own are played from your lossless copy instead."
+            body="Point Sonara at folders of FLAC, WAV, MP3, M4A or Ogg files. They play here in full quality, and with “Lossless when available” on, YouTube songs you own are played from your lossless copy instead."
             action={
               <PillButton className="mt-3" onClick={() => void api.addMusicFolder().then((list) => (list.length && enableLosslessIfHigh(toast), refetch()))}>
                 <FolderPlus size={16} /> Add Folder
