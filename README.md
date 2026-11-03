@@ -12,11 +12,12 @@ Get the latest version from **[Releases](../../releases/latest)**.
 
 | System | File |
 |---|---|
+| Windows, any PC (picks x64 or ARM64 itself) | `Sonara-Setup-<version>.exe` |
 | Windows (most PCs, Intel/AMD) | `Sonara-Setup-<version>-x64.exe` (installer) or `Sonara-<version>-x64-portable.zip` |
 | Windows on ARM (Snapdragon) | `Sonara-Setup-<version>-arm64.exe` or `Sonara-<version>-arm64-portable.zip` |
 | macOS, Apple Silicon (M1 and later) | `Sonara-<version>-mac-arm64.dmg` |
 | macOS, Intel | `Sonara-<version>-mac-x64.dmg` |
-| Linux x64 | `Sonara-<version>-linux-x64.AppImage` or `Sonara-<version>-linux-x64.deb` |
+| Linux x64 | `Sonara-<version>-linux-x86_64.AppImage` or `Sonara-<version>-linux-amd64.deb` |
 | Linux ARM64 | `Sonara-<version>-linux-arm64.AppImage` or `Sonara-<version>-linux-arm64.deb` |
 
 `SHA256SUMS.txt` in each release lists every file's checksum.
