@@ -3,14 +3,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { app, BrowserWindow, screen } from 'electron';
-import type { MiniGrow, MiniLayout, PlaybackState } from '../shared/types';
+import { MINI_SIZES as SIZES, type MiniGrow, type MiniLayout, type PlaybackState } from '../shared/types';
 import { log } from './log';
 
-/** Window sizes for each layout: the bar, and the bar with Up Next below it. */
-const SIZES: Record<MiniLayout, { width: number; height: number }> = {
-  bar: { width: 372, height: 84 },
-  queue: { width: 372, height: 360 },
-};
 const MARGIN = 20;
 
 let mini: BrowserWindow | null = null;
@@ -140,7 +135,7 @@ export function initMiniPlayer(options: { preload: string; url: string; icon: El
      * The bar, or the bar with Up Next. The bar stays where it is: the list opens above it, or below
      * when there isn't room above (near the top of the screen), and closing puts the bar back.
      */
-    setLayout(next: MiniLayout) {
+    setLayout(next: MiniLayout, wanted?: MiniGrow) {
       if (!SIZES[next] || next === layout) return;
       layout = next;
       if (!mini) return;
@@ -150,7 +145,8 @@ export function initMiniPlayer(options: { preload: string; url: string; icon: El
         const { width, height } = SIZES.queue;
         const area = screen.getDisplayMatching(b).workArea;
         bar = b;
-        grow = b.y + b.height - height >= area.y ? 'up' : 'down';
+        const fitsUp = b.y + b.height - height >= area.y;
+        grow = wanted === 'up' || wanted === 'down' ? wanted : fitsUp ? 'up' : 'down';
         const y = grow === 'up' ? b.y + b.height - height : Math.max(area.y, Math.min(b.y, area.y + area.height - height));
         mini.setBounds({ x: b.x + b.width - width, y, width, height }, animate);
       } else {

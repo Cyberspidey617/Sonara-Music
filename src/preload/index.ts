@@ -40,7 +40,7 @@ const api: ObsidianApi = {
   miniCommand: (command) => ipcRenderer.send('mini:command', command),
   openMainWindow: () => ipcRenderer.send('mini:open-app'),
   hideMiniPlayer: () => ipcRenderer.send('mini:hide'),
-  setMiniLayout: (layout) => ipcRenderer.send('mini:layout', layout),
+  setMiniLayout: (layout, grow) => ipcRenderer.send('mini:layout', layout, grow),
   miniJumpTo: (index) => ipcRenderer.send('mini:jump', index),
   onJumpTo: (handler) => {
     const listener = (_: unknown, index: number) => handler(index);

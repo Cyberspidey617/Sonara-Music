@@ -416,6 +416,11 @@ export interface PlaybackState {
 export type MiniLayout = 'bar' | 'queue';
 /** Which way Up Next opened from the bar: above it, or below it near the top of the screen. */
 export type MiniGrow = 'up' | 'down';
+/** The mini player's window for each layout (a see-through margin goes round the pill). */
+export const MINI_SIZES: Record<MiniLayout, { width: number; height: number }> = {
+  bar: { width: 424, height: 84 },
+  queue: { width: 424, height: 360 },
+};
 
 /** What the taskbar, tray, mini player and system-wide shortcuts can ask the player to do. */
 export type AppCommand = 'play-pause' | 'next' | 'previous' | 'volume-up' | 'volume-down' | 'like';
@@ -488,7 +493,8 @@ export interface ObsidianApi {
   openMainWindow(): void;
   hideMiniPlayer(): void;
   onMiniState(handler: (state: PlaybackState, layout: MiniLayout, grow: MiniGrow) => void): () => void;
-  setMiniLayout(layout: MiniLayout): void;
+  /** Up Next opens above the bar, or below it (`grow`) when there isn't room above. */
+  setMiniLayout(layout: MiniLayout, grow?: MiniGrow): void;
   /** Plays the song at that place in the queue (from the mini player's Up Next). */
   miniJumpTo(index: number): void;
   onJumpTo(handler: (index: number) => void): () => void;

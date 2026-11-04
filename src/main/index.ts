@@ -3,7 +3,7 @@ import { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu, nativeImage,
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { isYouTubeId, type AppCommand, type MiniLayout, type LibraryData, type LibraryScanState, type PlaybackState, type ServerLogin, type Track, type DownloadQuality } from '../shared/types';
+import { isYouTubeId, type AppCommand, type MiniGrow, type MiniLayout, type LibraryData, type LibraryScanState, type PlaybackState, type ServerLogin, type Track, type DownloadQuality } from '../shared/types';
 import { initMiniPlayer } from './mini';
 import { getScanState, localAlbum, localAlbums, localTracks, openLibrary, scan, searchLocal } from './library';
 import { clearMatches } from './lossless';
@@ -431,7 +431,7 @@ function registerIpc() {
   ipcMain.on('mini:toggle', () => (miniPlayer?.toggle(), updateTray()));
   ipcMain.on('mini:hide', () => (miniPlayer?.hide(), updateTray()));
   ipcMain.on('mini:open-app', showWindow);
-  ipcMain.on('mini:layout', (_event, layout: MiniLayout) => miniPlayer?.setLayout(layout));
+  ipcMain.on('mini:layout', (_event, layout: MiniLayout, grow?: MiniGrow) => miniPlayer?.setLayout(layout, grow));
   ipcMain.on('mini:jump', (_event, index: number) => Number.isInteger(index) && index >= 0 && win?.webContents.send('app:jump', index));
   ipcMain.on('mini:seek', (_event, seconds: number) => Number.isFinite(seconds) && seconds >= 0 && win?.webContents.send('app:seek', seconds));
   ipcMain.on('mini:move-start', () => miniPlayer?.moveStart());
