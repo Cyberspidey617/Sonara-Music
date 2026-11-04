@@ -69,30 +69,39 @@ function ImportPlaylist({ onClose }: { onClose: () => void }) {
   const [url, setUrl] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // A Spotify import's progress, as its songs are found on YouTube Music.
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const input = useRef<HTMLInputElement>(null);
   useEffect(() => {
     input.current?.focus();
     void navigator.clipboard
       .readText()
-      .then((text) => /youtube\.com|youtu\.be|list=/.test(text) && setUrl((v) => v || text.trim()))
+      .then((text) => /youtube\.com|youtu\.be|list=|spotify\.com|spotify\.link|^spotify:/.test(text) && setUrl((v) => v || text.trim()))
       .catch(() => undefined);
+    return api.onImportProgress((done, total) => setProgress({ done, total }));
   }, []);
   const run = async () => {
     setBusy(true);
     setError(null);
+    setProgress(null);
     try {
       const result = await api.importPlaylist(url);
       const id = useLibrary.getState().createPlaylist(result.title, result.tracks, url);
       onClose();
       go({ name: 'local', id });
-      toast(`Imported ${plural(result.tracks.length, 'song')} into “${result.title}”`);
+      const notes = [
+        result.missing?.length && `${plural(result.missing.length, 'song')} couldn’t be found`,
+        result.limitedTo && `Spotify only shares the first ${result.limitedTo}`,
+      ].filter(Boolean);
+      toast(`Imported ${plural(result.tracks.length, 'song')} into “${result.title}”${notes.length ? `. ${notes.join('; ')}.` : ''}`);
+      if (result.missing?.length) console.info('Not found on YouTube Music:', result.missing);
     } catch (e) {
       setError(errorMessage(e));
       setBusy(false);
     }
   };
   return (
-    <Modal title="Import a YouTube Playlist" onClose={busy ? () => undefined : onClose} width={480}>
+    <Modal title="Import a Playlist" onClose={busy ? () => undefined : onClose} width={480}>
       <form
         className="relative px-7 pb-6"
         onSubmit={(e) => {
@@ -100,13 +109,15 @@ function ImportPlaylist({ onClose }: { onClose: () => void }) {
           if (url.trim() && !busy) void run();
         }}
       >
-        <p className="mb-3 type-body-reduced text-secondary">Paste a link to a playlist on YouTube or YouTube Music. Every song is read, even in playlists of 500 or more.</p>
-        <input ref={input} className={field} value={url} disabled={busy} placeholder="https://music.youtube.com/playlist?list=…" onChange={(e) => setUrl(e.target.value)} />
+        <p className="mb-3 type-body-reduced text-secondary">
+          Paste a link to a playlist on YouTube or YouTube Music (every song, even 500 or more), or a Spotify playlist, album or song: each song is found on YouTube Music, up to the first 100.
+        </p>
+        <input ref={input} className={field} value={url} disabled={busy} placeholder="A YouTube, YouTube Music or Spotify link" onChange={(e) => setUrl(e.target.value)} />
         {error && <p className="mt-2 type-callout text-[#ff6b61]">{error}</p>}
         <div className="mt-5 flex items-center justify-end gap-2">
           {busy && (
             <span className="mr-auto inline-flex items-center gap-2 type-callout text-secondary">
-              <Loader2 size={14} className="animate-spin" /> Reading the playlist…
+              <Loader2 size={14} className="animate-spin" /> {progress ? `Finding songs… ${progress.done} of ${progress.total}` : 'Reading the playlist…'}
             </span>
           )}
           <button type="button" className={secondaryButton} disabled={busy} onClick={onClose}>

@@ -14,6 +14,11 @@ const api: ObsidianApi = {
   lyrics: (videoId) => ipcRenderer.invoke('yt:lyrics', videoId),
   track: (videoId) => ipcRenderer.invoke('yt:track', videoId),
   importPlaylist: (urlOrId) => ipcRenderer.invoke('yt:import', urlOrId),
+  onImportProgress: (handler) => {
+    const listener = (_: unknown, done: number, total: number) => handler(done, total);
+    ipcRenderer.on('import:progress', listener);
+    return () => ipcRenderer.removeListener('import:progress', listener);
+  },
   prefetch: (videoId) => ipcRenderer.invoke('stream:prefetch', videoId),
   streamInfo: (videoId) => ipcRenderer.invoke('stream:info', videoId),
   loadLibrary: () => ipcRenderer.invoke('library:load'),

@@ -122,6 +122,10 @@ export interface ImportResult {
   title: string;
   tracks: Track[];
   thumbnail?: string;
+  /** From another service (Spotify): songs that couldn't be found on YouTube Music, as "Title — Artist". */
+  missing?: string[];
+  /** Only this many songs could be read (a longer Spotify playlist is cut there). */
+  limitedTo?: number;
 }
 
 // ---- Local library (stored on disk by the main process) -------------------
@@ -477,7 +481,10 @@ export interface ObsidianApi {
   upNext(videoId: string, playlistId?: string): Promise<Track[]>;
   lyrics(videoId: string): Promise<Lyrics | null>;
   track(videoId: string): Promise<Track | null>;
+  /** A YouTube or YouTube Music playlist, or a Spotify playlist, album or song (matched on YouTube Music). */
   importPlaylist(urlOrId: string): Promise<ImportResult>;
+  /** While a Spotify import matches its songs: how many are done. */
+  onImportProgress(handler: (done: number, total: number) => void): () => void;
   prefetch(videoId: string): Promise<void>;
   streamInfo(videoId: string): Promise<StreamInfo | null>;
   loadLibrary(): Promise<LibraryData>;

@@ -120,7 +120,7 @@ export function Sidebar() {
         <div className="relative">
           {header('Playlists')}
           <div className={`absolute top-0 right-1.5 flex h-7 items-center gap-0.5 transition-opacity duration-200 ${expanded ? 'opacity-100' : 'pointer-events-none opacity-0'}`}>
-            <button className="grid size-6 place-items-center rounded-[5px] text-secondary hover:bg-quinary hover:text-primary" title="Import a YouTube playlist" aria-label="Import a YouTube playlist" onClick={() => openDialog({ kind: 'import' })}>
+            <button className="grid size-6 place-items-center rounded-[5px] text-secondary hover:bg-quinary hover:text-primary" title="Import a YouTube or Spotify playlist" aria-label="Import a YouTube or Spotify playlist" onClick={() => openDialog({ kind: 'import' })}>
               <Download size={14} strokeWidth={2.2} />
             </button>
             <button className="grid size-6 place-items-center rounded-[5px] text-secondary hover:bg-quinary hover:text-primary" title="New playlist" aria-label="New playlist" onClick={() => openDialog({ kind: 'new-playlist' })}>

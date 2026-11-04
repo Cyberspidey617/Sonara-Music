@@ -672,7 +672,7 @@ function AboutTab() {
   return (
     <>
       <Section title="Library">
-        <Row title="Import a YouTube playlist" detail="Paste a YouTube or YouTube Music playlist link. Large playlists are read in full.">
+        <Row title="Import a playlist" detail="Paste a YouTube or YouTube Music playlist link (read in full), or a Spotify playlist, album or song (its songs are found on YouTube Music).">
           <button className={button} onClick={() => useUi.getState().openDialog({ kind: 'import' })}>
             Import…
           </button>

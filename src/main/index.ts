@@ -5,6 +5,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { isYouTubeId, type AppCommand, type MiniGrow, type MiniLayout, type LibraryData, type LibraryScanState, type PlaybackState, type ServerLogin, type Track, type DownloadQuality } from '../shared/types';
 import { initMiniPlayer } from './mini';
+import { importSpotify, isSpotifyLink } from './spotify';
 import { getScanState, localAlbum, localAlbums, localTracks, openLibrary, scan, searchLocal } from './library';
 import { clearMatches } from './lossless';
 import { handleMediaRequest, serveFile } from './media';
@@ -300,9 +301,14 @@ export function friendlyError(error: unknown): string {
 
 /** Errors cross IPC as plain messages the UI can show. */
 function handle<A extends unknown[], R>(channel: string, fn: (...args: A) => Promise<R> | R) {
-  ipcMain.handle(channel, async (_event, ...args) => {
+  handleFrom<A, R>(channel, (_sender, ...args) => fn(...args));
+}
+
+/** As `handle`, for work that also reports back to the window that asked (progress). */
+function handleFrom<A extends unknown[], R>(channel: string, fn: (sender: Electron.WebContents, ...args: A) => Promise<R> | R) {
+  ipcMain.handle(channel, async (event, ...args) => {
     try {
-      return await fn(...(args as A));
+      return await fn(event.sender, ...(args as A));
     } catch (error) {
       const raw = error instanceof Error ? error.message : String(error);
       log.error(`${channel} failed: ${raw}`);
@@ -321,7 +327,11 @@ function registerIpc() {
   handle('yt:upnext', (videoId: string, playlistId?: string) => getUpNext(String(videoId), playlistId ? String(playlistId) : undefined));
   handle('yt:lyrics', (videoId: string) => getLyrics(String(videoId)));
   handle('yt:track', (videoId: string) => getTrack(String(videoId)));
-  handle('yt:import', (input: string) => importPlaylist(String(input)));
+  handleFrom('yt:import', (sender, input: string) =>
+    isSpotifyLink(String(input))
+      ? importSpotify(String(input), (done, total) => !sender.isDestroyed() && sender.send('import:progress', done, total))
+      : importPlaylist(String(input)),
+  );
   handle('stream:prefetch', async (videoId: string) => {
     await resolveStream(String(videoId), getLibrary().settings.quality).catch(() => undefined);
   });

@@ -146,6 +146,7 @@ export function createMockApi(): ObsidianApi {
     setMiniLayout: () => undefined,
     miniJumpTo: () => undefined,
     onJumpTo: () => () => undefined,
+    onImportProgress: () => () => undefined,
     miniSeek: () => undefined,
     onSeekTo: () => () => undefined,
     miniMoveStart: () => undefined,

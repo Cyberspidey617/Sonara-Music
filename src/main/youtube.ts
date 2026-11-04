@@ -648,6 +648,63 @@ export async function importPlaylist(input: string): Promise<ImportResult> {
   return { title: text(playlist.info?.title) || 'Imported playlist', tracks, thumbnail: bestThumbnail(playlist.info?.thumbnails) };
 }
 
+/** For comparing titles and names: lower case, no accents, punctuation or extras like "(Remastered)". */
+function comparable(value: string, keepBrackets = false): string {
+  let s = value.normalize('NFKD').replace(/\p{M}/gu, '').toLowerCase();
+  if (!keepBrackets) s = s.replace(/\s[-–]\s.*$/, '').replace(/[([][^)\]]*[)\]]/g, ' ');
+  return s.replace(/&/g, ' and ').replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+}
+
+/** How much of `a`'s words `b` has, and the other way round (0–1). */
+function overlap(a: string, b: string): number {
+  const x = new Set(a.split(' ').filter(Boolean));
+  const y = new Set(b.split(' ').filter(Boolean));
+  if (!x.size || !y.size) return 0;
+  let shared = 0;
+  for (const word of x) if (y.has(word)) shared++;
+  return (shared / x.size + shared / y.size) / 2;
+}
+
+/** Live, karaoke or cover versions that a plain studio title isn't asking for. */
+const VERSION = /\b(live|karaoke|instrumental|cover|remix|sped up|slowed|reverb|8d|nightcore|acoustic)\b/;
+
+/**
+ * The YouTube Music song that best matches a song from elsewhere (a Spotify import): by title,
+ * artist and length. None when nothing is close enough, rather than a wrong song.
+ */
+export async function matchSong(title: string, artists: string[], seconds?: number): Promise<Track | null> {
+  const yt = await getInnertube();
+  const wanted = comparable(title);
+  const wantedFull = comparable(title, true);
+  const names = artists.map((a) => comparable(a)).filter(Boolean);
+  const score = (track: Track) => {
+    const got = comparable(track.title);
+    const titleScore = Math.max(overlap(wanted, got), overlap(wantedFull, comparable(track.title, true)));
+    const byline = comparable(track.artists.map((a) => a.name).join(' '));
+    const artistScore = names.length ? Math.max(...names.map((n) => (byline.includes(n) || n.includes(byline) ? 1 : overlap(n, byline)))) : 0.5;
+    let lengthScore = 0.5;
+    if (seconds && track.duration) {
+      const off = Math.abs(track.duration - seconds);
+      lengthScore = off <= 3 ? 1 : off <= 8 ? 0.8 : off <= 20 ? 0.4 : 0;
+    }
+    // A version the title doesn't ask for (a live take for a studio song) loses out.
+    const unasked = VERSION.test(comparable(track.title, true)) && !VERSION.test(wantedFull) ? 0.25 : 0;
+    return titleScore * 0.5 + artistScore * 0.3 + lengthScore * 0.2 - unasked;
+  };
+  let best: { track: Track; score: number } | null = null;
+  for (const type of ['song', 'video'] as const) {
+    const results = await yt.music.search(`${title} ${artists[0] ?? ''}`.trim(), { type });
+    for (const row of searchRows(results.contents as AnyNode[]).slice(0, 6)) {
+      const track = trackFromListItem(row);
+      if (!track) continue;
+      const s = score(track) - (type === 'video' ? 0.05 : 0); // songs (the studio audio) first
+      if (!best || s > best.score) best = { track, score: s };
+    }
+    if (best && best.score >= 0.75) break; // a clear song match: no need to look at videos
+  }
+  return best && best.score >= 0.55 ? best.track : null;
+}
+
 /** The YouTube Music song for a title and artist (radio after a local or server song). */
 export async function findOnYouTube(title: string, artist: string): Promise<string | null> {
   const yt = await getInnertube();
