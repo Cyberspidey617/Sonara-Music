@@ -38,6 +38,7 @@ Get the latest version from **[Releases](../../releases/latest)**.
 - **Waveform options:** colour (from the song by default), bars, thickness, height, sensitivity, auto level, smoothness, shape and style.
 - **Your music:** lossless FLAC/WAV folders and Subsonic servers (Navidrome, Gonic, Airsonic…), plus "Lossless when available" for YouTube songs you own.
 - **Downloads** for offline listening, liked songs, playlists, YouTube playlist import, Recently Played (remove any song from it), sleep timer, crossfade, a 10-band equalizer, and media keys.
+- **Control it from any app:** a floating mini player (cover, title, previous / play-pause / next) that stays on top of other windows when Sonara is minimised or in the tray, and system-wide shortcuts: Ctrl + Alt + Space or P (play / pause), → / ← (next / previous), ↑ / ↓ (volume), L (like) and M (mini player); ⌘ instead of Ctrl on a Mac.
 - **A welcome guide** on first launch; every keyboard shortcut is listed in Settings › About.
 
 ## Build from source

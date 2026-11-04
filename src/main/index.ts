@@ -1,9 +1,10 @@
 import { cancelDownload, downloadedFile, downloadInfo, downloadsFolder, listDownloads, openDownloads, queueDownloads, removeDownload } from './downloads';
-import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, net, protocol, screen, session, shell, Tray } from 'electron';
+import { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu, nativeImage, net, protocol, screen, session, shell, Tray } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { isYouTubeId, type LibraryData, type LibraryScanState, type PlaybackState, type ServerLogin, type Track, type DownloadQuality } from '../shared/types';
+import { isYouTubeId, type AppCommand, type LibraryData, type LibraryScanState, type PlaybackState, type ServerLogin, type Track, type DownloadQuality } from '../shared/types';
+import { initMiniPlayer } from './mini';
 import { getScanState, localAlbum, localAlbums, localTracks, openLibrary, scan, searchLocal } from './library';
 import { clearMatches } from './lossless';
 import { handleMediaRequest, serveFile } from './media';
@@ -48,6 +49,7 @@ let win: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let quitting = false;
 let playback: PlaybackState = { playing: false };
+let miniPlayer: ReturnType<typeof initMiniPlayer> | null = null;
 
 const resources = app.isPackaged ? process.resourcesPath : path.join(__dirname, '../../resources');
 const icon = (name: string) => nativeImage.createFromPath(path.join(resources, name));
@@ -92,7 +94,7 @@ function saveWindowState() {
 
 // ---- Taskbar and tray ---------------------------------------------------------------
 
-function send(command: 'play-pause' | 'next' | 'previous') {
+function send(command: AppCommand) {
   win?.webContents.send('app:command', command);
 }
 
@@ -119,6 +121,7 @@ function updateTray() {
       { label: 'Next', click: () => send('next') },
       { label: 'Previous', click: () => send('previous') },
       { type: 'separator' },
+      { label: 'Mini player', type: 'checkbox', checked: miniPlayer?.isVisible() ?? false, click: () => (miniPlayer?.toggle(), updateTray()) },
       { label: 'Show Sonara', click: showWindow },
       { label: 'Quit', click: () => ((quitting = true), app.quit()) },
     ]),
@@ -178,7 +181,19 @@ function createWindow() {
       win?.hide();
     }
   });
-  win.on('closed', () => (win = null));
+  // Away from the window (minimised, or closed to the tray) while a song is loaded: the mini player
+  // floats up so it can still be controlled; it goes again when the window is back.
+  const floatMini = () => {
+    if (getLibrary().settings.miniPlayerAuto !== false && miniPlayer?.hasSong()) miniPlayer.show(true);
+    updateTray();
+  };
+  win.on('minimize', floatMini);
+  win.on('hide', floatMini);
+  for (const back of ['restore', 'show', 'focus'] as const) win.on(back as 'show', () => (miniPlayer?.hide(true), updateTray()));
+  win.on('closed', () => {
+    win = null;
+    miniPlayer?.destroy();
+  });
 
   // Links leave for the browser; the window never navigates away from the app.
   win.webContents.setWindowOpenHandler(({ url }) => {
@@ -344,6 +359,7 @@ function registerIpc() {
   handle('library:save', (patch: Partial<LibraryData>) => {
     patchLibrary(patch);
     if (patch.settings && 'closeToTray' in patch.settings) ensureTray();
+    if (patch.settings && 'globalShortcuts' in patch.settings) registerShortcuts();
   });
   handle('app:open-external', async (url: string) => {
     if (/^https:\/\//.test(url)) await shell.openExternal(url);
@@ -398,7 +414,8 @@ function registerIpc() {
   handle('yt:find', (title: string, artist: string) => findOnYouTube(String(title), String(artist ?? '')));
 
   ipcMain.on('app:playback-state', (_event, state: PlaybackState) => {
-    playback = { playing: !!state?.playing, title: state?.title, artist: state?.artist };
+    playback = { playing: !!state?.playing, title: state?.title, artist: state?.artist, thumbnail: state?.thumbnail, position: state?.position, duration: state?.duration, accent: state?.accent };
+    miniPlayer?.setState(playback);
     if (win) win.setTitle(playback.title ? `${playback.title} — ${playback.artist ?? ''} · Sonara` : 'Sonara');
     updateThumbar();
     updateTray();
@@ -408,6 +425,39 @@ function registerIpc() {
   ipcMain.on('window:toggle-maximize', () => win && (win.isMaximized() ? win.unmaximize() : win.maximize()));
   ipcMain.on('window:close', () => win?.close());
   handle('window:is-maximized', () => win?.isMaximized() ?? false);
+  // The mini player: its buttons act on the main window's player.
+  const commands: AppCommand[] = ['play-pause', 'next', 'previous', 'volume-up', 'volume-down', 'like'];
+  ipcMain.on('mini:command', (_event, command: AppCommand) => commands.includes(command) && send(command));
+  ipcMain.on('mini:toggle', () => (miniPlayer?.toggle(), updateTray()));
+  ipcMain.on('mini:hide', () => (miniPlayer?.hide(), updateTray()));
+  ipcMain.on('mini:open-app', showWindow);
+}
+
+/**
+ * System-wide shortcuts: they work while other apps are in front. A combination another app
+ * already holds is skipped (and logged); the rest still register.
+ */
+function registerShortcuts() {
+  globalShortcut.unregisterAll();
+  if (getLibrary().settings.globalShortcuts === false) return;
+  const keys: [string, () => void][] = [
+    ['CommandOrControl+Alt+Space', () => send('play-pause')],
+    // Ctrl+Alt+Space is often held by another app (input switchers, launchers): P always works too.
+    ['CommandOrControl+Alt+P', () => send('play-pause')],
+    ['CommandOrControl+Alt+Right', () => send('next')],
+    ['CommandOrControl+Alt+Left', () => send('previous')],
+    ['CommandOrControl+Alt+Up', () => send('volume-up')],
+    ['CommandOrControl+Alt+Down', () => send('volume-down')],
+    ['CommandOrControl+Alt+L', () => send('like')],
+    ['CommandOrControl+Alt+M', () => (miniPlayer?.toggle(), updateTray())],
+  ];
+  for (const [accelerator, run] of keys) {
+    try {
+      if (!globalShortcut.register(accelerator, run)) log.warn(`shortcut ${accelerator} is taken by another app`);
+    } catch (error) {
+      log.warn(`shortcut ${accelerator} not registered: ${String(error)}`);
+    }
+  }
 }
 
 function ensureTray() {
@@ -446,7 +496,14 @@ if (!app.requestSingleInstanceLock()) {
     installCorsSafetyNet();
     registerIpc();
     createWindow();
+    miniPlayer = initMiniPlayer({
+      preload: path.join(__dirname, '../preload/index.js'),
+      url: isDev ? `${process.env['ELECTRON_RENDERER_URL']!}?mini` : `${APP_ORIGIN}/index.html?mini`,
+      icon: icon(process.platform === 'win32' ? 'icon.ico' : 'icon.png'),
+    });
     ensureTray();
+    registerShortcuts();
+    app.on('will-quit', () => globalShortcut.unregisterAll());
     // Warm the YouTube session while the window paints.
     void getInnertube().catch(() => undefined);
     // Pick up music added to the folders since last time.

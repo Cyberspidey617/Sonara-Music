@@ -183,6 +183,11 @@ export const SHORTCUTS: [string, string][] = [
   ['Ctrl + K', 'Search'],
   ['Alt + ← / →', 'Back / forward'],
   ['Esc', 'Close the immersive player'],
+  ['Ctrl + Alt + Space or P', 'Play / pause, from any app'],
+  ['Ctrl + Alt + → / ←', 'Next / previous song, from any app'],
+  ['Ctrl + Alt + ↑ / ↓', 'Volume, from any app'],
+  ['Ctrl + Alt + L', 'Like the current song, from any app'],
+  ['Ctrl + Alt + M', 'Show or hide the mini player'],
 ];
 
 export function DialogLayer() {

@@ -224,9 +224,18 @@ function updatePositionState() {
 }
 
 function reportPlayback() {
-  const { queue, index, status } = usePlayer.getState();
+  const { queue, index, status, position, duration } = usePlayer.getState();
   const track = queue[index]?.track;
-  api.setPlaybackState({ playing: status === 'playing' || status === 'loading', title: track?.title, artist: track ? artistLine(track) : undefined });
+  api.setPlaybackState({
+    playing: status === 'playing' || status === 'loading',
+    title: track?.title,
+    artist: track ? artistLine(track) : undefined,
+    // For the mini player, which floats over other apps.
+    thumbnail: track?.thumbnail ? artworkAtPixels(track.thumbnail, 160) : undefined,
+    position,
+    duration,
+    accent: getComputedStyle(document.documentElement).getPropertyValue('--keyColor').trim() || undefined,
+  });
   if ('mediaSession' in navigator) navigator.mediaSession.playbackState = status === 'playing' ? 'playing' : status === 'paused' ? 'paused' : 'none';
 }
 
@@ -436,6 +445,7 @@ for (const [i, deck] of decks.entries()) {
     if (performance.now() - lastPositionState > 1000) {
       lastPositionState = performance.now();
       updatePositionState();
+      reportPlayback(); // keeps the mini player's progress line current
       persistSoon();
     }
     if (!duration) return;
@@ -819,4 +829,10 @@ api.onCommand((command) => {
   if (command === 'play-pause') s.togglePlay();
   else if (command === 'next') s.next();
   else if (command === 'previous') s.previous();
+  else if (command === 'volume-up') s.setVolume(s.volume + 0.05);
+  else if (command === 'volume-down') s.setVolume(s.volume - 0.05);
+  else if (command === 'like') {
+    const track = s.queue[s.index]?.track;
+    if (track) toast(useLibrary.getState().toggleLike(track) ? `Liked “${track.title}”` : `Removed “${track.title}” from Liked Songs`);
+  }
 });

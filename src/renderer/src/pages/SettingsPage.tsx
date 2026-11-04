@@ -176,6 +176,12 @@ function PlaybackTab() {
         <Row title="Keep playing in the tray when the window closes" detail="Quit from the tray icon.">
           <Toggle label="Close to tray" on={s.closeToTray} onChange={(closeToTray) => set({ closeToTray })} />
         </Row>
+        <Row title="Mini player" detail="A small player that floats over other apps when Sonara is minimised or in the tray. Ctrl + Alt + M shows or hides it any time.">
+          <Toggle label="Mini player" on={s.miniPlayerAuto} onChange={(miniPlayerAuto) => set({ miniPlayerAuto })} />
+        </Row>
+        <Row title="System-wide shortcuts" detail="Control Sonara from any app: Ctrl + Alt + Space or P (play / pause), → / ←, ↑ / ↓, L (like) and M (mini player). ⌘ instead of Ctrl on a Mac.">
+          <Toggle label="System-wide shortcuts" on={s.globalShortcuts} onChange={(globalShortcuts) => set({ globalShortcuts })} />
+        </Row>
       </Section>
       <DownloadSettings />
     </>
@@ -684,7 +690,7 @@ function AboutTab() {
           <img src={appIcon} alt="" className="size-16 flex-none drop-shadow-[0_6px_16px_rgb(0_0_0/0.4)]" />
           <div className="flex min-w-0 flex-col gap-0.5">
             <span className="type-title-3-emphasized">Sonara</span>
-            <span className="type-callout text-secondary">Version 2.0.2 · Based on Obsidian Music for PC · YouTube Music, plus your own lossless files and server · Lyrics via am-lyrics</span>
+            <span className="type-callout text-secondary">Version 2.1.0 · Based on Obsidian Music for PC · YouTube Music, plus your own lossless files and server · Lyrics via am-lyrics</span>
           </div>
         </div>
         <p className="px-5 pb-5 type-footnote text-tertiary">Not affiliated with YouTube, Google, Obsidian Music or BitChord. Use in line with YouTube’s terms and your local laws.</p>

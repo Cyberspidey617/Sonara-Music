@@ -1,6 +1,6 @@
 // The renderer's only door to the main process: a typed, minimal API.
 import { contextBridge, ipcRenderer, webFrame } from 'electron';
-import type { ObsidianApi } from '../shared/types';
+import type { AppCommand, ObsidianApi, PlaybackState } from '../shared/types';
 
 const api: ObsidianApi = {
   platform: process.platform,
@@ -32,9 +32,18 @@ const api: ObsidianApi = {
   toggleFullScreen: () => ipcRenderer.invoke('app:toggle-fullscreen'),
   dataPath: () => ipcRenderer.invoke('app:data-path'),
   onCommand: (handler) => {
-    const listener = (_: unknown, command: 'play-pause' | 'next' | 'previous') => handler(command);
+    const listener = (_: unknown, command: AppCommand) => handler(command);
     ipcRenderer.on('app:command', listener);
     return () => ipcRenderer.removeListener('app:command', listener);
+  },
+  toggleMiniPlayer: () => ipcRenderer.send('mini:toggle'),
+  miniCommand: (command) => ipcRenderer.send('mini:command', command),
+  openMainWindow: () => ipcRenderer.send('mini:open-app'),
+  hideMiniPlayer: () => ipcRenderer.send('mini:hide'),
+  onMiniState: (handler) => {
+    const listener = (_: unknown, state: PlaybackState) => handler(state);
+    ipcRenderer.on('mini:state', listener);
+    return () => ipcRenderer.removeListener('mini:state', listener);
   },
   setZoom: (factor) => webFrame.setZoomFactor(Math.max(0.7, Math.min(1.5, Number(factor) || 1))),
   localLibrary: () => ipcRenderer.invoke('music:library'),

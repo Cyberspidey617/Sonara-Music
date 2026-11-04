@@ -157,6 +157,10 @@ export interface Settings {
   /** Even out loudness between tracks with YouTube's loudness data. */
   normalize: boolean;
   closeToTray: boolean;
+  /** Show the floating mini player when Sonara is minimised or closed to the tray. */
+  miniPlayerAuto: boolean;
+  /** System-wide shortcuts (Ctrl+Alt+…, ⌘+Alt+… on a Mac) that work while other apps are in front. */
+  globalShortcuts: boolean;
 
   // Your music (lossless sources)
   musicFolders: string[];
@@ -298,6 +302,8 @@ export const DEFAULT_SETTINGS: Settings = {
   volume: 1,
   normalize: false,
   closeToTray: false,
+  miniPlayerAuto: true,
+  globalShortcuts: true,
   musicFolders: [],
   accent: '#fa586a',
   dynamicAccent: true,
@@ -397,7 +403,15 @@ export interface PlaybackState {
   playing: boolean;
   title?: string;
   artist?: string;
+  /** For the mini player: the artwork, where the song is, and the accent to tint it with. */
+  thumbnail?: string;
+  position?: number;
+  duration?: number;
+  accent?: string;
 }
+
+/** What the taskbar, tray, mini player and system-wide shortcuts can ask the player to do. */
+export type AppCommand = 'play-pause' | 'next' | 'previous' | 'volume-up' | 'volume-down' | 'like';
 
 // ---- Downloads ----------------------------------------------------------------
 
@@ -460,7 +474,13 @@ export interface ObsidianApi {
   isWindowMaximized(): Promise<boolean>;
   onMaximizedChange(handler: (maximized: boolean) => void): () => void;
   toggleFullScreen(): Promise<boolean>;
-  onCommand(handler: (command: 'play-pause' | 'next' | 'previous') => void): () => void;
+  onCommand(handler: (command: AppCommand) => void): () => void;
+  /** The mini player (shell/MiniPlayer, its own small window). */
+  toggleMiniPlayer(): void;
+  miniCommand(command: AppCommand): void;
+  openMainWindow(): void;
+  hideMiniPlayer(): void;
+  onMiniState(handler: (state: PlaybackState) => void): () => void;
   onFullScreenChange(handler: (fullScreen: boolean) => void): () => void;
   dataPath(): Promise<string>;
   setZoom(factor: number): void;

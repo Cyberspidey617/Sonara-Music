@@ -1,4 +1,5 @@
-import { Ellipsis, ListMusic, Maximize2, MicVocal, Repeat, Repeat1, Shuffle, SlidersVertical } from 'lucide-react';
+import { Ellipsis, ListMusic, Maximize2, MicVocal, PictureInPicture2, Repeat, Repeat1, Shuffle, SlidersVertical } from 'lucide-react';
+import { api, isElectron } from '@/lib/api';
 import { Artwork } from '@/components/Artwork';
 import { ExplicitBadge, LogoMark, NextGlyph, PauseGlyph, PlayGlyph, PreviousGlyph } from '@/components/icons';
 import { LikeButton } from '@/components/LikeButton';
@@ -243,6 +244,11 @@ export function PlayerBar() {
           <button className={`${action} @max-[700px]:hidden`} aria-label="Equalizer" aria-pressed={eqOn} title="Equalizer" onClick={() => useUi.getState().openDialog({ kind: 'equalizer' })}>
             <SlidersVertical size={17} strokeWidth={2} />
           </button>
+          {isElectron && (
+            <button className={`${action} @max-[760px]:hidden`} aria-label="Mini player" title="Mini player: floats over other apps (Ctrl+Alt+M)" onClick={() => api.toggleMiniPlayer()}>
+              <PictureInPicture2 size={17} strokeWidth={2} />
+            </button>
+          )}
           <button className={action} disabled={!track} aria-label="More" onClick={(e) => track && openMenuAt(e.currentTarget, trackMenu(track), 'above-end')}>
             <Ellipsis size={18} />
           </button>
