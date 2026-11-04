@@ -408,7 +408,12 @@ export interface PlaybackState {
   position?: number;
   duration?: number;
   accent?: string;
+  /** The songs after this one (up to 20), with their places in the queue, for the mini player's Up Next. */
+  upNext?: { index: number; title: string; artist: string; thumbnail?: string }[];
 }
+
+/** The mini player's shapes: the bar, the bar with Up Next below, or minimised to a small pebble. */
+export type MiniLayout = 'bar' | 'queue' | 'pebble';
 
 /** What the taskbar, tray, mini player and system-wide shortcuts can ask the player to do. */
 export type AppCommand = 'play-pause' | 'next' | 'previous' | 'volume-up' | 'volume-down' | 'like';
@@ -480,7 +485,11 @@ export interface ObsidianApi {
   miniCommand(command: AppCommand): void;
   openMainWindow(): void;
   hideMiniPlayer(): void;
-  onMiniState(handler: (state: PlaybackState) => void): () => void;
+  onMiniState(handler: (state: PlaybackState, layout: MiniLayout) => void): () => void;
+  setMiniLayout(layout: MiniLayout): void;
+  /** Plays the song at that place in the queue (from the mini player's Up Next). */
+  miniJumpTo(index: number): void;
+  onJumpTo(handler: (index: number) => void): () => void;
   onFullScreenChange(handler: (fullScreen: boolean) => void): () => void;
   dataPath(): Promise<string>;
   setZoom(factor: number): void;

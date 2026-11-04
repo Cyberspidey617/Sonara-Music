@@ -3,7 +3,7 @@ import { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu, nativeImage,
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { isYouTubeId, type AppCommand, type LibraryData, type LibraryScanState, type PlaybackState, type ServerLogin, type Track, type DownloadQuality } from '../shared/types';
+import { isYouTubeId, type AppCommand, type MiniLayout, type LibraryData, type LibraryScanState, type PlaybackState, type ServerLogin, type Track, type DownloadQuality } from '../shared/types';
 import { initMiniPlayer } from './mini';
 import { getScanState, localAlbum, localAlbums, localTracks, openLibrary, scan, searchLocal } from './library';
 import { clearMatches } from './lossless';
@@ -414,7 +414,7 @@ function registerIpc() {
   handle('yt:find', (title: string, artist: string) => findOnYouTube(String(title), String(artist ?? '')));
 
   ipcMain.on('app:playback-state', (_event, state: PlaybackState) => {
-    playback = { playing: !!state?.playing, title: state?.title, artist: state?.artist, thumbnail: state?.thumbnail, position: state?.position, duration: state?.duration, accent: state?.accent };
+    playback = { playing: !!state?.playing, title: state?.title, artist: state?.artist, thumbnail: state?.thumbnail, position: state?.position, duration: state?.duration, accent: state?.accent, upNext: Array.isArray(state?.upNext) ? state.upNext.slice(0, 20) : undefined };
     miniPlayer?.setState(playback);
     if (win) win.setTitle(playback.title ? `${playback.title} — ${playback.artist ?? ''} · Sonara` : 'Sonara');
     updateThumbar();
@@ -431,6 +431,8 @@ function registerIpc() {
   ipcMain.on('mini:toggle', () => (miniPlayer?.toggle(), updateTray()));
   ipcMain.on('mini:hide', () => (miniPlayer?.hide(), updateTray()));
   ipcMain.on('mini:open-app', showWindow);
+  ipcMain.on('mini:layout', (_event, layout: MiniLayout) => miniPlayer?.setLayout(layout));
+  ipcMain.on('mini:jump', (_event, index: number) => Number.isInteger(index) && index >= 0 && win?.webContents.send('app:jump', index));
 }
 
 /**

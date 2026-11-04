@@ -143,6 +143,9 @@ export function createMockApi(): ObsidianApi {
     openMainWindow: () => undefined,
     hideMiniPlayer: () => undefined,
     onMiniState: () => () => undefined,
+    setMiniLayout: () => undefined,
+    miniJumpTo: () => undefined,
+    onJumpTo: () => () => undefined,
     toggleFullScreen: async () => {
       if (document.fullscreenElement) await document.exitFullscreen();
       else await document.documentElement.requestFullscreen().catch(() => undefined);

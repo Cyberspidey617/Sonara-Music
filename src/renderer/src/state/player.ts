@@ -235,6 +235,7 @@ function reportPlayback() {
     position,
     duration,
     accent: getComputedStyle(document.documentElement).getPropertyValue('--keyColor').trim() || undefined,
+    upNext: queue.slice(index + 1, index + 21).map((q, i) => ({ index: index + 1 + i, title: q.track.title, artist: artistLine(q.track), thumbnail: q.track.thumbnail ? artworkAtPixels(q.track.thumbnail, 96) : undefined })),
   });
   if ('mediaSession' in navigator) navigator.mediaSession.playbackState = status === 'playing' ? 'playing' : status === 'paused' ? 'paused' : 'none';
 }
@@ -823,6 +824,9 @@ if ('mediaSession' in navigator) {
     }
   }
 }
+
+// A song picked in the mini player's Up Next.
+api.onJumpTo((index) => usePlayer.getState().jumpTo(index));
 
 api.onCommand((command) => {
   const s = usePlayer.getState();

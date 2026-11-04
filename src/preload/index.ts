@@ -1,6 +1,6 @@
 // The renderer's only door to the main process: a typed, minimal API.
 import { contextBridge, ipcRenderer, webFrame } from 'electron';
-import type { AppCommand, ObsidianApi, PlaybackState } from '../shared/types';
+import type { AppCommand, MiniLayout, ObsidianApi, PlaybackState } from '../shared/types';
 
 const api: ObsidianApi = {
   platform: process.platform,
@@ -40,8 +40,15 @@ const api: ObsidianApi = {
   miniCommand: (command) => ipcRenderer.send('mini:command', command),
   openMainWindow: () => ipcRenderer.send('mini:open-app'),
   hideMiniPlayer: () => ipcRenderer.send('mini:hide'),
+  setMiniLayout: (layout) => ipcRenderer.send('mini:layout', layout),
+  miniJumpTo: (index) => ipcRenderer.send('mini:jump', index),
+  onJumpTo: (handler) => {
+    const listener = (_: unknown, index: number) => handler(index);
+    ipcRenderer.on('app:jump', listener);
+    return () => ipcRenderer.removeListener('app:jump', listener);
+  },
   onMiniState: (handler) => {
-    const listener = (_: unknown, state: PlaybackState) => handler(state);
+    const listener = (_: unknown, state: PlaybackState, layout: MiniLayout) => handler(state, layout);
     ipcRenderer.on('mini:state', listener);
     return () => ipcRenderer.removeListener('mini:state', listener);
   },
