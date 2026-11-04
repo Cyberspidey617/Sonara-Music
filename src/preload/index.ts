@@ -1,6 +1,6 @@
 // The renderer's only door to the main process: a typed, minimal API.
 import { contextBridge, ipcRenderer, webFrame } from 'electron';
-import type { AppCommand, MiniLayout, ObsidianApi, PlaybackState } from '../shared/types';
+import type { AppCommand, MiniGrow, MiniLayout, ObsidianApi, PlaybackState } from '../shared/types';
 
 const api: ObsidianApi = {
   platform: process.platform,
@@ -56,7 +56,7 @@ const api: ObsidianApi = {
   miniMoveStart: () => ipcRenderer.send('mini:move-start'),
   miniMoveEnd: () => ipcRenderer.send('mini:move-end'),
   onMiniState: (handler) => {
-    const listener = (_: unknown, state: PlaybackState, layout: MiniLayout) => handler(state, layout);
+    const listener = (_: unknown, state: PlaybackState, layout: MiniLayout, grow: MiniGrow) => handler(state, layout, grow);
     ipcRenderer.on('mini:state', listener);
     return () => ipcRenderer.removeListener('mini:state', listener);
   },

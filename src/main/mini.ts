@@ -3,7 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { app, BrowserWindow, screen } from 'electron';
-import type { MiniLayout, PlaybackState } from '../shared/types';
+import type { MiniGrow, MiniLayout, PlaybackState } from '../shared/types';
 import { log } from './log';
 
 /** Window sizes for each layout: the bar, and the bar with Up Next below it. */
@@ -16,6 +16,9 @@ const MARGIN = 20;
 let mini: BrowserWindow | null = null;
 let latest: PlaybackState = { playing: false };
 let layout: MiniLayout = 'bar';
+/** While Up Next is open: where the bar was (it goes back there), and which way the list opened. */
+let bar: Electron.Rectangle | null = null;
+let grow: MiniGrow = 'up';
 /** Shown because the main window went away (not by hand), so it goes when the window returns. */
 let autoShown = false;
 let keepOnTop: ReturnType<typeof setInterval> | null = null;
@@ -60,7 +63,7 @@ function stayOnTop() {
 
 function savePosition() {
   if (!mini) return;
-  const b = mini.getBounds();
+  const b = layout === 'queue' && bar ? bar : mini.getBounds();
   try {
     fs.writeFileSync(positionFile(), JSON.stringify({ right: b.x + b.width, bottom: b.y + b.height }));
   } catch (error) {
@@ -103,7 +106,7 @@ function create(options: { preload: string; url: string; icon: Electron.NativeIm
     keepOnTop = dragging = null;
     mini = null;
   });
-  mini.webContents.on('did-finish-load', () => mini?.webContents.send('mini:state', latest, layout));
+  mini.webContents.on('did-finish-load', () => mini?.webContents.send('mini:state', latest, layout, grow));
   mini.webContents.on('will-navigate', (event) => event.preventDefault());
   mini.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   void mini.loadURL(options.url);
@@ -133,14 +136,28 @@ export function initMiniPlayer(options: { preload: string; url: string; icon: El
       else this.show();
     },
     isVisible: () => !!mini?.isVisible(),
-    /** The bar, or the bar with Up Next: the window resizes around its corner. */
+    /**
+     * The bar, or the bar with Up Next. The bar stays where it is: the list opens above it, or below
+     * when there isn't room above (near the top of the screen), and closing puts the bar back.
+     */
     setLayout(next: MiniLayout) {
-      if (!SIZES[next]) return;
+      if (!SIZES[next] || next === layout) return;
       layout = next;
       if (!mini) return;
-      const b = mini.getBounds();
-      mini.setBounds(boundsFor(next, { right: b.x + b.width, bottom: b.y + b.height }), process.platform === 'darwin');
-      mini.webContents.send('mini:state', latest, layout);
+      const animate = process.platform === 'darwin';
+      if (next === 'queue') {
+        const b = mini.getBounds();
+        const { width, height } = SIZES.queue;
+        const area = screen.getDisplayMatching(b).workArea;
+        bar = b;
+        grow = b.y + b.height - height >= area.y ? 'up' : 'down';
+        const y = grow === 'up' ? b.y + b.height - height : Math.max(area.y, Math.min(b.y, area.y + area.height - height));
+        mini.setBounds({ x: b.x + b.width - width, y, width, height }, animate);
+      } else {
+        mini.setBounds(bar ?? boundsFor(next), animate);
+        bar = null;
+      }
+      mini.webContents.send('mini:state', latest, layout, grow);
     },
     /**
      * Dragged from the page (so a double-click can reach it), it follows the real cursor: the page's
@@ -151,11 +168,14 @@ export function initMiniPlayer(options: { preload: string; url: string; icon: El
       if (!mini || dragging) return;
       const from = screen.getCursorScreenPoint();
       const start = mini.getBounds();
+      const startBar = bar;
       dragging = setInterval(() => {
         const at = screen.getCursorScreenPoint();
         if (!mini || mini.isDestroyed()) return this.moveEnd();
         const x = start.x + at.x - from.x;
         const y = start.y + at.y - from.y;
+        // Moved with Up Next open, the bar comes back where it was carried to.
+        if (startBar) bar = { ...startBar, x: startBar.x + at.x - from.x, y: startBar.y + at.y - from.y };
         const now = mini.getBounds();
         if (now.x !== x || now.y !== y) mini.setBounds({ x, y, ...SIZES[layout] });
       }, 8);
@@ -168,7 +188,7 @@ export function initMiniPlayer(options: { preload: string; url: string; icon: El
     },
     setState(state: PlaybackState) {
       latest = state;
-      mini?.webContents.send('mini:state', state, layout);
+      mini?.webContents.send('mini:state', state, layout, grow);
     },
     hasSong: () => !!latest.title,
     /** With the main window gone, it goes too (so the app can quit). */

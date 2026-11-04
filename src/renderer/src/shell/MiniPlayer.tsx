@@ -1,6 +1,6 @@
 import { ListMusic, X } from 'lucide-react';
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
-import type { MiniLayout, PlaybackState } from '@shared/types';
+import type { MiniGrow, MiniLayout, PlaybackState } from '@shared/types';
 import { api } from '@/lib/api';
 import { LogoMark, NextGlyph, PauseGlyph, PlayGlyph, PreviousGlyph } from '@/components/icons';
 
@@ -18,6 +18,7 @@ const interactive = (target: EventTarget) => target instanceof Element && !!targ
 export function MiniPlayer() {
   const [state, setState] = useState<PlaybackState & { at: number }>({ playing: false, at: performance.now() });
   const [layout, setLayout] = useState<MiniLayout>('bar');
+  const [grow, setGrow] = useState<MiniGrow>('up');
   const [closing, setClosing] = useState(false);
   // Bumped each time the window comes back, to play its arrival again.
   const [shown, setShown] = useState(0);
@@ -27,9 +28,10 @@ export function MiniPlayer() {
 
   useEffect(
     () =>
-      api.onMiniState((next, nextLayout) => {
+      api.onMiniState((next, nextLayout, nextGrow) => {
         setState({ ...next, at: performance.now() });
         if (nextLayout) setLayout(nextLayout);
+        if (nextGrow) setGrow(nextGrow);
       }),
     [],
   );
@@ -112,6 +114,15 @@ export function MiniPlayer() {
         onDoubleClick={(e) => !interactive(e.target) && api.openMainWindow()}
       >
         <div className="relative flex h-[68px] flex-none items-center gap-3 pr-3 pl-2">
+          {/* Hide sits on the cover's corner, clear of the controls. */}
+          <button
+            className="absolute top-1 left-1 z-10 grid size-5 place-items-center rounded-full bg-black/60 text-secondary opacity-0 transition-opacity group-hover:opacity-100 hover:text-primary"
+            aria-label="Hide the mini player"
+            title="Hide (Ctrl+Alt+M)"
+            onClick={() => api.hideMiniPlayer()}
+          >
+            <X size={11} strokeWidth={2.5} />
+          </button>
           <button className="size-[52px] flex-none overflow-hidden rounded-[16px] bg-white/8 transition-[scale] duration-150 active:scale-95" title="Open Sonara" aria-label="Open Sonara" onClick={() => api.openMainWindow()}>
             {state.thumbnail ? <img key={state.thumbnail} src={state.thumbnail} alt="" draggable={false} className="size-full animate-fade-in object-cover" /> : <LogoMark size={30} className="m-auto" />}
           </button>
@@ -163,7 +174,7 @@ export function MiniPlayer() {
           </div>
         </div>
         {queueOpen && (
-          <div data-list className={`flex min-h-0 flex-1 flex-col border-t border-white/10 bg-black/50 ${closing ? 'animate-mini-out' : 'animate-fade-in'}`}>
+          <div data-list className={`flex min-h-0 flex-1 flex-col border-white/10 bg-black/50 ${grow === 'up' ? 'order-first border-b' : 'border-t'} ${closing ? 'animate-mini-out' : 'animate-fade-in'}`}>
             <h2 className="px-4 pt-3 pb-1.5 type-callout-emphasized text-secondary">Up Next{state.upNext?.length ? ` · ${state.upNext.length}` : ''}</h2>
             <div className="no-scrollbar min-h-0 flex-1 overflow-y-auto px-2 pb-2">
               {state.upNext?.length ? (
@@ -188,15 +199,6 @@ export function MiniPlayer() {
             </div>
           </div>
         )}
-        {/* Hide sits on the cover's corner, clear of the controls. */}
-        <button
-          className="absolute top-1 left-1 z-10 grid size-5 place-items-center rounded-full bg-black/60 text-secondary opacity-0 transition-opacity group-hover:opacity-100 hover:text-primary"
-          aria-label="Hide the mini player"
-          title="Hide (Ctrl+Alt+M)"
-          onClick={() => api.hideMiniPlayer()}
-        >
-          <X size={11} strokeWidth={2.5} />
-        </button>
       </div>
     </div>
   );
