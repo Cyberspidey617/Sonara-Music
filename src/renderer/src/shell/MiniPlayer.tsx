@@ -5,6 +5,8 @@ import { api } from '@/lib/api';
 import { LogoMark, NextGlyph, PauseGlyph, PlayGlyph, PreviousGlyph } from '@/components/icons';
 
 const control = 'grid size-9 flex-none place-items-center rounded-full text-primary transition-[background-color,scale] duration-200 hover:bg-white/10 active:scale-90 disabled:opacity-35 aria-pressed:bg-white/15';
+/** The window keeps the Up Next size (see main/mini.ts), so opening and closing it is the pill's alone. */
+const fixed = new URLSearchParams(location.search).has('fixed');
 /** The window's see-through margin around the pill. */
 const INSET = 8;
 /** The pill's height as the bar, and with Up Next open. */
@@ -23,9 +25,8 @@ const interactive = (target: EventTarget) => target instanceof Element && !!targ
  * reports and sends its buttons back there. The page drags it itself, so a double-click anywhere
  * that isn't a button can open Sonara.
  *
- * Up Next: the window takes its full size first (the new part is see-through), then the pill grows
- * into it; closing, the pill shrinks back before the window does. So the movement is all the page's
- * own, never the window's jump.
+ * Up Next: the pill grows into the window's see-through space and shrinks back. Where the window
+ * can't stay that size (Linux), it takes the full size first and gives it back once the pill is small.
  */
 export function MiniPlayer() {
   const [state, setState] = useState<PlaybackState & { at: number }>({ playing: false, at: performance.now() });
@@ -83,6 +84,7 @@ export function MiniPlayer() {
   const queueOpen = layout === 'queue';
   const openQueue = () => {
     if (closing.current) return;
+    if (fixed) return api.setMiniLayout('queue');
     // Above the bar if there's room on this screen, otherwise below it.
     const next: MiniGrow = window.screenY + window.innerHeight - MINI_SIZES.queue.height >= (screen as Screen & { availTop: number }).availTop ? 'up' : 'down';
     setGrow(next);
@@ -145,6 +147,8 @@ export function MiniPlayer() {
           transition: `height ${RESIZE_MS}ms ${EASE}, border-radius ${RESIZE_MS}ms ${EASE}`,
           background: `linear-gradient(115deg, color-mix(in srgb, ${accent} 26%, transparent), transparent 62%), rgb(18 18 22 / 0.62)`,
         }}
+        onPointerEnter={() => fixed && api.miniInteractive(true)}
+        onPointerLeave={() => fixed && !dragging.current && api.miniInteractive(false)}
         onPointerDown={onPointerDown}
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}

@@ -156,6 +156,8 @@ export interface Settings {
   volume: number;
   /** Even out loudness between tracks with YouTube's loudness data. */
   normalize: boolean;
+  /** Spatial audio: virtual speakers around you (headphones), or a wider stage (speakers). */
+  spatialAudio: SpatialAudio;
   closeToTray: boolean;
   /** Show the floating mini player when Sonara is minimised or closed to the tray. */
   miniPlayerAuto: boolean;
@@ -250,6 +252,8 @@ export interface Settings {
   eq: EqSettings;
 }
 
+export type SpatialAudio = 'off' | 'headphones' | 'speakers';
+
 /** A 10-band graphic equalizer (32 Hz – 16 kHz), in dB. */
 export interface EqSettings {
   enabled: boolean;
@@ -301,6 +305,7 @@ export const DEFAULT_SETTINGS: Settings = {
   crossfade: 0,
   volume: 1,
   normalize: false,
+  spatialAudio: 'off',
   closeToTray: false,
   miniPlayerAuto: true,
   globalShortcuts: true,
@@ -503,6 +508,8 @@ export interface ObsidianApi {
   onSeekTo(handler: (seconds: number) => void): () => void;
   /** Drags the mini player with the cursor until the button is let go; where it was left is kept. */
   miniMoveStart(): void;
+  /** Whether the pointer is on the mini player's pill, so its see-through surround lets clicks through. */
+  miniInteractive(on: boolean): void;
   miniMoveEnd(): void;
   onFullScreenChange(handler: (fullScreen: boolean) => void): () => void;
   dataPath(): Promise<string>;

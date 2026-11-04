@@ -5,7 +5,7 @@ import { Check, Clock, FolderOpen, FolderPlus, Heart, House, Loader2, RefreshCw,
 import { SHORTCUTS } from '@/components/Dialogs';
 import { createContext, useContext, useEffect, useState, type CSSProperties, type ReactNode } from 'react';
 import { create } from 'zustand';
-import { DEFAULT_SETTINGS, type AudioQuality, type DownloadQuality, type Settings } from '@shared/types';
+import { DEFAULT_SETTINGS, type AudioQuality, type DownloadQuality, type Settings, type SpatialAudio } from '@shared/types';
 import { api } from '@/lib/api';
 import { ACCENTS, LYRIC_FONTS, THEMES, themeVars, useThemeColors } from '@/lib/appearance';
 import { artworkAtPixels, largeArtwork } from '@/lib/artwork';
@@ -155,6 +155,24 @@ function PlaybackTab() {
         </Row>
         <Row title="Normalize volume" detail="Even out loudness between YouTube songs. Your own files play as mastered.">
           <Toggle label="Normalize volume" on={s.normalize} onChange={(normalize) => set({ normalize })} />
+        </Row>
+        <Row
+          title="Spatial Audio"
+          detail={
+            s.spatialAudio === 'speakers'
+              ? 'Widens the stereo image beyond your speakers, with a touch of room. Bass and vocals stay centred.'
+              : 'Places the music on virtual speakers around you, with a touch of room, instead of inside your head. Best with headphones.'
+          }
+        >
+          <Segmented<SpatialAudio>
+            value={s.spatialAudio}
+            options={[
+              { value: 'off', label: 'Off' },
+              { value: 'headphones', label: 'Headphones' },
+              { value: 'speakers', label: 'Speakers' },
+            ]}
+            onChange={(spatialAudio) => set({ spatialAudio })}
+          />
         </Row>
       </Section>
       <Section title="Playback">

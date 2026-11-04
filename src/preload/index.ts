@@ -54,6 +54,7 @@ const api: ObsidianApi = {
     return () => ipcRenderer.removeListener('app:seek', listener);
   },
   miniMoveStart: () => ipcRenderer.send('mini:move-start'),
+  miniInteractive: (on) => ipcRenderer.send('mini:interactive', on),
   miniMoveEnd: () => ipcRenderer.send('mini:move-end'),
   onMiniState: (handler) => {
     const listener = (_: unknown, state: PlaybackState, layout: MiniLayout, grow: MiniGrow) => handler(state, layout, grow);

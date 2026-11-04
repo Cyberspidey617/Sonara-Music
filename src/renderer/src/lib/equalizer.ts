@@ -1,5 +1,5 @@
 /*
- * The equalizer: 10 peaking filters at the ISO octave centres (32 Hz – 16 kHz).
+ * The equalizer: 10 peaking filters at the ISO octave centres (32 Hz – 16 kHz), then Spatial Audio.
  *
  * Audio quality comes first:
  * - Until the equalizer is first switched on, nothing changes: the <audio>
@@ -11,7 +11,7 @@
  * - Boosts would clip, so by default the level is lowered by the largest
  *   boost ("Prevent clipping"); cuts never lower the level.
  */
-import { EQ_FREQUENCIES, type EqSettings } from '@shared/types';
+import { EQ_FREQUENCIES, type EqSettings, type SpatialAudio } from '@shared/types';
 import { useLibrary } from '@/state/library';
 
 export const EQ_MIN = -12;
@@ -94,8 +94,21 @@ const isFlat = (eq: EqSettings) => eq.bands.every((b) => b === 0) && preampFor(e
 
 // ---- The audio graph ------------------------------------------------------------------
 
+type Graph = {
+  ctx: AudioContext;
+  bus: GainNode;
+  preamp: GainNode;
+  filters: BiquadFilterNode[];
+  /** After the equalizer (or straight from the decks): into Spatial Audio, or to the output. */
+  post: GainNode;
+  out: GainNode;
+  meter: AnalyserNode;
+  routed: 'direct' | 'eq' | null;
+  spatial: { node: AudioNode; mode: SpatialAudio } | null;
+};
+
 let elements: readonly HTMLAudioElement[] = [];
-let graph: { ctx: AudioContext; bus: GainNode; preamp: GainNode; filters: BiquadFilterNode[]; out: GainNode; meter: AnalyserNode; routed: 'direct' | 'eq' | null } | null = null;
+let graph: Graph | null = null;
 
 const dbToGain = (db: number) => 10 ** (db / 20);
 
@@ -111,6 +124,7 @@ function build() {
     node.gain.value = 0;
     return node;
   });
+  const post = ctx.createGain();
   // `out` is a unity gain (an exact ×1.0) so a meter can listen without touching the signal.
   const out = ctx.createGain();
   const meter = ctx.createAnalyser();
@@ -120,22 +134,183 @@ function build() {
   out.connect(meter);
   preamp.connect(filters[0]!);
   for (let i = 0; i < filters.length - 1; i++) filters[i]!.connect(filters[i + 1]!);
-  filters[filters.length - 1]!.connect(out);
-  // Once an element feeds Web Audio it can't go back, so this only happens when the EQ is first used.
+  filters[filters.length - 1]!.connect(post);
+  post.connect(out);
+  // Once an element feeds Web Audio it can't go back, so this only happens when first needed.
   for (const el of elements) ctx.createMediaElementSource(el).connect(bus);
   for (const el of elements) el.addEventListener('play', () => void ctx.resume());
-  graph = { ctx, bus, preamp, filters, out, meter, routed: null };
+  graph = { ctx, bus, preamp, filters, post, out, meter, routed: null, spatial: null };
 }
 
 function route(to: 'direct' | 'eq') {
   if (!graph || graph.routed === to) return;
   graph.bus.disconnect();
-  graph.bus.connect(to === 'eq' ? graph.preamp : graph.out);
+  graph.bus.connect(to === 'eq' ? graph.preamp : graph.post);
   graph.routed = to;
 }
 
-export function applyEq(eq: EqSettings) {
-  if (!graph && !eq.enabled) return; // never used: the untouched path
+// ---- Spatial Audio --------------------------------------------------------------------
+
+/** A short, soft room: decaying noise, darker as it fades, slightly different in each ear. */
+function roomImpulse(ctx: BaseAudioContext, seconds = 0.55): AudioBuffer {
+  const length = Math.round(ctx.sampleRate * seconds);
+  const buffer = ctx.createBuffer(2, length, ctx.sampleRate);
+  for (let c = 0; c < 2; c++) {
+    const data = buffer.getChannelData(c);
+    let smooth = 0;
+    for (let i = 0; i < length; i++) {
+      const t = i / length;
+      // A one-pole lowpass that closes as the tail goes on: early reflections bright, the tail warm.
+      const k = 0.65 - 0.5 * t;
+      smooth = smooth * (1 - k) + (Math.random() * 2 - 1) * k;
+      data[i] = smooth * (1 - t) ** 3;
+    }
+    // Unit energy: the room adds its level (set where it's used) and no more.
+    const energy = Math.sqrt(data.reduce((sum, v) => sum + v * v, 0));
+    for (let i = 0; i < length; i++) data[i]! /= energy;
+  }
+  return buffer;
+}
+
+function filter(ctx: BaseAudioContext, type: BiquadFilterType, frequency: number) {
+  const node = ctx.createBiquadFilter();
+  node.type = type;
+  node.frequency.value = frequency;
+  node.Q.value = Math.SQRT1_2;
+  return node;
+}
+
+/** A speaker placed at `degrees` around the listener (0 ahead, negative to the left), heard through HRTF. */
+function virtualSpeaker(ctx: BaseAudioContext, degrees: number, elevation = 0) {
+  const p = ctx.createPanner();
+  p.panningModel = 'HRTF';
+  p.distanceModel = 'linear';
+  p.rolloffFactor = 0; // placement only: no level change with distance
+  const a = (degrees * Math.PI) / 180;
+  const e = (elevation * Math.PI) / 180;
+  p.positionX.value = Math.sin(a) * Math.cos(e);
+  p.positionY.value = Math.sin(e);
+  p.positionZ.value = -Math.cos(a) * Math.cos(e);
+  return p;
+}
+
+/**
+ * Evens out what the virtual speakers do to the tone (measured octave by octave on music-like
+ * signals): HRTF colours the sound, and the speakers' paths to each ear add up unevenly.
+ */
+const HEADPHONE_CORRECTION: [frequency: number, gain: number, q: number][] = [
+  [190, -4, 0.9],
+  [1250, 4, 1.1],
+  [8500, 6.5, 1.6],
+];
+
+/**
+ * Headphones: the music moves out of your head onto speakers around you. Each side plays from a
+ * front speaker at ±30° and, quieter and a little later, from one behind at ±110°, all through
+ * HRTF, with a touch of room.
+ */
+function headphoneStage(ctx: BaseAudioContext, input: AudioNode, output: AudioNode) {
+  const split = ctx.createChannelSplitter(2);
+  input.connect(split);
+  const wet = ctx.createGain();
+  wet.gain.value = 0.7;
+  for (const [channel, side] of [
+    [0, -1],
+    [1, 1],
+  ] as const) {
+    split.connect(virtualSpeaker(ctx, side * 30, 5), channel).connect(wet);
+    const delay = ctx.createDelay(0.05);
+    delay.delayTime.value = 0.014;
+    const rear = ctx.createGain();
+    rear.gain.value = 0.3;
+    split.connect(delay, channel).connect(rear).connect(virtualSpeaker(ctx, side * 110)).connect(wet);
+  }
+  let voiced: AudioNode = wet;
+  for (const [frequency, gain, q] of HEADPHONE_CORRECTION) {
+    const peak = ctx.createBiquadFilter();
+    peak.type = 'peaking';
+    peak.frequency.value = frequency;
+    peak.gain.value = gain;
+    peak.Q.value = q;
+    voiced = voiced.connect(peak);
+  }
+  voiced.connect(output);
+  const room = ctx.createConvolver();
+  room.normalize = false;
+  room.buffer = roomImpulse(ctx);
+  const roomLevel = ctx.createGain();
+  roomLevel.gain.value = 0.11;
+  voiced.connect(room).connect(roomLevel).connect(output);
+}
+
+/**
+ * Speakers: a wider stage. The difference between the channels (what's at the sides) is lifted
+ * above 200 Hz; the middle (bass, vocals) is untouched. A touch of room adds depth.
+ */
+function speakerStage(ctx: BaseAudioContext, input: AudioNode, output: AudioNode) {
+  const split = ctx.createChannelSplitter(2);
+  const merge = ctx.createChannelMerger(2);
+  input.connect(split);
+  const mid = ctx.createGain();
+  const side = ctx.createGain();
+  const half = (channel: 0 | 1, to: AudioNode, sign: 1 | -1) => {
+    const g = ctx.createGain();
+    g.gain.value = 0.5 * sign;
+    split.connect(g, channel).connect(to);
+  };
+  half(0, mid, 1);
+  half(1, mid, 1);
+  half(0, side, 1);
+  half(1, side, -1);
+  // The original sides, plus extra width above 200 Hz.
+  const extra = ctx.createGain();
+  extra.gain.value = 0.7;
+  const wide = ctx.createGain();
+  side.connect(wide);
+  side.connect(filter(ctx, 'highpass', 200)).connect(extra).connect(wide);
+  const flip = ctx.createGain();
+  flip.gain.value = -1;
+  mid.connect(merge, 0, 0);
+  mid.connect(merge, 0, 1);
+  wide.connect(merge, 0, 0);
+  wide.connect(flip).connect(merge, 0, 1);
+  merge.connect(output);
+  const room = ctx.createConvolver();
+  room.normalize = false;
+  room.buffer = roomImpulse(ctx, 0.4);
+  const roomLevel = ctx.createGain();
+  roomLevel.gain.value = 0.07;
+  merge.connect(room).connect(roomLevel).connect(output);
+}
+
+/** Puts Spatial Audio after the equalizer, or takes it out of the path entirely when off. */
+function applySpatial(mode: SpatialAudio) {
+  const g = graph!;
+  if ((g.spatial?.mode ?? 'off') === mode) return;
+  g.post.disconnect();
+  g.spatial?.node.disconnect();
+  g.spatial = null;
+  if (mode === 'off') {
+    g.post.connect(g.out);
+    return;
+  }
+  const input = g.ctx.createGain();
+  // A safety limiter: the virtual speakers and room add a little level on loud, wide passages.
+  const limiter = g.ctx.createDynamicsCompressor();
+  limiter.threshold.value = -1.5;
+  limiter.knee.value = 0;
+  limiter.ratio.value = 20;
+  limiter.attack.value = 0.002;
+  limiter.release.value = 0.12;
+  (mode === 'headphones' ? headphoneStage : speakerStage)(g.ctx, input, limiter);
+  limiter.connect(g.out);
+  g.post.connect(input);
+  g.spatial = { node: input, mode };
+}
+
+/** The equalizer and Spatial Audio, as the settings say. */
+export function applyAudio(eq: EqSettings, spatial: SpatialAudio = 'off') {
+  if (!graph && !eq.enabled && spatial === 'off') return; // never used: the untouched path
   if (!graph) build();
   const g = graph!;
   const now = g.ctx.currentTime;
@@ -146,18 +321,19 @@ export function applyEq(eq: EqSettings) {
     g.preamp.gain.setTargetAtTime(dbToGain(preampFor(eq)), now, 0.03);
     route('eq');
   }
+  applySpatial(spatial);
   if (elements.some((el) => !el.paused)) void g.ctx.resume();
 }
 
 /** Called once by the player with its two decks. */
 export function attachEqualizer(decks: readonly HTMLAudioElement[]) {
   elements = decks;
-  let last: EqSettings | undefined;
+  let last: [EqSettings | undefined, SpatialAudio | undefined] = [undefined, undefined];
   const sync = () => {
-    const eq = useLibrary.getState().settings.eq;
-    if (eq && eq !== last) {
-      last = eq;
-      applyEq(eq);
+    const { eq, spatialAudio } = useLibrary.getState().settings;
+    if (eq && (eq !== last[0] || spatialAudio !== last[1])) {
+      last = [eq, spatialAudio];
+      applyAudio(eq, spatialAudio ?? 'off');
     }
   };
   useLibrary.subscribe(sync);
@@ -180,12 +356,12 @@ function measure(freqs: number[]): { rms: number; bands: Record<number, number> 
   }
   return { rms, bands };
 }
-(window as unknown as { __obsidianEq: unknown }).__obsidianEq = { path: () => eqPath(), measure };
+(window as unknown as { __obsidianEq: unknown }).__obsidianEq = { path: () => eqPath(), measure, stages: { headphones: headphoneStage, speakers: speakerStage } };
 
 /** For tests and the readout: what the audio is going through right now. */
-export function eqPath(): { path: 'native' | 'direct' | 'eq'; sampleRate?: number } {
+export function eqPath(): { path: 'native' | 'direct' | 'eq'; spatial?: SpatialAudio; sampleRate?: number } {
   if (!graph) return { path: 'native' };
-  return { path: graph.routed ?? 'direct', sampleRate: graph.ctx.sampleRate };
+  return { path: graph.routed ?? 'direct', spatial: graph.spatial?.mode ?? 'off', sampleRate: graph.ctx.sampleRate };
 }
 
 // ---- The curve on screen --------------------------------------------------------------

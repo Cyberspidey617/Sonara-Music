@@ -7,11 +7,18 @@ import { MINI_SIZES as SIZES, type MiniGrow, type MiniLayout, type PlaybackState
 import { log } from './log';
 
 const MARGIN = 20;
+/**
+ * Where clicks can pass through its see-through part (Windows, macOS), the window keeps the Up Next
+ * size and only the pill inside it changes: a resized window shows a stale frame first, which jumps.
+ * Elsewhere (Linux) it resizes, as an always-on-top window there would block clicks around the bar.
+ */
+const fixed = process.platform !== 'linux';
+const FULL = SIZES.queue;
 
 let mini: BrowserWindow | null = null;
 let latest: PlaybackState = { playing: false };
 let layout: MiniLayout = 'bar';
-/** While Up Next is open: where the bar was (it goes back there), and which way the list opened. */
+/** While Up Next is open (resizing): where the bar was, so it goes back there; and which way the list opens. */
 let bar: Electron.Rectangle | null = null;
 let grow: MiniGrow = 'up';
 /** Shown because the main window went away (not by hand), so it goes when the window returns. */
@@ -47,6 +54,28 @@ function boundsFor(next: MiniLayout, corner = anchor()) {
   };
 }
 
+/** The bar's own rectangle on screen (in a fixed window, the pill sits at its top or bottom). */
+function barRect(): Electron.Rectangle {
+  const b = mini!.getBounds();
+  if (!fixed) return layout === 'queue' && bar ? bar : b;
+  return { x: b.x, y: grow === 'up' ? b.y + b.height - SIZES.bar.height : b.y, width: b.width, height: SIZES.bar.height };
+}
+
+/** A fixed window holding the bar at `r`: Up Next opens above it, or below it with no room above. */
+function fixedBounds(r: { x: number; y: number; width: number; height: number }) {
+  const area = screen.getDisplayMatching(r).workArea;
+  const next: MiniGrow = r.y + r.height - FULL.height >= area.y ? 'up' : 'down';
+  return { grow: next, bounds: { x: r.x + r.width - FULL.width, y: next === 'up' ? r.y + r.height - FULL.height : r.y, ...FULL } };
+}
+
+function initialBounds() {
+  const at = boundsFor('bar');
+  if (!fixed) return at;
+  const placed = fixedBounds(at);
+  grow = placed.grow;
+  return placed.bounds;
+}
+
 /**
  * Keeps it "on top" if something took that away, without pushing in front of other on-top windows:
  * the taskbar's menus and a screenshot tool's overlay belong above it while they're open.
@@ -58,7 +87,7 @@ function stayOnTop() {
 
 function savePosition() {
   if (!mini) return;
-  const b = layout === 'queue' && bar ? bar : mini.getBounds();
+  const b = barRect();
   try {
     fs.writeFileSync(positionFile(), JSON.stringify({ right: b.x + b.width, bottom: b.y + b.height }));
   } catch (error) {
@@ -68,7 +97,7 @@ function savePosition() {
 
 function create(options: { preload: string; url: string; icon: Electron.NativeImage }) {
   mini = new BrowserWindow({
-    ...boundsFor(layout),
+    ...initialBounds(),
     show: false,
     frame: false,
     resizable: false,
@@ -86,6 +115,8 @@ function create(options: { preload: string; url: string; icon: Electron.NativeIm
   // Above ordinary windows, full-screen ones on macOS too, but below menus and system overlays.
   mini.setAlwaysOnTop(true, 'floating');
   if (process.platform === 'darwin') mini.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  // Clicks on the see-through part go to whatever is behind; the page says when the pointer is on the pill.
+  if (fixed) mini.setIgnoreMouseEvents(true, { forward: true });
   mini.on('always-on-top-changed', (_event, onTop) => !onTop && stayOnTop());
   mini.on('moved', savePosition);
   mini.on('show', () => {
@@ -104,7 +135,7 @@ function create(options: { preload: string; url: string; icon: Electron.NativeIm
   mini.webContents.on('did-finish-load', () => mini?.webContents.send('mini:state', latest, layout, grow));
   mini.webContents.on('will-navigate', (event) => event.preventDefault());
   mini.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
-  void mini.loadURL(options.url);
+  void mini.loadURL(`${options.url}${fixed ? '&fixed' : ''}`);
 }
 
 export function initMiniPlayer(options: { preload: string; url: string; icon: Electron.NativeImage }) {
@@ -139,6 +170,7 @@ export function initMiniPlayer(options: { preload: string; url: string; icon: El
       if (!SIZES[next] || next === layout) return;
       layout = next;
       if (!mini) return;
+      if (fixed) return void mini.webContents.send('mini:state', latest, layout, grow);
       const animate = process.platform === 'darwin';
       if (next === 'queue') {
         const b = mini.getBounds();
@@ -173,14 +205,27 @@ export function initMiniPlayer(options: { preload: string; url: string; icon: El
         // Moved with Up Next open, the bar comes back where it was carried to.
         if (startBar) bar = { ...startBar, x: startBar.x + at.x - from.x, y: startBar.y + at.y - from.y };
         const now = mini.getBounds();
-        if (now.x !== x || now.y !== y) mini.setBounds({ x, y, ...SIZES[layout] });
+        if (now.x !== x || now.y !== y) mini.setBounds({ x, y, ...(fixed ? FULL : SIZES[layout]) });
       }, 8);
     },
     moveEnd() {
       if (!dragging) return;
       clearInterval(dragging);
       dragging = null;
+      // Dropped near the top (or back down), Up Next's side changes: the window moves so the bar stays.
+      if (fixed && mini && layout === 'bar') {
+        const placed = fixedBounds(barRect());
+        if (placed.grow !== grow) {
+          grow = placed.grow;
+          mini.setBounds(placed.bounds);
+          mini.webContents.send('mini:state', latest, layout, grow);
+        }
+      }
       savePosition();
+    },
+    /** In a fixed window: whether the pointer is on the pill (it takes clicks) or not (they pass through). */
+    setInteractive(on: boolean) {
+      if (fixed && mini && !mini.isDestroyed()) mini.setIgnoreMouseEvents(!on, { forward: true });
     },
     setState(state: PlaybackState) {
       latest = state;

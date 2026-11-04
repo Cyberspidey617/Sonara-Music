@@ -435,6 +435,7 @@ function registerIpc() {
   ipcMain.on('mini:jump', (_event, index: number) => Number.isInteger(index) && index >= 0 && win?.webContents.send('app:jump', index));
   ipcMain.on('mini:seek', (_event, seconds: number) => Number.isFinite(seconds) && seconds >= 0 && win?.webContents.send('app:seek', seconds));
   ipcMain.on('mini:move-start', () => miniPlayer?.moveStart());
+  ipcMain.on('mini:interactive', (_event, on: boolean) => miniPlayer?.setInteractive(on === true));
   ipcMain.on('mini:move-end', () => miniPlayer?.moveEnd());
 }
 
