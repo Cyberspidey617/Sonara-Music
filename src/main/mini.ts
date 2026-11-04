@@ -19,6 +19,8 @@ let layout: MiniLayout = 'bar';
 /** Shown because the main window went away (not by hand), so it goes when the window returns. */
 let autoShown = false;
 let keepOnTop: ReturnType<typeof setInterval> | null = null;
+/** While it's being dragged: following the cursor from where the drag began. */
+let dragging: ReturnType<typeof setInterval> | null = null;
 
 const positionFile = () => path.join(app.getPath('userData'), 'mini-player.json');
 
@@ -54,6 +56,16 @@ function stayOnTop() {
   mini.moveTop();
 }
 
+function savePosition() {
+  if (!mini) return;
+  const b = mini.getBounds();
+  try {
+    fs.writeFileSync(positionFile(), JSON.stringify({ right: b.x + b.width, bottom: b.y + b.height }));
+  } catch (error) {
+    log.warn(`mini player position not saved: ${String(error)}`);
+  }
+}
+
 function create(options: { preload: string; url: string; icon: Electron.NativeImage }) {
   mini = new BrowserWindow({
     ...boundsFor(layout),
@@ -76,15 +88,7 @@ function create(options: { preload: string; url: string; icon: Electron.NativeIm
   if (process.platform === 'darwin') mini.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   mini.on('blur', () => setTimeout(stayOnTop, 150));
   mini.on('always-on-top-changed', (_event, onTop) => !onTop && stayOnTop());
-  mini.on('moved', () => {
-    if (!mini) return;
-    const b = mini.getBounds();
-    try {
-      fs.writeFileSync(positionFile(), JSON.stringify({ right: b.x + b.width, bottom: b.y + b.height }));
-    } catch (error) {
-      log.warn(`mini player position not saved: ${String(error)}`);
-    }
-  });
+  mini.on('moved', savePosition);
   mini.on('show', () => {
     if (!keepOnTop) keepOnTop = setInterval(stayOnTop, 2500);
   });
@@ -94,7 +98,8 @@ function create(options: { preload: string; url: string; icon: Electron.NativeIm
   });
   mini.on('closed', () => {
     if (keepOnTop) clearInterval(keepOnTop);
-    keepOnTop = null;
+    if (dragging) clearInterval(dragging);
+    keepOnTop = dragging = null;
     mini = null;
   });
   mini.webContents.on('did-finish-load', () => mini?.webContents.send('mini:state', latest, layout));
@@ -135,6 +140,30 @@ export function initMiniPlayer(options: { preload: string; url: string; icon: El
       const b = mini.getBounds();
       mini.setBounds(boundsFor(next, { right: b.x + b.width, bottom: b.y + b.height }), process.platform === 'darwin');
       mini.webContents.send('mini:state', latest, layout);
+    },
+    /**
+     * Dragged from the page (so a double-click can reach it), it follows the real cursor: the page's
+     * own screen coordinates lag while its window moves. The size is set with each move, since
+     * moving alone can grow a see-through window on scaled Windows displays.
+     */
+    moveStart() {
+      if (!mini || dragging) return;
+      const from = screen.getCursorScreenPoint();
+      const start = mini.getBounds();
+      dragging = setInterval(() => {
+        const at = screen.getCursorScreenPoint();
+        if (!mini || mini.isDestroyed()) return this.moveEnd();
+        const x = start.x + at.x - from.x;
+        const y = start.y + at.y - from.y;
+        const now = mini.getBounds();
+        if (now.x !== x || now.y !== y) mini.setBounds({ x, y, ...SIZES[layout] });
+      }, 8);
+    },
+    moveEnd() {
+      if (!dragging) return;
+      clearInterval(dragging);
+      dragging = null;
+      savePosition();
     },
     setState(state: PlaybackState) {
       latest = state;

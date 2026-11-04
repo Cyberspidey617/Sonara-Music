@@ -146,6 +146,10 @@ export function createMockApi(): ObsidianApi {
     setMiniLayout: () => undefined,
     miniJumpTo: () => undefined,
     onJumpTo: () => () => undefined,
+    miniSeek: () => undefined,
+    onSeekTo: () => () => undefined,
+    miniMoveStart: () => undefined,
+    miniMoveEnd: () => undefined,
     toggleFullScreen: async () => {
       if (document.fullscreenElement) await document.exitFullscreen();
       else await document.documentElement.requestFullscreen().catch(() => undefined);

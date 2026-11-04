@@ -827,6 +827,7 @@ if ('mediaSession' in navigator) {
 
 // A song picked in the mini player's Up Next.
 api.onJumpTo((index) => usePlayer.getState().jumpTo(index));
+api.onSeekTo((seconds) => usePlayer.getState().seek(seconds));
 
 api.onCommand((command) => {
   const s = usePlayer.getState();

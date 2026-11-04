@@ -490,6 +490,12 @@ export interface ObsidianApi {
   /** Plays the song at that place in the queue (from the mini player's Up Next). */
   miniJumpTo(index: number): void;
   onJumpTo(handler: (index: number) => void): () => void;
+  /** Moves the playing song to that many seconds in (from the mini player's progress line). */
+  miniSeek(seconds: number): void;
+  onSeekTo(handler: (seconds: number) => void): () => void;
+  /** Drags the mini player with the cursor until the button is let go; where it was left is kept. */
+  miniMoveStart(): void;
+  miniMoveEnd(): void;
   onFullScreenChange(handler: (fullScreen: boolean) => void): () => void;
   dataPath(): Promise<string>;
   setZoom(factor: number): void;
