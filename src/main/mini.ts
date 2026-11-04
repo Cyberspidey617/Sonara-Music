@@ -49,11 +49,13 @@ function boundsFor(next: MiniLayout, corner = anchor()) {
   };
 }
 
-/** Other always-on-top windows (a screenshot tool's overlay, say) can take its place: take it back. */
+/**
+ * Keeps it "on top" if something took that away, without pushing in front of other on-top windows:
+ * the taskbar's menus and a screenshot tool's overlay belong above it while they're open.
+ */
 function stayOnTop() {
-  if (!mini || mini.isDestroyed() || !mini.isVisible()) return;
-  mini.setAlwaysOnTop(true, 'screen-saver');
-  mini.moveTop();
+  if (!mini || mini.isDestroyed() || !mini.isVisible() || mini.isAlwaysOnTop()) return;
+  mini.setAlwaysOnTop(true, 'floating');
 }
 
 function savePosition() {
@@ -83,10 +85,9 @@ function create(options: { preload: string; url: string; icon: Electron.NativeIm
     icon: options.icon,
     webPreferences: { preload: options.preload, sandbox: true, contextIsolation: true, nodeIntegration: false, spellcheck: false },
   });
-  // The highest level, above ordinary windows and other "on top" ones, full-screen ones on macOS too.
-  mini.setAlwaysOnTop(true, 'screen-saver');
+  // Above ordinary windows, full-screen ones on macOS too, but below menus and system overlays.
+  mini.setAlwaysOnTop(true, 'floating');
   if (process.platform === 'darwin') mini.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-  mini.on('blur', () => setTimeout(stayOnTop, 150));
   mini.on('always-on-top-changed', (_event, onTop) => !onTop && stayOnTop());
   mini.on('moved', savePosition);
   mini.on('show', () => {

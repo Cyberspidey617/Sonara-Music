@@ -23,6 +23,8 @@ export interface QueueItem {
   uid: string;
   /** Added by autoplay (the radio that follows the queue). */
   auto?: boolean;
+  /** Added with Play Next or Add to Queue: it plays before the rest of the album, playlist or radio. */
+  queued?: boolean;
 }
 
 export interface PlaySource {
@@ -74,7 +76,7 @@ interface PlayerState {
   setSleepEndOfTrack: () => void;
 }
 
-const item = (track: Track, auto = false): QueueItem => ({ track, uid: uid(), ...(auto && { auto }) });
+const item = (track: Track, kind?: 'auto' | 'queued'): QueueItem => ({ track, uid: uid(), ...(kind && { [kind]: true }) });
 
 function shuffled<T>(list: T[]): T[] {
   const out = list.slice();
@@ -281,9 +283,10 @@ async function fillRadio(seed: Track, replaceUpcoming = false) {
     const tracks = await api.upNext(ytId, `RDAMVM${ytId}`);
     const state = usePlayer.getState();
     const have = new Set(state.queue.map((q) => q.track.videoId));
-    const fresh = tracks.filter((t) => !have.has(t.videoId)).slice(0, 40).map((t) => item(t, true));
+    const fresh = tracks.filter((t) => !have.has(t.videoId)).slice(0, 40).map((t) => item(t, 'auto'));
     if (!fresh.length) return;
-    const base = replaceUpcoming ? state.queue.slice(0, state.index + 1) : state.queue;
+    // A fresh radio replaces what autoplay found before, but keeps songs you've queued meanwhile.
+    const base = replaceUpcoming ? state.queue.filter((q, i) => i <= state.index || !q.auto) : state.queue;
     usePlayer.setState({ queue: [...base, ...fresh], original: state.original ? [...state.original, ...fresh] : null });
   } catch (error) {
     console.warn('autoplay radio failed', error);
@@ -615,7 +618,7 @@ export const usePlayer = create<PlayerState>((set, get) => ({
   playNext: (tracks) => {
     const { queue, index, original } = get();
     if (index < 0) return get().playTracks(tracks);
-    const items = tracks.map((t) => item(t));
+    const items = tracks.map((t) => item(t, 'queued'));
     set({ queue: [...queue.slice(0, index + 1), ...items, ...queue.slice(index + 1)], original: original ? [...original, ...items] : null });
     preloaded && resetDeck(preloaded.deck);
   },
@@ -623,10 +626,10 @@ export const usePlayer = create<PlayerState>((set, get) => ({
   addToQueue: (tracks) => {
     const { queue, index, original } = get();
     if (index < 0) return get().playTracks(tracks);
-    const items = tracks.map((t) => item(t));
-    // Before the autoplay tracks: what's asked for comes first.
-    const firstAuto = queue.findIndex((q, i) => i > index && q.auto);
-    const at = firstAuto === -1 ? queue.length : firstAuto;
+    const items = tracks.map((t) => item(t, 'queued'));
+    // After what's already queued, before the rest of the album, playlist or the autoplay songs.
+    let at = index + 1;
+    while (queue[at]?.queued) at++;
     set({ queue: [...queue.slice(0, at), ...items, ...queue.slice(at)], original: original ? [...original, ...items] : null });
     if (at === index + 1 && preloaded) resetDeck(preloaded.deck);
   },
@@ -752,14 +755,24 @@ export const usePlayer = create<PlayerState>((set, get) => ({
     const { shuffle, queue, index, original } = get();
     if (preloaded) resetDeck(preloaded.deck);
     if (!shuffle) {
-      const current = queue.slice(0, index + 1);
-      const rest = shuffled(queue.slice(index + 1));
-      set({ shuffle: true, original: queue, queue: [...current, ...rest] });
+      // Songs you queued stay next, in order; the rest is shuffled, with autoplay's still last.
+      const upcoming = queue.slice(index + 1);
+      const rest = [...shuffled(upcoming.filter((q) => !q.queued && !q.auto)), ...shuffled(upcoming.filter((q) => q.auto))];
+      set({ shuffle: true, original: queue, queue: [...queue.slice(0, index + 1), ...upcoming.filter((q) => q.queued), ...rest] });
     } else {
-      const currentUid = queue[index]?.uid;
-      if (original) {
-        const at = original.findIndex((q) => q.uid === currentUid);
-        set({ shuffle: false, queue: original, index: at >= 0 ? at : index, original: null });
+      const current = queue[index];
+      if (original && current) {
+        // Back to the original order, with the songs you queued (still to come) right after this one.
+        const queuedUp = queue.slice(index + 1).filter((q) => q.queued);
+        const moving = new Set(queuedUp.map((q) => q.uid));
+        if (current.queued) moving.add(current.uid);
+        const rest = original.filter((q) => !moving.has(q.uid));
+        // Where to pick up: this song's place, or (for a queued one) the last song played before it.
+        let at = -1;
+        for (let i = index; i >= 0 && at < 0; i--) at = moving.has(queue[i]!.uid) ? -1 : rest.findIndex((q) => q.uid === queue[i]!.uid);
+        const head = rest.slice(0, at + 1);
+        const next = current.queued ? [...head, current, ...queuedUp, ...rest.slice(at + 1)] : [...head, ...queuedUp, ...rest.slice(at + 1)];
+        set({ shuffle: false, queue: next, index: next.indexOf(current), original: null });
       } else {
         set({ shuffle: false });
       }
