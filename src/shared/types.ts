@@ -412,8 +412,8 @@ export interface PlaybackState {
   upNext?: { index: number; title: string; artist: string; thumbnail?: string }[];
 }
 
-/** The mini player's shapes: the bar, the bar with Up Next below, or minimised to a small pebble. */
-export type MiniLayout = 'bar' | 'queue' | 'pebble';
+/** The mini player's shapes: the bar, or the bar with Up Next below it. */
+export type MiniLayout = 'bar' | 'queue';
 
 /** What the taskbar, tray, mini player and system-wide shortcuts can ask the player to do. */
 export type AppCommand = 'play-pause' | 'next' | 'previous' | 'volume-up' | 'volume-down' | 'like';
