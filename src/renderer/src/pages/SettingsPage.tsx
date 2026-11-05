@@ -5,7 +5,7 @@ import { Check, Clock, FolderOpen, FolderPlus, Heart, House, Loader2, RefreshCw,
 import { SHORTCUTS } from '@/components/Dialogs';
 import { createContext, useContext, useEffect, useState, type CSSProperties, type ReactNode } from 'react';
 import { create } from 'zustand';
-import { DEFAULT_SETTINGS, type AudioQuality, type DownloadQuality, type MiniPlayerWhen, type Settings, type SpatialAudio, type UiStyle, type UpdateInfo } from '@shared/types';
+import { DEFAULT_SETTINGS, type AudioQuality, type DownloadQuality, type MiniPlayerWhen, type Settings, type SpatialAudio, type UpdateInfo } from '@shared/types';
 import { api } from '@/lib/api';
 import { ACCENTS, LYRIC_FONTS, THEMES, themeVars, useThemeColors } from '@/lib/appearance';
 import { artworkAtPixels, largeArtwork } from '@/lib/artwork';
@@ -342,28 +342,6 @@ function AppearanceTab() {
   const { s, set } = useSettings();
   return (
     <>
-      <Section title="Design" footer={<ResetButton keys={['uiStyle']} />}>
-        <Row
-          title="Design"
-          detail={
-            s.uiStyle === 'windows'
-              ? 'Windows 11’s Fluent: acrylic panels with hairline borders, small corners and Segoe UI.'
-              : s.uiStyle === 'material'
-                ? 'Google’s Material You: solid panels tinted by your accent, soft shadows, big rounded corners.'
-                : 'Apple’s liquid glass: translucent, refracting panels, rounded pills and Inter.'
-          }
-        >
-          <Segmented<UiStyle>
-            value={s.uiStyle}
-            options={[
-              { value: 'apple', label: 'Apple' },
-              { value: 'windows', label: 'Windows' },
-              { value: 'material', label: 'Material' },
-            ]}
-            onChange={(uiStyle) => set({ uiStyle })}
-          />
-        </Row>
-      </Section>
       <Section title="Theme" footer={<ResetButton keys={['pageTone', 'accent', 'dynamicAccent', 'uiFont', 'corners', 'glassStyle', 'glassBlur', 'pageBackground', 'ambientGlow']} />}>
         <div className="grid grid-cols-2 gap-2.5 px-5 py-4 @min-[520px]/page:grid-cols-4">
           {THEMES.map((t) => (
@@ -850,7 +828,7 @@ function SettingsPreview() {
   );
   return (
     <div className="sticky top-[calc(var(--titlebar-height)+6px)] z-10 mb-6" aria-label="Preview" role="img">
-      <div className="theme-scope relative h-[196px] overflow-hidden rounded-panel border border-white/10 bg-page text-primary shadow-[0_14px_40px_rgb(0_0_0/0.5)]" style={vars as CSSProperties} data-glass={s.glassStyle} data-ui={s.uiStyle}>
+      <div className="theme-scope relative h-[196px] overflow-hidden rounded-panel border border-white/10 bg-page text-primary shadow-[0_14px_40px_rgb(0_0_0/0.5)]" style={vars as CSSProperties} data-glass={s.glassStyle}>
         {s.pageBackground === 'gradient' && (
           <div className="absolute inset-0" style={{ background: `radial-gradient(ellipse 85% 60% at 90% -10%, ${rgb(accent, 0.32)}, transparent 70%), radial-gradient(ellipse 70% 55% at -5% 105%, ${rgb(accent, 0.16)}, transparent 70%)` }} />
         )}

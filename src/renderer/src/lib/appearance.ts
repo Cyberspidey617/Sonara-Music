@@ -125,8 +125,7 @@ export function useAppearance() {
     const data = document.documentElement.dataset;
     data.glass = s.glassStyle ?? 'clear';
     data.sidebar = s.sidebarMode ?? 'compact';
-    data.ui = s.uiStyle ?? 'apple';
-  }, [s.glassStyle, s.sidebarMode, s.uiStyle]);
+  }, [s.glassStyle, s.sidebarMode]);
 
   useEffect(() => {
     api.setZoom(s.zoom || 1);

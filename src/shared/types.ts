@@ -179,8 +179,6 @@ export interface Settings {
   /** Spatial audio: virtual speakers around you (headphones), or a wider stage (speakers). */
   spatialAudio: SpatialAudio;
   closeToTray: boolean;
-  /** The design language the whole app is drawn in (Settings › Appearance › Design). */
-  uiStyle: UiStyle;
   /** When the floating mini player comes up by itself: Sonara not in use, minimised (or in the tray), or never. */
   miniPlayerWhen: MiniPlayerWhen;
   /** System-wide shortcuts (Ctrl+Alt+…, ⌘+Alt+… on a Mac) that work while other apps are in front. */
@@ -278,8 +276,6 @@ export interface Settings {
 
 export type SpatialAudio = 'off' | 'headphones' | 'speakers';
 export type MiniPlayerWhen = 'away' | 'minimised' | 'off';
-/** The app's design language: Apple's liquid glass, Windows 11's Fluent, or Google's Material You. */
-export type UiStyle = 'apple' | 'windows' | 'material';
 
 /** A 10-band graphic equalizer (32 Hz – 16 kHz), in dB. */
 export interface EqSettings {
@@ -337,7 +333,6 @@ export const DEFAULT_SETTINGS: Settings = {
   spatialAudio: 'off',
   closeToTray: false,
   miniPlayerWhen: 'away',
-  uiStyle: 'apple',
   updateNotices: true,
   globalShortcuts: true,
   musicFolders: [],

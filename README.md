@@ -38,7 +38,6 @@ Get the latest version from **[Releases](../../releases/latest)**.
 - **Waveform options:** colour (from the song by default), bars, thickness, height, sensitivity, auto level, smoothness, shape and style.
 - **Your music:** lossless FLAC/WAV folders and Subsonic servers (Navidrome, Gonic, Airsonic…), plus "Lossless when available" for YouTube songs you own.
 - **Downloads** for offline listening, liked songs, playlists, YouTube playlist import, Spotify import (playlists, albums and songs, matched on YouTube Music), Recently Played (remove any song from it), sleep timer, crossfade, a 10-band equalizer, and media keys.
-- **Three designs:** Apple's liquid glass, Windows 11's Fluent or Google's Material You (Settings › Appearance › Design), on top of any theme.
 - **Search as you type:** suggested searches plus the songs, artists and albums they mean; click a song to play it.
 - **Update notices** when a new Sonara is released (Settings › About).
 - **Spatial Audio:** virtual speakers around you for headphones, or a wider stage for speakers (Settings › Playback).

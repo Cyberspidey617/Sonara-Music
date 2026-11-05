@@ -34,6 +34,21 @@ export function SearchBar() {
     setOpen(false);
     input.current?.blur();
   };
+  // Any click outside the field and its suggestions closes them (what you typed stays), even where
+  // the click takes no focus; so does switching to another app.
+  const box = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const outside = (e: PointerEvent) => {
+      if (!box.current?.contains(e.target as Node)) close();
+    };
+    window.addEventListener('pointerdown', outside, true);
+    window.addEventListener('blur', close);
+    return () => {
+      window.removeEventListener('pointerdown', outside, true);
+      window.removeEventListener('blur', close);
+    };
+  }, [open]);
   const submit = (q: string) => {
     const query = q.trim();
     if (!query) return;
@@ -53,7 +68,7 @@ export function SearchBar() {
       ? [...suggestions.queries.map((q): Row => ({ kind: 'query', q })), ...suggestions.items.map((item): Row => ({ kind: 'item', item }))]
       : [];
   return (
-    <div data-elastic="0.3" className="glass elastic app-no-drag relative h-[34px] w-full rounded-pill after:opacity-80 transition-[box-shadow] focus-within:shadow-[0_0_0_3px_rgb(var(--keyColor-rgb)/0.35),var(--glass-shadow)]">
+    <div ref={box} data-elastic="0.3" className="glass elastic app-no-drag relative h-[34px] w-full rounded-pill after:opacity-80 transition-[box-shadow] focus-within:shadow-[0_0_0_3px_rgb(var(--keyColor-rgb)/0.35),var(--glass-shadow)]">
       <Search size={15} strokeWidth={2.3} className="pointer-events-none absolute top-1/2 left-3.5 z-1 -translate-y-1/2 text-secondary" />
       <input
         ref={input}
