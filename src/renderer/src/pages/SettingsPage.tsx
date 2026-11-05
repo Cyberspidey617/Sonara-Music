@@ -175,6 +175,19 @@ function PlaybackTab() {
           />
         </Row>
       </Section>
+      <Section title="Your music taste">
+        <Row
+          title="Languages, kinds of songs and artists"
+          detail={
+            [s.taste.languages.join(', '), s.taste.genres.join(', '), s.taste.artists.map((a) => a.name).join(', ')].filter(Boolean).join(' · ') ||
+            'Nothing picked yet. Home’s “Made for you” is made from these.'
+          }
+        >
+          <button className={button} onClick={() => useLibrary.getState().updateSettings({ tasteSeen: false })}>
+            <Sparkles size={15} /> {s.taste.languages.length + s.taste.genres.length + s.taste.artists.length ? 'Change' : 'Pick'}
+          </button>
+        </Row>
+      </Section>
       <Section title="Playback">
         <Row title="Crossfade" detail="Blend the end of one song into the next.">
           <Segmented<number>

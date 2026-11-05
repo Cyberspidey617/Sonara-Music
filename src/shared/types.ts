@@ -258,6 +258,10 @@ export interface Settings {
   playerStyle: PlayerStyle;
   /** The first-run guide was finished or skipped. */
   guideSeen: boolean;
+  /** Your music taste, for Home's "Made for you" (picked after the guide; Settings › Playback). */
+  taste: Taste;
+  /** The taste picker was finished or skipped. */
+  tasteSeen: boolean;
   startPage: StartPage;
   sidebarSearch: boolean;
   sidebarRecent: boolean;
@@ -276,6 +280,13 @@ export interface Settings {
 
 export type SpatialAudio = 'off' | 'headphones' | 'speakers';
 export type MiniPlayerWhen = 'away' | 'minimised' | 'off';
+
+/** The languages, kinds of songs and artists you like. */
+export interface Taste {
+  languages: string[];
+  genres: string[];
+  artists: { id: string; name: string; thumbnail?: string }[];
+}
 
 /** A 10-band graphic equalizer (32 Hz – 16 kHz), in dB. */
 export interface EqSettings {
@@ -374,6 +385,8 @@ export const DEFAULT_SETTINGS: Settings = {
   coverSize: 1,
   playerStyle: 'pebble',
   guideSeen: false,
+  taste: { languages: [], genres: [], artists: [] },
+  tasteSeen: false,
   startPage: 'home',
   sidebarSearch: true,
   sidebarRecent: true,

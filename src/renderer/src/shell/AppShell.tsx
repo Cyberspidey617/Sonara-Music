@@ -29,6 +29,7 @@ import { UpNext } from './UpNext';
 import { useKeyboardShortcuts } from './useKeyboardShortcuts';
 import { WindowControls } from './WindowControls';
 import { FirstRunGuide } from './FirstRunGuide';
+import { TastePicker } from './TastePicker';
 import { Segmented } from '@/components/Segmented';
 
 function RoutePage({ route }: { route: Route }) {
@@ -203,6 +204,7 @@ export function AppShell() {
       <MenuLayer />
       <Toasts />
       <FirstRunGuide />
+      <TastePicker />
       <WindowControls />
     </div>
   );
