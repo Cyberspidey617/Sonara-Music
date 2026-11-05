@@ -206,6 +206,7 @@
 
   --animate-*: initial;
   --animate-menu-in: menu-in 0.32s cubic-bezier(0.34, 1.36, 0.64, 1);
+  --animate-search-drop: search-drop 0.36s var(--ease-out-panel);
   --animate-slide-in: slide-in var(--duration-panel) var(--ease-out-panel) forwards;
   --animate-fade: fade 0.15s ease-out;
   --animate-fade-in: fade-in 0.4s ease;
@@ -242,6 +243,16 @@
     }
   }
 
+  /* Search suggestions dropping down out of the field: the panel opens from the field's own shape.
+     It ends a little past the panel, so its shadow isn't cut while it settles. */
+  @keyframes search-drop {
+    from {
+      clip-path: inset(0 0 calc(100% - 34px) 0 round 17px);
+    }
+    to {
+      clip-path: inset(-40px round 58px);
+    }
+  }
   @keyframes menu-in {
     from {
       opacity: 0;
