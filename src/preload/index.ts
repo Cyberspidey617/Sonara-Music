@@ -1,6 +1,6 @@
 // The renderer's only door to the main process: a typed, minimal API.
 import { contextBridge, ipcRenderer, webFrame } from 'electron';
-import type { AppCommand, MiniGrow, MiniLayout, ObsidianApi, PlaybackState } from '../shared/types';
+import type { AppCommand, MiniGrow, MiniLayout, ObsidianApi, PlaybackState, UpdateInfo } from '../shared/types';
 
 const api: ObsidianApi = {
   platform: process.platform,
@@ -14,6 +14,12 @@ const api: ObsidianApi = {
   lyrics: (videoId) => ipcRenderer.invoke('yt:lyrics', videoId),
   track: (videoId) => ipcRenderer.invoke('yt:track', videoId),
   importPlaylist: (urlOrId) => ipcRenderer.invoke('yt:import', urlOrId),
+  checkForUpdate: () => ipcRenderer.invoke('app:check-update'),
+  onUpdateAvailable: (handler) => {
+    const listener = (_: unknown, info: UpdateInfo) => handler(info);
+    ipcRenderer.on('app:update-available', listener);
+    return () => ipcRenderer.removeListener('app:update-available', listener);
+  },
   onImportProgress: (handler) => {
     const listener = (_: unknown, done: number, total: number) => handler(done, total);
     ipcRenderer.on('import:progress', listener);

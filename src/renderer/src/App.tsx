@@ -5,9 +5,13 @@ import { useLibrary } from '@/state/library';
 import { restoreQueue, usePlayer } from '@/state/player';
 import { AppShell } from '@/shell/AppShell';
 import { lastRoute, useNav } from '@/state/nav';
+import { api } from '@/lib/api';
+import { toast } from '@/state/ui';
 
 export function App() {
   const loaded = useLibrary((s) => s.loaded);
+  // A newer Sonara on GitHub: say so, with a way to the downloads (the release page opens in the browser).
+  useEffect(() => api.onUpdateAvailable((info) => toast(`Sonara ${info.latest} is available (you have ${info.current})`, { label: 'Download', run: () => window.open(info.url) })), []);
   useEffect(() => {
     void useLibrary
       .getState()

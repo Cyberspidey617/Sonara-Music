@@ -1,8 +1,14 @@
 import { Search, X } from 'lucide-react';
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import type { Lockup } from '@shared/types';
+import { Artwork } from '@/components/Artwork';
+import { openLockup } from '@/components/Lockup';
 import { useSuggestions } from '@/lib/queries';
 import { go, useNav } from '@/state/nav';
 import { useUi } from '@/state/ui';
+
+/** A row in the suggestions: words to search for, or a song, artist or album to go straight to. */
+type Row = { kind: 'query'; q: string } | { kind: 'item'; item: Lockup };
 
 /** The search field, centred in the toolbar like Apple Music on the Mac. */
 export function SearchBar() {
@@ -12,7 +18,7 @@ export function SearchBar() {
   const [open, setOpen] = useState(false);
   const [highlight, setHighlight] = useState(-1);
   const input = useRef<HTMLInputElement>(null);
-  const { data: suggestions = [] } = useSuggestions(open ? value : '');
+  const { data: suggestions } = useSuggestions(open ? value : '');
 
   useEffect(() => {
     if (tick) {
@@ -24,16 +30,28 @@ export function SearchBar() {
     if (route.name === 'search') setValue(route.q);
   }, [route]);
 
+  const close = () => {
+    setOpen(false);
+    input.current?.blur();
+  };
   const submit = (q: string) => {
     const query = q.trim();
     if (!query) return;
     setValue(query);
-    setOpen(false);
-    input.current?.blur();
+    close();
     go({ name: 'search', q: query });
   };
+  // A song plays (with its radio after it); an artist, album or playlist opens.
+  const choose = (row: Row) => {
+    if (row.kind === 'query') return submit(row.q);
+    close();
+    openLockup(row.item);
+  };
 
-  const shown = open && value.trim().length > 1 ? suggestions : [];
+  const rows: Row[] =
+    open && value.trim().length > 1 && suggestions
+      ? [...suggestions.queries.map((q): Row => ({ kind: 'query', q })), ...suggestions.items.map((item): Row => ({ kind: 'item', item }))]
+      : [];
   return (
     <div data-elastic="0.3" className="glass elastic app-no-drag relative h-[34px] w-full rounded-pill after:opacity-80 transition-[box-shadow] focus-within:shadow-[0_0_0_3px_rgb(var(--keyColor-rgb)/0.35),var(--glass-shadow)]">
       <Search size={15} strokeWidth={2.3} className="pointer-events-none absolute top-1/2 left-3.5 z-1 -translate-y-1/2 text-secondary" />
@@ -51,17 +69,17 @@ export function SearchBar() {
         onFocus={() => setOpen(true)}
         onBlur={() => setTimeout(() => setOpen(false), 120)}
         onKeyDown={(e) => {
-          if (e.key === 'Enter') submit(highlight >= 0 && shown[highlight] ? shown[highlight]! : value);
-          else if (e.key === 'ArrowDown') {
+          if (e.key === 'Enter') {
+            const row = rows[highlight];
+            if (row) choose(row);
+            else submit(value);
+          } else if (e.key === 'ArrowDown') {
             e.preventDefault();
-            setHighlight((h) => Math.min(shown.length - 1, h + 1));
+            setHighlight((h) => Math.min(rows.length - 1, h + 1));
           } else if (e.key === 'ArrowUp') {
             e.preventDefault();
             setHighlight((h) => Math.max(-1, h - 1));
-          } else if (e.key === 'Escape') {
-            setOpen(false);
-            input.current?.blur();
-          }
+          } else if (e.key === 'Escape') close();
         }}
       />
       {value && (
@@ -69,22 +87,56 @@ export function SearchBar() {
           <X size={13} />
         </button>
       )}
-      {shown.length > 0 && (
-        <ul className="glass-thick absolute inset-x-0 top-[calc(100%+6px)] z-50 animate-menu-in overflow-hidden rounded-[18px] p-1.5 [transform-origin:50%_0]" role="listbox">
-          {shown.map((s, i) => (
-            <li key={s} className="stagger" style={{ '--i': i } as CSSProperties}>
+      {rows.length > 0 && (
+        // Solid, a shade above the page: it sits inside the field's glass, which can't blur what's behind it again.
+        <ul
+          className="glass-thick absolute inset-x-0 top-[calc(100%+6px)] z-50 max-h-[min(70vh,560px)] animate-menu-in overflow-y-auto rounded-[18px] p-1.5 [transform-origin:50%_0]"
+          style={{ backgroundColor: 'color-mix(in srgb, rgb(var(--pageBG-rgb)) 93%, #fff)' }}
+          role="listbox"
+        >
+          {rows.map((row, i) => (
+            <li key={row.kind === 'query' ? `q:${row.q}` : `i:${row.item.kind}:${row.item.id}`} className="stagger" style={{ '--i': i } as CSSProperties} role="option" aria-selected={i === highlight}>
               <button
-                className={`relative flex h-8 w-full items-center gap-2 rounded-[10px] px-2.5 text-left type-body-reduced ${i === highlight ? 'bg-white/12' : 'hover:bg-white/8'}`}
+                className={`relative flex w-full items-center gap-3 rounded-[10px] px-2.5 text-left ${row.kind === 'query' ? 'h-9' : 'h-14'} ${i === highlight ? 'bg-white/12' : 'hover:bg-white/8'}`}
                 onMouseDown={(e) => e.preventDefault()}
-                onClick={() => submit(s)}
+                onMouseEnter={() => setHighlight(i)}
+                onClick={() => choose(row)}
               >
-                <Search size={13} className="flex-none text-tertiary" />
-                <span className="truncate">{s}</span>
+                {row.kind === 'query' ? (
+                  <>
+                    <Search size={14} className="flex-none text-tertiary" />
+                    <span className="truncate type-body-reduced text-secondary">
+                      <Typed text={row.q} typed={value} />
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <Artwork url={row.item.thumbnail} size={40} round={row.item.kind === 'artist'} radius="sm" kind={row.item.kind === 'artist' ? 'artist' : 'music'} className="size-10 flex-none" />
+                    <span className="flex min-w-0 flex-col">
+                      <span className="truncate type-body-emphasized text-primary">{row.item.title}</span>
+                      {row.item.subtitle && <span className="truncate type-callout text-secondary">{row.item.subtitle}</span>}
+                    </span>
+                  </>
+                )}
               </button>
             </li>
           ))}
         </ul>
       )}
     </div>
+  );
+}
+
+/** A suggestion with what you've typed in bold, the rest it adds in the lighter colour. */
+function Typed({ text, typed }: { text: string; typed: string }) {
+  const start = text.toLowerCase().indexOf(typed.trim().toLowerCase());
+  if (!typed.trim() || start < 0) return <>{text}</>;
+  const end = start + typed.trim().length;
+  return (
+    <>
+      {text.slice(0, start)}
+      <strong className="font-semibold text-primary">{text.slice(start, end)}</strong>
+      {text.slice(end)}
+    </>
   );
 }

@@ -5,7 +5,7 @@ import { Check, Clock, FolderOpen, FolderPlus, Heart, House, Loader2, RefreshCw,
 import { SHORTCUTS } from '@/components/Dialogs';
 import { createContext, useContext, useEffect, useState, type CSSProperties, type ReactNode } from 'react';
 import { create } from 'zustand';
-import { DEFAULT_SETTINGS, type AudioQuality, type DownloadQuality, type Settings, type SpatialAudio } from '@shared/types';
+import { DEFAULT_SETTINGS, type AudioQuality, type DownloadQuality, type MiniPlayerWhen, type Settings, type SpatialAudio, type UiStyle, type UpdateInfo } from '@shared/types';
 import { api } from '@/lib/api';
 import { ACCENTS, LYRIC_FONTS, THEMES, themeVars, useThemeColors } from '@/lib/appearance';
 import { artworkAtPixels, largeArtwork } from '@/lib/artwork';
@@ -194,8 +194,25 @@ function PlaybackTab() {
         <Row title="Keep playing in the tray when the window closes" detail="Quit from the tray icon.">
           <Toggle label="Close to tray" on={s.closeToTray} onChange={(closeToTray) => set({ closeToTray })} />
         </Row>
-        <Row title="Mini player" detail="A small player that floats over other apps when Sonara is minimised or in the tray. Ctrl + Alt + M shows or hides it any time.">
-          <Toggle label="Mini player" on={s.miniPlayerAuto} onChange={(miniPlayerAuto) => set({ miniPlayerAuto })} />
+        <Row
+          title="Mini player"
+          detail={
+            s.miniPlayerWhen === 'away'
+              ? 'Floats over other apps whenever you’re using something else, and goes when you come back to Sonara. Ctrl + Alt + M shows or hides it any time.'
+              : s.miniPlayerWhen === 'minimised'
+                ? 'Floats over other apps when Sonara is minimised or in the tray. Ctrl + Alt + M shows or hides it any time.'
+                : 'Only when you ask for it: Ctrl + Alt + M, the player’s mini player button, or the tray menu.'
+          }
+        >
+          <Segmented<MiniPlayerWhen>
+            value={s.miniPlayerWhen}
+            options={[
+              { value: 'away', label: 'Not in use' },
+              { value: 'minimised', label: 'Minimised' },
+              { value: 'off', label: 'Off' },
+            ]}
+            onChange={(miniPlayerWhen) => set({ miniPlayerWhen })}
+          />
         </Row>
         <Row title="System-wide shortcuts" detail="Control Sonara from any app: Ctrl + Alt + Space or P (play / pause), → / ←, ↑ / ↓, L (like) and M (mini player). ⌘ instead of Ctrl on a Mac.">
           <Toggle label="System-wide shortcuts" on={s.globalShortcuts} onChange={(globalShortcuts) => set({ globalShortcuts })} />
@@ -325,6 +342,28 @@ function AppearanceTab() {
   const { s, set } = useSettings();
   return (
     <>
+      <Section title="Design" footer={<ResetButton keys={['uiStyle']} />}>
+        <Row
+          title="Design"
+          detail={
+            s.uiStyle === 'windows'
+              ? 'Windows 11’s Fluent: acrylic panels with hairline borders, small corners and Segoe UI.'
+              : s.uiStyle === 'material'
+                ? 'Google’s Material You: solid panels tinted by your accent, soft shadows, big rounded corners.'
+                : 'Apple’s liquid glass: translucent, refracting panels, rounded pills and Inter.'
+          }
+        >
+          <Segmented<UiStyle>
+            value={s.uiStyle}
+            options={[
+              { value: 'apple', label: 'Apple' },
+              { value: 'windows', label: 'Windows' },
+              { value: 'material', label: 'Material' },
+            ]}
+            onChange={(uiStyle) => set({ uiStyle })}
+          />
+        </Row>
+      </Section>
       <Section title="Theme" footer={<ResetButton keys={['pageTone', 'accent', 'dynamicAccent', 'uiFont', 'corners', 'glassStyle', 'glassBlur', 'pageBackground', 'ambientGlow']} />}>
         <div className="grid grid-cols-2 gap-2.5 px-5 py-4 @min-[520px]/page:grid-cols-4">
           {THEMES.map((t) => (
@@ -664,6 +703,51 @@ function LayoutTab() {
   );
 }
 
+/** Settings › About: whether Sonara looks for new releases, and a check on the spot. */
+function UpdateSettings() {
+  const { s, set } = useSettings();
+  const [state, setState] = useState<{ checking: boolean; info?: UpdateInfo; error?: string }>({ checking: false });
+  const check = () => {
+    setState({ checking: true });
+    api
+      .checkForUpdate()
+      .then((info) => setState({ checking: false, info }))
+      .catch((error: unknown) => setState({ checking: false, error: error instanceof Error ? error.message : String(error) }));
+  };
+  const info = state.info;
+  return (
+    <Section title="Updates">
+      <Row title="Tell me about new versions" detail="Every few hours Sonara asks GitHub for its latest release, and lets you know once when there’s a newer one. Nothing is downloaded or installed by itself.">
+        <Toggle label="Tell me about new versions" on={s.updateNotices} onChange={(updateNotices) => set({ updateNotices })} />
+      </Row>
+      <Row
+        title="Check now"
+        detail={
+          state.checking
+            ? 'Asking GitHub…'
+            : state.error
+              ? state.error
+              : info
+                ? info.available
+                  ? `Sonara ${info.latest} is available. You have ${info.current}.`
+                  : `You have the latest version (${info.current}).`
+                : 'See whether there’s a newer Sonara.'
+        }
+      >
+        {info?.available ? (
+          <button className={button} onClick={() => window.open(info.url)}>
+            Download {info.latest}
+          </button>
+        ) : (
+          <button className={button} disabled={state.checking} onClick={check}>
+            {state.checking ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} />} Check
+          </button>
+        )}
+      </Row>
+    </Section>
+  );
+}
+
 function AboutTab() {
   const [dataPath, setDataPath] = useState('');
   useEffect(() => {
@@ -671,6 +755,7 @@ function AboutTab() {
   }, []);
   return (
     <>
+      <UpdateSettings />
       <Section title="Library">
         <Row title="Import a playlist" detail="Paste a YouTube or YouTube Music playlist link (read in full), or a Spotify playlist, album or song (its songs are found on YouTube Music).">
           <button className={button} onClick={() => useUi.getState().openDialog({ kind: 'import' })}>
@@ -765,7 +850,7 @@ function SettingsPreview() {
   );
   return (
     <div className="sticky top-[calc(var(--titlebar-height)+6px)] z-10 mb-6" aria-label="Preview" role="img">
-      <div className="theme-scope relative h-[196px] overflow-hidden rounded-panel border border-white/10 bg-page text-primary shadow-[0_14px_40px_rgb(0_0_0/0.5)]" style={vars as CSSProperties} data-glass={s.glassStyle}>
+      <div className="theme-scope relative h-[196px] overflow-hidden rounded-panel border border-white/10 bg-page text-primary shadow-[0_14px_40px_rgb(0_0_0/0.5)]" style={vars as CSSProperties} data-glass={s.glassStyle} data-ui={s.uiStyle}>
         {s.pageBackground === 'gradient' && (
           <div className="absolute inset-0" style={{ background: `radial-gradient(ellipse 85% 60% at 90% -10%, ${rgb(accent, 0.32)}, transparent 70%), radial-gradient(ellipse 70% 55% at -5% 105%, ${rgb(accent, 0.16)}, transparent 70%)` }} />
         )}

@@ -10,6 +10,7 @@
 import vm from 'node:vm';
 import { Innertube, Platform, UniversalCache, YTNodes, type Types } from 'youtubei.js';
 import type {
+  Suggestions,
   AlbumPage,
   ArtistPage,
   ArtistRef,
@@ -432,20 +433,27 @@ export async function search(query: string): Promise<SearchResults> {
   return result;
 }
 
-export async function suggest(query: string): Promise<string[]> {
-  if (!query.trim()) return [];
+/** As you type: words to search for, and the songs, artists and albums they most likely mean. */
+export async function suggest(query: string): Promise<Suggestions> {
+  if (!query.trim()) return { queries: [], items: [] };
   const yt = await getInnertube();
   const sections = await yt.music.getSearchSuggestions(query);
-  const out: string[] = [];
+  const out: Suggestions = { queries: [], items: [] };
   for (const section of sections as AnyNode[]) {
     for (const item of section.contents ?? []) {
       if (item?.type === 'SearchSuggestion') {
         const s = text(item.suggestion);
-        if (s) out.push(s);
+        if (s) out.queries.push(s);
+      } else if (item?.type === 'MusicResponsiveListItem' && !isNotMusic(item)) {
+        const lockup = lockupFromListItem(item);
+        if (!lockup) continue;
+        // The row's own line ("Song • Coldplay • 2.4B plays") says more than the artist alone.
+        const line = text(item.flex_columns?.[1]?.title);
+        out.items.push(line ? { ...lockup, subtitle: line } : lockup);
       }
     }
   }
-  return out.slice(0, 8);
+  return { queries: out.queries.slice(0, 6), items: out.items.slice(0, 5) };
 }
 
 export async function getAlbum(id: string): Promise<AlbumPage> {

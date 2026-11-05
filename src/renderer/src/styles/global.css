@@ -145,6 +145,97 @@
   --glass-rim: rgb(255 255 255 / 0.22);
 }
 
+/*
+ * Design (Settings › Appearance › Design): the whole app in another platform's language, on top of
+ * any theme. Apple, the default, is everything above. These change the shared tokens and the four
+ * glass materials, so every screen follows; the theme's colours, the accent and the corner slider
+ * still apply.
+ */
+
+/* Windows 11 (Fluent): acrylic and Mica rather than liquid glass, hairline borders, small corners,
+   gently rounded rectangular buttons, Segoe UI. */
+:root[data-ui='windows'],
+.theme-scope[data-ui='windows'] {
+  --font-family: 'Segoe UI Variable Text', 'Segoe UI Variable', 'Segoe UI', system-ui, sans-serif;
+  --radius-panel: calc(8px * var(--corner-scale, 1));
+  --radius-control: calc(4px * var(--corner-scale, 1));
+  --radius-card: calc(8px * var(--corner-scale, 1));
+  --radius-artwork-small: calc(4px * var(--corner-scale, 1));
+  --radius-artwork-medium: calc(4px * var(--corner-scale, 1));
+  --radius-artwork-large: calc(8px * var(--corner-scale, 1));
+  --radius-nav-item: calc(4px * var(--corner-scale, 1));
+  --radius-track-row: calc(4px * var(--corner-scale, 1));
+  --glass-fill: rgb(44 44 44 / 0.8);
+  --glass-fill-thick: rgb(40 40 40 / 0.92);
+  --glass-fill-clear: rgb(255 255 255 / 0.06);
+  --glass-saturate: 1.25;
+  --glass-blur: calc(30px * var(--glass-blur-scale, 1));
+  --glass-blur-thick: calc(40px * var(--glass-blur-scale, 1));
+  --glass-shadow: 0 2px 8px rgb(0 0 0 / 0.26);
+  --glass-shadow-thick: 0 8px 24px rgb(0 0 0 / 0.36), 0 2px 6px rgb(0 0 0 / 0.2);
+  --navSidebarSelectedState: #ffffff10;
+  --dialog-fill: rgb(32 32 32 / 0.97);
+}
+[data-ui='windows'] :is(.glass, .glass-thick, .glass-clear) {
+  box-shadow: var(--glass-shadow);
+  outline: 1px solid rgb(255 255 255 / 0.08);
+  outline-offset: -1px;
+}
+[data-ui='windows'] .glass-thick {
+  box-shadow: var(--glass-shadow-thick);
+}
+[data-ui='windows'] :is(.glass, .glass-thick, .glass-clear, .glass-prominent)::after {
+  display: none;
+}
+[data-ui='windows'] .glass-prominent {
+  box-shadow: 0 2px 6px rgb(0 0 0 / 0.3);
+}
+/* Fluent buttons and fields are rectangles with soft corners; round icon buttons stay round. */
+[data-ui='windows'] .rounded-pill {
+  border-radius: calc(6px * var(--corner-scale, 1));
+}
+
+/* Material You (Material 3): solid tonal surfaces tinted by the accent, elevation shadows instead
+   of glass, large rounded containers, pill highlights, DM Sans. */
+:root[data-ui='material'],
+.theme-scope[data-ui='material'] {
+  --font-family: 'DM Sans Variable', 'DM Sans', 'Roboto', system-ui, sans-serif;
+  --radius-panel: calc(28px * var(--corner-scale, 1));
+  --radius-control: calc(20px * var(--corner-scale, 1));
+  --radius-card: calc(16px * var(--corner-scale, 1));
+  --radius-artwork-small: calc(8px * var(--corner-scale, 1));
+  --radius-artwork-medium: calc(12px * var(--corner-scale, 1));
+  --radius-artwork-large: calc(16px * var(--corner-scale, 1));
+  --radius-nav-item: 1000px;
+  --radius-track-row: calc(14px * var(--corner-scale, 1));
+  --glass-fill: color-mix(in srgb, rgb(var(--keyColor-rgb)) 9%, #1d1b20);
+  --glass-fill-thick: color-mix(in srgb, rgb(var(--keyColor-rgb)) 12%, #211f26);
+  --glass-fill-clear: color-mix(in srgb, rgb(var(--keyColor-rgb)) 14%, rgb(255 255 255 / 0.04));
+  --glass-blur: 0px;
+  --glass-blur-thick: 0px;
+  --glass-shadow: 0 1px 2px rgb(0 0 0 / 0.3), 0 2px 6px 2px rgb(0 0 0 / 0.15);
+  --glass-shadow-thick: 0 4px 8px 3px rgb(0 0 0 / 0.15), 0 1px 3px rgb(0 0 0 / 0.3);
+  --navSidebarSelectedState: rgb(var(--keyColor-rgb) / 0.24);
+  --dialog-fill: color-mix(in srgb, rgb(var(--keyColor-rgb)) 12%, #211f26);
+}
+[data-ui='material'] :is(.glass, .glass-thick, .glass-clear) {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  box-shadow: var(--glass-shadow);
+}
+[data-ui='material'] .glass-thick {
+  box-shadow: var(--glass-shadow-thick);
+}
+[data-ui='material'] :is(.glass, .glass-thick, .glass-clear, .glass-prominent)::after {
+  display: none;
+}
+[data-ui='material'] .glass-prominent {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  background-color: rgb(var(--keyColor-rgb));
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.3), 0 4px 8px 3px rgb(0 0 0 / 0.15);
+}
+
 /* Windows: Settings › Personalisation › Colours › Transparency effects off. */
 @media (prefers-reduced-transparency: reduce) {
   :root {

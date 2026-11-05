@@ -6,6 +6,7 @@ import { pathToFileURL } from 'node:url';
 import { isYouTubeId, type AppCommand, type MiniGrow, type MiniLayout, type LibraryData, type LibraryScanState, type PlaybackState, type ServerLogin, type Track, type DownloadQuality } from '../shared/types';
 import { initMiniPlayer } from './mini';
 import { importSpotify, isSpotifyLink } from './spotify';
+import { checkForUpdate, watchForUpdates } from './update';
 import { getScanState, localAlbum, localAlbums, localTracks, openLibrary, scan, searchLocal } from './library';
 import { clearMatches } from './lossless';
 import { handleMediaRequest, serveFile } from './media';
@@ -182,15 +183,32 @@ function createWindow() {
       win?.hide();
     }
   });
-  // Away from the window (minimised, or closed to the tray) while a song is loaded: the mini player
-  // floats up so it can still be controlled; it goes again when the window is back.
+  // Away from the window while a song is loaded, the mini player floats up so it can still be
+  // controlled, and goes again when the window is back. "Away" is minimised or in the tray, or (by
+  // default) any time another app is in use: after a moment, so passing clicks don't flash it.
+  const miniWhen = () => getLibrary().settings.miniPlayerWhen ?? 'away';
+  let awayTimer: ReturnType<typeof setTimeout> | null = null;
   const floatMini = () => {
-    if (getLibrary().settings.miniPlayerAuto !== false && miniPlayer?.hasSong()) miniPlayer.show(true);
+    if (miniWhen() !== 'off' && miniPlayer?.hasSong()) miniPlayer.show(true);
     updateTray();
   };
   win.on('minimize', floatMini);
   win.on('hide', floatMini);
-  for (const back of ['restore', 'show', 'focus'] as const) win.on(back as 'show', () => (miniPlayer?.hide(true), updateTray()));
+  win.on('blur', () => {
+    if (miniWhen() !== 'away') return;
+    if (awayTimer) clearTimeout(awayTimer);
+    awayTimer = setTimeout(() => {
+      awayTimer = null;
+      if (win && !win.isDestroyed() && !win.isFocused()) floatMini();
+    }, 700);
+  });
+  for (const back of ['restore', 'show', 'focus'] as const)
+    win.on(back as 'show', () => {
+      if (awayTimer) clearTimeout(awayTimer);
+      awayTimer = null;
+      miniPlayer?.hide(true);
+      updateTray();
+    });
   win.on('closed', () => {
     win = null;
     miniPlayer?.destroy();
@@ -445,6 +463,7 @@ function registerIpc() {
   ipcMain.on('mini:jump', (_event, index: number) => Number.isInteger(index) && index >= 0 && win?.webContents.send('app:jump', index));
   ipcMain.on('mini:seek', (_event, seconds: number) => Number.isFinite(seconds) && seconds >= 0 && win?.webContents.send('app:seek', seconds));
   ipcMain.on('mini:move-start', () => miniPlayer?.moveStart());
+  handle('app:check-update', () => checkForUpdate());
   ipcMain.on('mini:interactive', (_event, on: boolean) => miniPlayer?.setInteractive(on === true));
   ipcMain.on('mini:move-end', () => miniPlayer?.moveEnd());
 }
@@ -512,6 +531,11 @@ if (!app.requestSingleInstanceLock()) {
     installCorsSafetyNet();
     registerIpc();
     createWindow();
+    watchForUpdates({
+      enabled: () => getLibrary().settings.updateNotices !== false,
+      tell: (info) => win?.webContents.send('app:update-available', info),
+      icon: icon(process.platform === 'win32' ? 'icon.ico' : 'icon.png'),
+    });
     miniPlayer = initMiniPlayer({
       preload: path.join(__dirname, '../preload/index.js'),
       url: isDev ? `${process.env['ELECTRON_RENDERER_URL']!}?mini` : `${APP_ORIGIN}/index.html?mini`,

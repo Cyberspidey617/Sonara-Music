@@ -67,6 +67,22 @@ export interface HomeFeed {
   shelves: Shelf[];
 }
 
+/** What GitHub says about the latest Sonara release. */
+export interface UpdateInfo {
+  current: string;
+  latest: string;
+  /** The latest is newer than this copy. */
+  available: boolean;
+  /** Its release page, with the downloads. */
+  url: string;
+}
+
+/** Search-as-you-type: words to search for, then the music they most likely mean. */
+export interface Suggestions {
+  queries: string[];
+  items: Lockup[];
+}
+
 export interface SearchResults {
   query: string;
   correctedQuery?: string;
@@ -163,10 +179,14 @@ export interface Settings {
   /** Spatial audio: virtual speakers around you (headphones), or a wider stage (speakers). */
   spatialAudio: SpatialAudio;
   closeToTray: boolean;
-  /** Show the floating mini player when Sonara is minimised or closed to the tray. */
-  miniPlayerAuto: boolean;
+  /** The design language the whole app is drawn in (Settings › Appearance › Design). */
+  uiStyle: UiStyle;
+  /** When the floating mini player comes up by itself: Sonara not in use, minimised (or in the tray), or never. */
+  miniPlayerWhen: MiniPlayerWhen;
   /** System-wide shortcuts (Ctrl+Alt+…, ⌘+Alt+… on a Mac) that work while other apps are in front. */
   globalShortcuts: boolean;
+  /** Look for a newer Sonara on GitHub now and then, and say so when there is one. */
+  updateNotices: boolean;
 
   // Your music (lossless sources)
   musicFolders: string[];
@@ -257,6 +277,9 @@ export interface Settings {
 }
 
 export type SpatialAudio = 'off' | 'headphones' | 'speakers';
+export type MiniPlayerWhen = 'away' | 'minimised' | 'off';
+/** The app's design language: Apple's liquid glass, Windows 11's Fluent, or Google's Material You. */
+export type UiStyle = 'apple' | 'windows' | 'material';
 
 /** A 10-band graphic equalizer (32 Hz – 16 kHz), in dB. */
 export interface EqSettings {
@@ -283,13 +306,15 @@ export interface LibraryData {
 
 /** Settings saved by earlier versions, in their newer shapes. */
 export function migrateSettings(saved: Record<string, unknown>): Partial<Settings> {
-  const { compact, density, ...rest } = saved;
+  const { compact, density, miniPlayerAuto, ...rest } = saved;
   const settings = rest as Partial<Settings> & Record<string, unknown>;
   // "Compact song lists" (on/off), then three row densities, became a row height.
   if (typeof settings.rowHeight !== 'number' && (compact === true || typeof density === 'string'))
     settings.rowHeight = ({ compact: 44, comfortable: 56, spacious: 66 } as Record<string, number>)[compact === true ? 'compact' : String(density)] ?? 56;
   // Lossless downloads were removed; a saved default of Lossless becomes Best.
   if (settings.downloadQuality === ('lossless' as string)) settings.downloadQuality = 'best';
+  // The mini player's on/off became when it comes up; off stays off.
+  if (!settings.miniPlayerWhen && miniPlayerAuto === false) settings.miniPlayerWhen = 'off';
   // Step choices became sliders.
   const steps: [keyof Settings, Record<string, number>][] = [
     ['glassBlur', { off: 0, soft: 0.5, default: 1, strong: 1.7 }],
@@ -311,7 +336,9 @@ export const DEFAULT_SETTINGS: Settings = {
   normalize: false,
   spatialAudio: 'off',
   closeToTray: false,
-  miniPlayerAuto: true,
+  miniPlayerWhen: 'away',
+  uiStyle: 'apple',
+  updateNotices: true,
   globalShortcuts: true,
   musicFolders: [],
   accent: '#fa586a',
@@ -474,7 +501,7 @@ export interface ObsidianApi {
   platform: string;
   home(): Promise<HomeFeed>;
   search(query: string): Promise<SearchResults>;
-  suggest(query: string): Promise<string[]>;
+  suggest(query: string): Promise<Suggestions>;
   album(id: string): Promise<AlbumPage>;
   artist(id: string): Promise<ArtistPage>;
   playlist(id: string): Promise<PlaylistPage>;
@@ -485,6 +512,10 @@ export interface ObsidianApi {
   importPlaylist(urlOrId: string): Promise<ImportResult>;
   /** While a Spotify import matches its songs: how many are done. */
   onImportProgress(handler: (done: number, total: number) => void): () => void;
+  /** Asks GitHub now (Settings › About). */
+  checkForUpdate(): Promise<UpdateInfo>;
+  /** A newer release was found by the regular check. */
+  onUpdateAvailable(handler: (info: UpdateInfo) => void): () => void;
   prefetch(videoId: string): Promise<void>;
   streamInfo(videoId: string): Promise<StreamInfo | null>;
   loadLibrary(): Promise<LibraryData>;
