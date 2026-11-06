@@ -520,6 +520,11 @@ export interface ObsidianApi {
   importPlaylist(urlOrId: string): Promise<ImportResult>;
   /** While a Spotify import matches its songs: how many are done. */
   onImportProgress(handler: (done: number, total: number) => void): () => void;
+  /** A song's attached music video (its address for the player), or null. Keyed by the song's id. */
+  musicVideo(key: string): Promise<string | null>;
+  /** Asks for a video file and attaches it to the song; null if cancelled. */
+  attachMusicVideo(key: string, title: string): Promise<string | null>;
+  removeMusicVideo(key: string): Promise<void>;
   /** Asks GitHub now (Settings › About). */
   checkForUpdate(): Promise<UpdateInfo>;
   /** A newer release was found by the regular check. */

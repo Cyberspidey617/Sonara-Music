@@ -7,6 +7,7 @@ import { isYouTubeId, type AppCommand, type MiniGrow, type MiniLayout, type Libr
 import { initMiniPlayer } from './mini';
 import { importSpotify, isSpotifyLink } from './spotify';
 import { checkForUpdate, watchForUpdates } from './update';
+import { attachMusicVideo, musicVideoUrl, removeMusicVideo, serveMusicVideo } from './videos';
 import { getScanState, localAlbum, localAlbums, localTracks, openLibrary, scan, searchLocal } from './library';
 import { clearMatches } from './lossless';
 import { handleMediaRequest, serveFile } from './media';
@@ -261,6 +262,7 @@ function registerProtocols() {
   });
   protocol.handle('media', (request) => {
     const url = new URL(request.url);
+    if (url.hostname === 'video') return serveMusicVideo(request);
     if (url.hostname === 'server') {
       const saved = downloadedFile(`srv_${decodeURIComponent(url.pathname.replace(/^\/+/, ''))}`);
       if (saved) return serveFile(saved.path!, request.headers.get('range'));
@@ -464,6 +466,9 @@ function registerIpc() {
   ipcMain.on('mini:seek', (_event, seconds: number) => Number.isFinite(seconds) && seconds >= 0 && win?.webContents.send('app:seek', seconds));
   ipcMain.on('mini:move-start', () => miniPlayer?.moveStart());
   handle('app:check-update', () => checkForUpdate());
+  handle('video:get', (key: string) => musicVideoUrl(String(key)));
+  handle('video:attach', (key: string, title: string) => attachMusicVideo(win, String(key), String(title ?? '')));
+  handle('video:remove', (key: string) => removeMusicVideo(String(key)));
   ipcMain.on('mini:interactive', (_event, on: boolean) => miniPlayer?.setInteractive(on === true));
   ipcMain.on('mini:move-end', () => miniPlayer?.moveEnd());
 }

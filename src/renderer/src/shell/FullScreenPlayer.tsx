@@ -1,5 +1,5 @@
 import { hasViewTransitions, transition } from '@/lib/motion';
-import { ChevronDown, Ellipsis, ListMusic, Maximize, MicVocal, Minimize, Plus, Repeat, Repeat1, Shuffle, SlidersVertical, X } from 'lucide-react';
+import { ChevronDown, Clapperboard, Ellipsis, ListMusic, Maximize, MicVocal, Minimize, Plus, Repeat, Repeat1, Shuffle, SlidersVertical, X } from 'lucide-react';
 import { useEffect, useState, type CSSProperties } from 'react';
 import { Artwork } from '@/components/Artwork';
 import { ExplicitBadge, NextGlyph, PauseGlyph, PlayGlyph, PreviousGlyph } from '@/components/icons';
@@ -11,11 +11,12 @@ import { largeArtwork } from '@/lib/artwork';
 import { openMenuAt } from '@/state/menu';
 import { albumRoute, go } from '@/state/nav';
 import { usePlayer } from '@/state/player';
-import { useUi } from '@/state/ui';
+import { toast, useUi } from '@/state/ui';
 import { NowPlayingQuality } from '@/components/QualityBadge';
 import { rgb, tintFor } from '@/lib/palette';
 import { useLibrary } from '@/state/library';
 import { LyricsView } from './LyricsView';
+import { MusicVideo } from './MusicVideo';
 import { ArtworkBackdrop, MeshBackdrop, SolidBackdrop } from './MeshBackdrop';
 import { SleepCountdown, SleepTimerButton } from './SleepTimer';
 import { UpNext } from './UpNext';
@@ -124,6 +125,20 @@ export function FullScreenPlayer() {
   const motion = useLibrary((s) => (reduceMotion ? 0 : s.settings.backdropMotion));
   const artScale = useLibrary((s) => s.settings.artworkScale) || 1;
   const [solid, setSolid] = useState<string | null>(null);
+  // This song's music video, if one is attached, and whether it's on screen.
+  const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [showVideo, setShowVideo] = useState(false);
+  const videoKey = track?.videoId;
+  useEffect(() => {
+    setShowVideo(false);
+    setVideoUrl(null);
+    if (!videoKey) return;
+    let alive = true;
+    void api.musicVideo(videoKey).then((url) => alive && setVideoUrl(url));
+    return () => {
+      alive = false;
+    };
+  }, [videoKey]);
   const artUrl = track ? (largeArtwork(track.thumbnail) ?? track.thumbnail) : undefined;
 
   useEffect(() => {
@@ -177,13 +192,25 @@ export function FullScreenPlayer() {
       ) : (
         <MeshBackdrop artworkUrl={artUrl} playing={playing} speed={motion} />
       )}
-      {/* The window's drag strip, with the close and full-screen buttons. */}
-      <div className="app-drag absolute inset-x-0 top-0 z-10 flex h-[52px] items-center pl-3">
+      {showVideo && videoUrl && <MusicVideo url={videoUrl} onClose={() => setShowVideo(false)} />}
+      {/* The window's drag strip, with the close, music video and full-screen buttons. */}
+      <div className="app-drag absolute inset-x-0 top-0 z-30 flex h-[52px] items-center pl-3">
         {/* Related controls share one piece of glass. */}
         <div className="glass app-no-drag relative flex items-center gap-0.5 rounded-pill p-[3px]">
         <button className="relative grid size-8 place-items-center rounded-full text-secondary hover:bg-white/12 hover:text-primary" aria-label="Close (Esc)" title="Close (Esc)" onClick={close}>
           <ChevronDown size={22} />
         </button>
+        {videoUrl && (
+          <button
+            className="relative grid size-8 animate-glyph place-items-center rounded-full text-secondary hover:bg-white/12 hover:text-primary aria-pressed:bg-white/16 aria-pressed:text-primary"
+            aria-label={showVideo ? 'Hide the music video' : 'Show the music video'}
+            aria-pressed={showVideo}
+            title={showVideo ? 'Hide the music video (Esc)' : 'Music video'}
+            onClick={() => setShowVideo((v) => !v)}
+          >
+            <Clapperboard size={16} />
+          </button>
+        )}
         <button
           className="relative grid size-8 place-items-center rounded-full text-secondary hover:bg-white/12 hover:text-primary"
           aria-label={windowFull ? 'Exit full screen' : 'Full screen'}
@@ -246,7 +273,44 @@ export function FullScreenPlayer() {
               <SleepCountdown className="type-callout-medium text-tertiary" />
             </div>
             <LikeButton track={track} size={19} className="glass elastic relative size-10 flex-none rounded-full text-primary aria-pressed:text-key" />
-            <button className={`${glassCircle} size-10 flex-none`} aria-label="More" onClick={(e) => openMenuAt(e.currentTarget, trackMenu(track), 'above-end')}>
+            <button
+              className={`${glassCircle} size-10 flex-none`}
+              aria-label="More"
+              onClick={(e) =>
+                openMenuAt(
+                  e.currentTarget,
+                  [
+                    ...trackMenu(track),
+                    { separator: true },
+                    {
+                      label: videoUrl ? 'Change music video…' : 'Attach a music video…',
+                      icon: <Clapperboard size={16} />,
+                      onSelect: () =>
+                        void api.attachMusicVideo(track.videoId, track.title).then((url) => {
+                          if (!url) return;
+                          setVideoUrl(url);
+                          setShowVideo(true);
+                          toast(`Music video attached to “${track.title}”`);
+                        }),
+                    },
+                    ...(videoUrl
+                      ? [
+                          {
+                            label: 'Remove music video',
+                            destructive: true,
+                            onSelect: () =>
+                              void api.removeMusicVideo(track.videoId).then(() => {
+                                setShowVideo(false);
+                                setVideoUrl(null);
+                              }),
+                          },
+                        ]
+                      : []),
+                  ],
+                  'above-end',
+                )
+              }
+            >
               <Ellipsis size={19} className="relative z-1" />
             </button>
           </div>
