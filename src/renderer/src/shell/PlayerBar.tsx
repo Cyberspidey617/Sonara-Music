@@ -204,6 +204,11 @@ export function PlayerBar() {
         style={lens}
         role="region"
         aria-label="Player"
+        // A double-click on the bar itself (not a control) opens the full-screen player.
+        onDoubleClick={(e) => {
+          if (!(e.target instanceof Element) || e.target.closest('button, a, input, [role="slider"]')) return;
+          useUi.getState().setFullScreen(true);
+        }}
       >
         <Pebble shown={pebble} />
         {/* The full bar; it crossfades with the pebble as the capsule grows and shrinks. */}

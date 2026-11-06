@@ -574,7 +574,12 @@
   }
 }
 
-/* Window dragging (frameless window): drag regions and the controls inside them. */
+/* Window dragging (frameless window): drag regions and the controls inside them. Anything pressed
+   inside a drag region (the Linux mini player) stays pressable. */
+.app-drag :is(button, input, [data-seek], [data-list]) {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
 @utility app-drag {
   -webkit-app-region: drag;
   app-region: drag;

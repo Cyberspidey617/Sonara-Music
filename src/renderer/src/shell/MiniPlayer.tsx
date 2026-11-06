@@ -24,6 +24,11 @@ const control =
   "grid size-9 flex-none place-items-center rounded-full text-primary transition-[background-color,scale] duration-200 hover:bg-white/10 active:scale-90 disabled:opacity-35 aria-pressed:bg-white/15";
 /** The window keeps the Up Next size (see main/mini.ts), so opening and closing it is the pill's alone. */
 const fixed = new URLSearchParams(location.search).has("fixed");
+/**
+ * Where the window can't keep that size (Linux), it's dragged by the system instead: Wayland lets
+ * no app place its own window or read the cursor outside it, so the page's own drag can't work.
+ */
+const systemDrag = !fixed;
 /** The window's see-through margin around the pill. */
 const INSET = 8;
 /** The pill's height as the bar, and with Up Next open. */
@@ -183,7 +188,7 @@ export function MiniPlayer() {
         style={{ filter: "drop-shadow(0 1px 2px rgb(0 0 0 / 0.45))" }}
       >
         <div
-          className="relative flex w-full flex-col overflow-hidden border border-white/12"
+          className={`relative flex w-full flex-col overflow-hidden border border-white/12 ${systemDrag ? "app-drag" : ""}`}
           style={{
             height: queueOpen ? OPEN : BAR,
             borderRadius: open ? 24 : BAR / 2,
@@ -197,9 +202,9 @@ export function MiniPlayer() {
           onPointerLeave={() =>
             fixed && !dragging.current && api.miniInteractive(false)
           }
-          onPointerDown={onPointerDown}
-          onPointerUp={onPointerUp}
-          onPointerCancel={onPointerUp}
+          onPointerDown={systemDrag ? undefined : onPointerDown}
+          onPointerUp={systemDrag ? undefined : onPointerUp}
+          onPointerCancel={systemDrag ? undefined : onPointerUp}
           onDoubleClick={(e) => !interactive(e.target) && api.openMainWindow()}
         >
           <div
