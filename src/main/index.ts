@@ -6,7 +6,7 @@ import { pathToFileURL } from 'node:url';
 import { isYouTubeId, type AppCommand, type MiniGrow, type MiniLayout, type LibraryData, type LibraryScanState, type PlaybackState, type ServerLogin, type Track, type DownloadQuality } from '../shared/types';
 import { initMiniPlayer } from './mini';
 import { importSpotify, isSpotifyLink } from './spotify';
-import { checkForUpdate, watchForUpdates } from './update';
+import { checkForUpdate, downloadUpdate, installUpdate, updateState, watchForUpdates } from './update';
 import { attachMusicVideo, musicVideoUrl, removeMusicVideo, serveMusicVideo } from './videos';
 import { getScanState, localAlbum, localAlbums, localTracks, openLibrary, scan, searchLocal } from './library';
 import { clearMatches } from './lossless';
@@ -466,6 +466,9 @@ function registerIpc() {
   ipcMain.on('mini:seek', (_event, seconds: number) => Number.isFinite(seconds) && seconds >= 0 && win?.webContents.send('app:seek', seconds));
   ipcMain.on('mini:move-start', () => miniPlayer?.moveStart());
   handle('app:check-update', () => checkForUpdate());
+  handle('app:update-state', () => updateState());
+  handle('app:update-download', () => downloadUpdate());
+  ipcMain.on('app:update-install', () => installUpdate());
   handle('video:get', (key: string) => musicVideoUrl(String(key)));
   handle('video:attach', (key: string, title: string) => attachMusicVideo(win, String(key), String(title ?? '')));
   handle('video:remove', (key: string) => removeMusicVideo(String(key)));
@@ -538,7 +541,7 @@ if (!app.requestSingleInstanceLock()) {
     createWindow();
     watchForUpdates({
       enabled: () => getLibrary().settings.updateNotices !== false,
-      tell: (info) => win?.webContents.send('app:update-available', info),
+      tell: (state) => win?.webContents.send('app:update-state', state),
       icon: icon(process.platform === 'win32' ? 'icon.ico' : 'icon.png'),
     });
     miniPlayer = initMiniPlayer({

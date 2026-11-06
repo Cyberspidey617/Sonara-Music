@@ -1,11 +1,11 @@
 import { EqualizerPanel } from '@/components/Equalizer';
 import { useQueryClient } from '@tanstack/react-query';
 import appIcon from '@/assets/app-icon.png';
-import { Check, Clock, FolderOpen, FolderPlus, Heart, House, Loader2, RefreshCw, RotateCcw, Server, Sparkles, Trash2 } from 'lucide-react';
+import { Check, Clock, Download, FolderOpen, FolderPlus, Heart, House, Loader2, RefreshCw, RotateCcw, Server, Sparkles, Trash2 } from 'lucide-react';
 import { SHORTCUTS } from '@/components/Dialogs';
 import { createContext, useContext, useEffect, useState, type CSSProperties, type ReactNode } from 'react';
 import { create } from 'zustand';
-import { DEFAULT_SETTINGS, type AudioQuality, type DownloadQuality, type MiniPlayerWhen, type Settings, type SpatialAudio, type UpdateInfo } from '@shared/types';
+import { DEFAULT_SETTINGS, type AudioQuality, type DownloadQuality, type MiniPlayerWhen, type Settings, type SpatialAudio, type UpdateState } from '@shared/types';
 import { api } from '@/lib/api';
 import { ACCENTS, LYRIC_FONTS, THEMES, themeVars, useThemeColors } from '@/lib/appearance';
 import { artworkAtPixels, largeArtwork } from '@/lib/artwork';
@@ -694,44 +694,52 @@ function LayoutTab() {
   );
 }
 
-/** Settings › About: whether Sonara looks for new releases, and a check on the spot. */
+/** Settings › About: updates — check, download inside the app, restart into it. */
 function UpdateSettings() {
   const { s, set } = useSettings();
-  const [state, setState] = useState<{ checking: boolean; info?: UpdateInfo; error?: string }>({ checking: false });
-  const check = () => {
-    setState({ checking: true });
-    api
-      .checkForUpdate()
-      .then((info) => setState({ checking: false, info }))
-      .catch((error: unknown) => setState({ checking: false, error: error instanceof Error ? error.message : String(error) }));
-  };
-  const info = state.info;
+  const [u, setU] = useState<UpdateState | null>(null);
+  useEffect(() => {
+    void api.updateState().then(setU);
+    return api.onUpdateState(setU);
+  }, []);
+  const detail = !u
+    ? '…'
+    : u.phase === 'checking'
+      ? 'Looking for a newer version…'
+      : u.phase === 'available'
+        ? u.canInstall
+          ? `Sonara ${u.latest} is available. You have ${u.current}. It downloads here, then a restart installs it.`
+          : `Sonara ${u.latest} is available. You have ${u.current}. This copy can’t update itself (on macOS, or the portable or .deb version), so the download page opens.`
+        : u.phase === 'downloading'
+          ? `Downloading Sonara ${u.latest}… ${u.percent ?? 0}%`
+          : u.phase === 'ready'
+            ? `Sonara ${u.latest} is downloaded. Restart to install it.`
+            : u.phase === 'none'
+              ? `You have the latest version (${u.current}).`
+              : u.phase === 'error'
+                ? (u.error ?? 'The update didn’t work. Try again.')
+                : `You have ${u.current}.`;
   return (
     <Section title="Updates">
-      <Row title="Tell me about new versions" detail="Every few hours Sonara asks GitHub for its latest release, and lets you know once when there’s a newer one. Nothing is downloaded or installed by itself.">
-        <Toggle label="Tell me about new versions" on={s.updateNotices} onChange={(updateNotices) => set({ updateNotices })} />
+      <Row title="Look for updates" detail="When Sonara starts, and every few hours, it asks GitHub for its latest release and tells you when there’s a newer one.">
+        <Toggle label="Look for updates" on={s.updateNotices} onChange={(updateNotices) => set({ updateNotices })} />
       </Row>
-      <Row
-        title="Check now"
-        detail={
-          state.checking
-            ? 'Asking GitHub…'
-            : state.error
-              ? state.error
-              : info
-                ? info.available
-                  ? `Sonara ${info.latest} is available. You have ${info.current}.`
-                  : `You have the latest version (${info.current}).`
-                : 'See whether there’s a newer Sonara.'
-        }
-      >
-        {info?.available ? (
-          <button className={button} onClick={() => window.open(info.url)}>
-            Download {info.latest}
+      <Row title="Sonara updates" detail={detail}>
+        {u?.phase === 'available' ? (
+          <button className={button} onClick={() => void api.downloadUpdate()}>
+            <Download size={15} /> {u.canInstall ? `Download ${u.latest}` : 'Open the download page'}
+          </button>
+        ) : u?.phase === 'downloading' ? (
+          <span className="inline-flex h-8 w-36 items-center overflow-hidden rounded-pill bg-white/10" role="progressbar" aria-valuenow={u.percent ?? 0} aria-valuemin={0} aria-valuemax={100}>
+            <span className="h-full bg-key transition-[width] duration-300" style={{ width: `${u.percent ?? 0}%` }} />
+          </span>
+        ) : u?.phase === 'ready' ? (
+          <button className={`${button} bg-key text-white hover:bg-key`} onClick={() => api.installUpdate()}>
+            <RotateCcw size={15} /> Restart to update
           </button>
         ) : (
-          <button className={button} disabled={state.checking} onClick={check}>
-            {state.checking ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} />} Check
+          <button className={button} disabled={u?.phase === 'checking'} onClick={() => void api.checkForUpdate()}>
+            {u?.phase === 'checking' ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} />} Check
           </button>
         )}
       </Row>

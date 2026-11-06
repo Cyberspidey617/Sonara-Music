@@ -51,5 +51,11 @@ linux:
     - target: AppImage
     - target: deb
   artifactName: Sonara-${version}-linux-${arch}.${ext}
-# Builds are attached to GitHub Releases by the release workflow, not published by electron-builder.
-publish: null
+# Builds are attached to GitHub Releases by the release workflow (--publish never), not uploaded by
+# electron-builder. Naming GitHub here still matters: it writes the update feed (latest*.yml) the
+# workflow attaches, and builds the update source into the app for in-app updates.
+publish:
+  provider: github
+  owner: Cyberspidey617
+  repo: Sonara-Music
+  releaseType: release

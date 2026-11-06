@@ -10,8 +10,25 @@ import { toast } from '@/state/ui';
 
 export function App() {
   const loaded = useLibrary((s) => s.loaded);
-  // A newer Sonara on GitHub: say so, with a way to the downloads (the release page opens in the browser).
-  useEffect(() => api.onUpdateAvailable((info) => toast(`Sonara ${info.latest} is available (you have ${info.current})`, { label: 'Download', run: () => window.open(info.url) })), []);
+  // A newer Sonara: offer to download it here (or open its page where it can't install itself),
+  // then to restart into it once it's downloaded.
+  useEffect(() => {
+    let said = '';
+    return api.onUpdateState((s) => {
+      const key = `${s.phase}:${s.latest}`;
+      if (key === said) return;
+      if (s.phase === 'available') {
+        said = key;
+        toast(`Sonara ${s.latest} is available (you have ${s.current})`, s.canInstall ? { label: 'Download', run: () => void api.downloadUpdate() } : { label: 'Get it', run: () => window.open(s.url) });
+      } else if (s.phase === 'ready') {
+        said = key;
+        toast(`Sonara ${s.latest} is ready`, { label: 'Restart to update', run: () => api.installUpdate() });
+      } else if (s.phase === 'error' && s.error) {
+        said = key;
+        toast(s.error);
+      }
+    });
+  }, []);
   useEffect(() => {
     void useLibrary
       .getState()

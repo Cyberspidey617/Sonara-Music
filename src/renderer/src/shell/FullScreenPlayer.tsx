@@ -362,7 +362,8 @@ export function FullScreenPlayer() {
           </div>
         </section>
 
-        {panel === 'lyrics' && (
+        {/* Under a music video the lyrics (with their Translate and Pronunciation controls) aren't drawn. */}
+        {panel === 'lyrics' && !showVideo && (
           <section className={`np-lyrics flex min-h-0 ${stacked ? 'order-1 w-full max-w-[620px] flex-1' : 'h-full'}`} aria-label="Lyrics">
             <LyricsView full />
           </section>

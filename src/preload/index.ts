@@ -1,6 +1,6 @@
 // The renderer's only door to the main process: a typed, minimal API.
 import { contextBridge, ipcRenderer, webFrame } from 'electron';
-import type { AppCommand, MiniGrow, MiniLayout, ObsidianApi, PlaybackState, UpdateInfo } from '../shared/types';
+import type { AppCommand, MiniGrow, MiniLayout, ObsidianApi, PlaybackState, UpdateState } from '../shared/types';
 
 const api: ObsidianApi = {
   platform: process.platform,
@@ -14,14 +14,17 @@ const api: ObsidianApi = {
   lyrics: (videoId) => ipcRenderer.invoke('yt:lyrics', videoId),
   track: (videoId) => ipcRenderer.invoke('yt:track', videoId),
   importPlaylist: (urlOrId) => ipcRenderer.invoke('yt:import', urlOrId),
+  updateState: () => ipcRenderer.invoke('app:update-state'),
   checkForUpdate: () => ipcRenderer.invoke('app:check-update'),
+  downloadUpdate: () => ipcRenderer.invoke('app:update-download'),
+  installUpdate: () => ipcRenderer.send('app:update-install'),
   musicVideo: (key) => ipcRenderer.invoke('video:get', key),
   attachMusicVideo: (key, title) => ipcRenderer.invoke('video:attach', key, title),
   removeMusicVideo: (key) => ipcRenderer.invoke('video:remove', key),
-  onUpdateAvailable: (handler) => {
-    const listener = (_: unknown, info: UpdateInfo) => handler(info);
-    ipcRenderer.on('app:update-available', listener);
-    return () => ipcRenderer.removeListener('app:update-available', listener);
+  onUpdateState: (handler) => {
+    const listener = (_: unknown, state: UpdateState) => handler(state);
+    ipcRenderer.on('app:update-state', listener);
+    return () => ipcRenderer.removeListener('app:update-state', listener);
   },
   onImportProgress: (handler) => {
     const listener = (_: unknown, done: number, total: number) => handler(done, total);

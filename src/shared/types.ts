@@ -67,14 +67,19 @@ export interface HomeFeed {
   shelves: Shelf[];
 }
 
-/** What GitHub says about the latest Sonara release. */
-export interface UpdateInfo {
+/** Where an update stands. */
+export interface UpdateState {
+  phase: 'idle' | 'checking' | 'none' | 'available' | 'downloading' | 'ready' | 'error';
   current: string;
-  latest: string;
-  /** The latest is newer than this copy. */
-  available: boolean;
-  /** Its release page, with the downloads. */
+  /** The newest release's version, once known. */
+  latest?: string;
+  /** Download progress, 0–100. */
+  percent?: number;
+  /** This copy can download and install updates itself (the Windows setup's install, a Linux AppImage). */
+  canInstall: boolean;
+  /** The release page, for copies that can't install themselves. */
   url: string;
+  error?: string;
 }
 
 /** Search-as-you-type: words to search for, then the music they most likely mean. */
@@ -525,10 +530,14 @@ export interface ObsidianApi {
   /** Asks for a video file and attaches it to the song; null if cancelled. */
   attachMusicVideo(key: string, title: string): Promise<string | null>;
   removeMusicVideo(key: string): Promise<void>;
-  /** Asks GitHub now (Settings › About). */
-  checkForUpdate(): Promise<UpdateInfo>;
-  /** A newer release was found by the regular check. */
-  onUpdateAvailable(handler: (info: UpdateInfo) => void): () => void;
+  updateState(): Promise<UpdateState>;
+  /** Looks for a newer release now (Settings › About). */
+  checkForUpdate(): Promise<UpdateState>;
+  /** Downloads the update inside the app (or opens the release page where it can't install itself). */
+  downloadUpdate(): Promise<void>;
+  /** Restarts into the downloaded update. */
+  installUpdate(): void;
+  onUpdateState(handler: (state: UpdateState) => void): () => void;
   prefetch(videoId: string): Promise<void>;
   streamInfo(videoId: string): Promise<StreamInfo | null>;
   loadLibrary(): Promise<LibraryData>;
