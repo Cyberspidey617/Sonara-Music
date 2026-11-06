@@ -147,7 +147,7 @@ export function createMockApi(): ObsidianApi {
     miniJumpTo: () => undefined,
     onJumpTo: () => () => undefined,
     onImportProgress: () => () => undefined,
-    checkForUpdate: async () => ({ current: '0.0.0', latest: '0.0.0', available: false, url: 'https://github.com/Cyberspidey617/Sonara/releases' }),
+    checkForUpdate: async () => ({ current: '0.0.0', latest: '0.0.0', available: false, url: 'https://github.com/Cyberspidey617/Sonara-Music/releases' }),
     onUpdateAvailable: () => () => undefined,
     miniSeek: () => undefined,
     onSeekTo: () => () => undefined,

@@ -6,7 +6,7 @@ import { app, Notification, shell } from 'electron';
 import type { UpdateInfo } from '../shared/types';
 import { log } from './log';
 
-const LATEST = 'https://api.github.com/repos/Cyberspidey617/Sonara/releases/latest';
+const LATEST = 'https://api.github.com/repos/Cyberspidey617/Sonara-Music/releases/latest';
 /** How often a running Sonara looks again. */
 const EVERY = 6 * 60 * 60_000;
 
@@ -37,7 +37,7 @@ export async function checkForUpdate(): Promise<UpdateInfo> {
     current,
     latest: latest ? latest.join('.') : current,
     available,
-    url: release.html_url ?? 'https://github.com/Cyberspidey617/Sonara/releases/latest',
+    url: release.html_url ?? 'https://github.com/Cyberspidey617/Sonara-Music/releases/latest',
   };
 }
 

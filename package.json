@@ -43,9 +43,9 @@
     "youtubei.js": "^18.3.0",
     "zustand": "^5.0.16"
   },
-  "homepage": "https://github.com/Cyberspidey617/Sonara",
+  "homepage": "https://github.com/Cyberspidey617/Sonara-Music",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Cyberspidey617/Sonara.git"
+    "url": "https://github.com/Cyberspidey617/Sonara-Music.git"
   }
 }
