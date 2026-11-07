@@ -193,10 +193,15 @@ function createWindow() {
     if (miniWhen() !== 'off' && miniPlayer?.hasSong()) miniPlayer.show(true);
     updateTray();
   };
-  // Development copies run as electron.exe, whose taskbar icon is Electron's: give their button
-  // Sonara's icon, under their own app ID so they don't group with an installed Sonara.
-  if (process.platform === 'win32' && !app.isPackaged) {
-    win.setAppDetails({ appId: 'com.obsidian.music.pc.dev', appIconPath: path.join(resources, 'icon.ico'), appIconIndex: 0 });
+  // The taskbar button's icon, named outright: Sonara.exe's own icon when installed (Windows can hold
+  // on to a stale icon for the app ID otherwise), and for development copies, which run as
+  // electron.exe, Sonara's icon file under their own app ID so they don't group with an installed one.
+  if (process.platform === 'win32') {
+    win.setAppDetails(
+      app.isPackaged
+        ? { appId: 'com.obsidian.music.pc', appIconPath: process.execPath, appIconIndex: 0 }
+        : { appId: 'com.obsidian.music.pc.dev', appIconPath: path.join(resources, 'icon.ico'), appIconIndex: 0 },
+    );
   }
   win.on('minimize', floatMini);
   win.on('hide', floatMini);
@@ -547,6 +552,11 @@ if (!app.requestSingleInstanceLock()) {
     watchForUpdates({
       enabled: () => getLibrary().settings.updateNotices !== false,
       tell: (state) => win?.webContents.send('app:update-state', state),
+      // Downloaded while minimised or away: back to the front, where the update window asks to restart.
+      ready: () => {
+        showWindow();
+        win?.flashFrame(true);
+      },
       icon: icon(process.platform === 'win32' ? 'icon.ico' : 'icon.png'),
     });
     miniPlayer = initMiniPlayer({

@@ -107,7 +107,7 @@ function announced(): string | null {
 }
 
 /** Starts the checks (a little after launch, then every few hours) while `enabled()` says so. */
-export function watchForUpdates(options: { enabled: () => boolean; tell: (s: UpdateState) => void; icon?: Electron.NativeImage }) {
+export function watchForUpdates(options: { enabled: () => boolean; tell: (s: UpdateState) => void; ready: () => void; icon?: Electron.NativeImage }) {
   tell = options.tell;
   state = { ...state, canInstall: canInstall() };
   autoUpdater.autoDownload = false;
@@ -117,7 +117,10 @@ export function watchForUpdates(options: { enabled: () => boolean; tell: (s: Upd
   autoUpdater.on('update-available', (info) => set({ phase: 'available', latest: info.version, canInstall: true }));
   autoUpdater.on('update-not-available', (info) => set({ phase: 'none', latest: info.version, canInstall: true }));
   autoUpdater.on('download-progress', (p) => set({ phase: 'downloading', percent: Math.round(p.percent) }));
-  autoUpdater.on('update-downloaded', (info) => set({ phase: 'ready', latest: info.version, percent: 100 }));
+  autoUpdater.on('update-downloaded', (info) => {
+    set({ phase: 'ready', latest: info.version, percent: 100 });
+    options.ready();
+  });
 
   const look = async () => {
     if (!options.enabled()) return;

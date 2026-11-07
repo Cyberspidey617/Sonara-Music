@@ -11,7 +11,7 @@ import { go } from '@/state/nav';
 import { toast, useUi } from '@/state/ui';
 import { Mosaic } from './Mosaic';
 
-function Modal({ title, children, onClose, width = 420 }: { title: string; children: ReactNode; onClose: () => void; width?: number }) {
+export function Modal({ title, children, onClose, width = 420 }: { title: string; children: ReactNode; onClose: () => void; width?: number }) {
   const sheet = useRef<HTMLDivElement>(null);
   const lens = useLiquidLens(sheet, { band: 22, strength: 40, blur: 36 });
   useEffect(() => {
