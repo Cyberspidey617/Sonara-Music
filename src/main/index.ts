@@ -193,6 +193,11 @@ function createWindow() {
     if (miniWhen() !== 'off' && miniPlayer?.hasSong()) miniPlayer.show(true);
     updateTray();
   };
+  // Development copies run as electron.exe, whose taskbar icon is Electron's: give their button
+  // Sonara's icon, under their own app ID so they don't group with an installed Sonara.
+  if (process.platform === 'win32' && !app.isPackaged) {
+    win.setAppDetails({ appId: 'com.obsidian.music.pc.dev', appIconPath: path.join(resources, 'icon.ico'), appIconIndex: 0 });
+  }
   win.on('minimize', floatMini);
   win.on('hide', floatMini);
   win.on('blur', () => {
