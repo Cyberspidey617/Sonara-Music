@@ -10,6 +10,21 @@ type Note = { icon: LucideIcon; title: string; body: string; open?: () => void; 
 /** What each version brought, newest first. Shown once, after Sonara updates to it. */
 const NOTES: { version: string; notes: Note[] }[] = [
   {
+    version: '2.2.6',
+    notes: [
+      {
+        icon: Clapperboard,
+        title: 'Smoother music videos',
+        body: 'No more stutter after skipping ahead: the picture waits for the new spot to load and starts again in time. Videos that are a different length from the song now play with their own sound (the song goes on silently), at the same volume.',
+      },
+      {
+        icon: Clapperboard,
+        title: 'Video controls',
+        body: 'A seek bar with play and skip under the video, a size menu (fit, fill, 75%, 50%) that keeps each video’s own shape, and controls that fade away while you watch, coming back when you move the mouse.',
+      },
+    ],
+  },
+  {
     version: '2.2.5',
     notes: [
       {

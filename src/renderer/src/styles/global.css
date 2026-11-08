@@ -898,3 +898,14 @@
   border-style: solid;
   border-width: 0;
 }
+
+/* A music video playing with the mouse at rest: the pointer and the window's buttons fade away. */
+[data-cursor-hidden],
+[data-cursor-hidden] * {
+  cursor: none !important;
+}
+:root[data-video-idle] .window-controls {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 500ms;
+}

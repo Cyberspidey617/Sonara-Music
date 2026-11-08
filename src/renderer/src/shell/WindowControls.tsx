@@ -17,7 +17,7 @@ export function WindowControls() {
   // macOS has its own traffic lights.
   if (!isElectron || document.documentElement.dataset.platform === 'mac') return null;
   return (
-    <div data-elastic="0.6" className="glass elastic app-no-drag fixed top-[5px] right-2 z-[9800] flex h-[34px] items-center gap-0.5 rounded-pill px-[3px]">
+    <div data-elastic="0.6" className="window-controls glass elastic app-no-drag fixed top-[5px] right-2 z-[9800] flex h-[34px] items-center gap-0.5 rounded-pill px-[3px]">
       <button className={button} aria-label="Minimise" title="Minimise" onClick={() => api.minimizeWindow()}>
         <Minus size={15} strokeWidth={2} />
       </button>

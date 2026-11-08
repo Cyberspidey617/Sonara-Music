@@ -131,9 +131,24 @@ function settings() {
   return useLibrary.getState().settings;
 }
 
+/** While a music video plays its own sound, the song keeps playing, silently. */
+let silenced = false;
+
+export function setSongSilenced(on: boolean) {
+  if (silenced === on) return;
+  silenced = on;
+  applyVolume();
+}
+
+/** The volume you set (0–1, as heard), for sound played alongside the song, like a music video's. */
+export function listeningVolume(): number {
+  const { volume, muted } = usePlayer.getState();
+  return muted ? 0 : Math.max(0, Math.min(1, volume * volume));
+}
+
 function targetVolume(deckIndex: number): number {
   const { volume, muted } = usePlayer.getState();
-  if (muted) return 0;
+  if (muted || silenced) return 0;
   return Math.max(0, Math.min(1, volume * volume * (settings().normalize ? gains[deckIndex]! : 1)));
 }
 

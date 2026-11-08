@@ -132,14 +132,15 @@ async function resolveWith(yt: Innertube, videoId: string, client: ClientName, q
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const usable = formats.filter((f: any) => !f.is_drc && (f.audio_track ? f.audio_track.audio_is_default !== false : true));
   const pool = usable.length ? usable : formats;
-  // A video: the tallest picture up to the chosen height, H.264 before VP9 before AV1 (easier to decode).
+  // A video: the tallest picture up to the chosen height; at a height, 30 frames a second before 60 (half
+  // the data, plenty for a music video), and H.264 before VP9 before AV1 (easier to decode).
   const codecRank = (f: { mime_type?: string }) => (/avc1/.test(String(f.mime_type)) ? 0 : /vp0?9/.test(String(f.mime_type)) ? 1 : 2);
   const videoOrder = video
     ? pool
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         .filter((f: any) => (f.height ?? 0) <= maxHeight && (f.url || f.signature_cipher || f.cipher))
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        .sort((a: any, b: any) => (b.height ?? 0) - (a.height ?? 0) || codecRank(a) - codecRank(b) || (b.bitrate ?? 0) - (a.bitrate ?? 0))
+        .sort((a: any, b: any) => (b.height ?? 0) - (a.height ?? 0) || Number((a.fps ?? 30) > 30) - Number((b.fps ?? 30) > 30) || codecRank(a) - codecRank(b) || (b.bitrate ?? 0) - (a.bitrate ?? 0))
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         .map((f: any) => f.itag as number)
     : [];

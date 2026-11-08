@@ -1,5 +1,5 @@
 import { hasViewTransitions, transition } from '@/lib/motion';
-import { ChevronDown, Clapperboard, Ellipsis, ListMusic, Maximize, MicVocal, Minimize, Plus, Repeat, Repeat1, Shuffle, SlidersVertical, X } from 'lucide-react';
+import { ChevronDown, Clapperboard, Ellipsis, Proportions, ListMusic, Maximize, MicVocal, Minimize, Plus, Repeat, Repeat1, Shuffle, SlidersVertical, X } from 'lucide-react';
 import { useEffect, useState, type CSSProperties } from 'react';
 import { Artwork } from '@/components/Artwork';
 import { ExplicitBadge, NextGlyph, PauseGlyph, PlayGlyph, PreviousGlyph } from '@/components/icons';
@@ -91,6 +91,44 @@ function Transport() {
   );
 }
 
+/** Over a music video: the song, play / pause and skip, and the seek bar, on one piece of glass. */
+function VideoControls({ hidden }: { hidden: boolean }) {
+  const track = usePlayer((s) => s.queue[s.index]?.track ?? null);
+  const playing = usePlayer((s) => s.status === 'playing' || s.status === 'loading');
+  const hasNext = usePlayer((s) => s.index + 1 < s.queue.length || s.repeat === 'all' || s.radioLoading);
+  const { togglePlay, next, previous } = usePlayer.getState();
+  if (!track) return null;
+  return (
+    <div
+      className={`absolute inset-x-0 bottom-0 z-30 bg-[linear-gradient(transparent,rgb(0_0_0/0.55))] px-[clamp(16px,4vw,48px)] pt-16 pb-5 transition-opacity duration-500 ${hidden ? 'pointer-events-none opacity-0' : ''}`}
+    >
+      <div className="glass mx-auto max-w-[920px] rounded-[24px] px-5 pt-3 pb-2">
+        <div className="flex items-center gap-4">
+          <div className="min-w-0 flex-1">
+            <div className="truncate type-body-emphasized text-primary">{track.title}</div>
+            <div className="truncate type-callout text-secondary">{track.artists.map((a) => a.name).join(', ')}</div>
+          </div>
+          <div className="flex flex-none items-center gap-2">
+            <button className={`${round} size-10 text-primary hover:bg-white/10`} aria-label="Previous" onClick={previous}>
+              <PreviousGlyph size={20} />
+            </button>
+            <button className={`${round} size-12 bg-white/90 text-black hover:bg-white`} aria-label={playing ? 'Pause' : 'Play'} onClick={togglePlay}>
+              {playing ? <PauseGlyph key="pause" size={22} className="animate-glyph" /> : <PlayGlyph key="play" size={22} className="animate-glyph" />}
+            </button>
+            <button className={`${round} size-10 text-primary hover:bg-white/10`} disabled={!hasNext} aria-label="Next" onClick={next}>
+              <NextGlyph size={20} />
+            </button>
+          </div>
+          <div className="flex-1" />
+        </div>
+        <div className="-mt-3">
+          <Scrubber />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /** Narrow or portrait windows get the one-column layout. */
 function useStacked() {
   const test = () => window.innerWidth < 960 || window.innerWidth / window.innerHeight < 1.05;
@@ -138,6 +176,35 @@ export function FullScreenPlayer() {
   const online = useOnline((s) => s.online);
   // The "may not be in sync" note: shown when the video opens, then it fades away.
   const unsynced = showVideo && !videoAttached && !!found && !found.synced;
+  const videoFit = useLibrary((s) => s.settings.videoFit) || 'fit';
+  // While the video is on, the controls (and the pointer) fade away when the mouse rests.
+  const [idle, setIdle] = useState(false);
+  useEffect(() => {
+    setIdle(false);
+    if (!showVideo) return;
+    let timer = window.setTimeout(() => setIdle(true), 2500);
+    const wake = () => {
+      setIdle(false);
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => setIdle(true), 2500);
+    };
+    window.addEventListener('pointermove', wake);
+    window.addEventListener('pointerdown', wake);
+    window.addEventListener('keydown', wake);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener('pointermove', wake);
+      window.removeEventListener('pointerdown', wake);
+      window.removeEventListener('keydown', wake);
+    };
+  }, [showVideo]);
+  const hidden = showVideo && idle;
+  useEffect(() => {
+    // The window's own buttons fade too.
+    if (hidden) document.documentElement.dataset.videoIdle = '';
+    else delete document.documentElement.dataset.videoIdle;
+    return () => void delete document.documentElement.dataset.videoIdle;
+  }, [hidden]);
   const [syncNote, setSyncNote] = useState(false);
   useEffect(() => {
     setSyncNote(unsynced);
@@ -209,11 +276,13 @@ export function FullScreenPlayer() {
       }`}
       style={{ '--art-scale': artScale } as CSSProperties}
       data-immersive
+      data-cursor-hidden={hidden || undefined}
       role="dialog"
       aria-modal="true"
       aria-label="Now Playing"
     >
-      {backdrop === 'artwork' ? (
+      {/* Under the video nothing is drawn: the backdrop and the player would only cost frames. */}
+      {showVideo && videoUrl ? null : backdrop === 'artwork' ? (
         <ArtworkBackdrop artworkUrl={artUrl} speed={playing ? motion : 0} />
       ) : backdrop === 'solid' ? (
         <SolidBackdrop color={solid} />
@@ -223,6 +292,10 @@ export function FullScreenPlayer() {
       {showVideo && videoUrl && (
         <MusicVideo
           url={videoUrl}
+          // In time with the song: the song is heard, as before. Not in time: the video's own sound,
+          // with the song going on silently.
+          audioUrl={!videoAttached && found && !found.synced ? `ytstream://track/${encodeURIComponent(found.videoId)}?q=high` : null}
+          fit={videoFit}
           onClose={() => setShowVideo(false)}
           onError={() => {
             setShowVideo(false);
@@ -230,15 +303,16 @@ export function FullScreenPlayer() {
           }}
         />
       )}
+      {showVideo && videoUrl && <VideoControls hidden={hidden} />}
       {unsynced && found && (
         <div className={`pointer-events-none absolute inset-x-0 top-[60px] z-30 flex justify-center px-4 transition-opacity duration-700 ${syncNote ? 'opacity-100' : 'opacity-0'}`} aria-hidden={!syncNote}>
           <div className="glass max-w-[560px] animate-rise rounded-pill px-4 py-1.5 text-center type-callout text-secondary">
-            The official video{found.channel ? ` from ${found.channel}` : ''}: it isn’t the same length as the song, so it may not be in sync.
+            The official video{found.channel ? ` from ${found.channel}` : ''} isn’t the same length as the song, so it plays with its own sound.
           </div>
         </div>
       )}
       {/* The window's drag strip, with the close, music video and full-screen buttons. */}
-      <div className="app-drag absolute inset-x-0 top-0 z-30 flex h-[52px] items-center pl-3">
+      <div className={`app-drag absolute inset-x-0 top-0 z-30 flex h-[52px] items-center pl-3 transition-opacity duration-500 ${hidden ? 'pointer-events-none opacity-0' : ''}`}>
         {/* Related controls share one piece of glass. */}
         <div className="glass app-no-drag relative flex items-center gap-0.5 rounded-pill p-[3px]">
         <button className="relative grid size-8 place-items-center rounded-full text-secondary hover:bg-white/12 hover:text-primary" aria-label="Close (Esc)" title="Close (Esc)" onClick={close}>
@@ -278,6 +352,38 @@ export function FullScreenPlayer() {
             {videoQuality}p <ChevronDown size={13} className="opacity-70" />
           </button>
         )}
+        {showVideo && (
+          <>
+            <button
+              className="relative grid size-8 animate-glyph place-items-center rounded-full text-secondary hover:bg-white/12 hover:text-primary"
+              aria-label="Video size"
+              title="Video size"
+              onClick={(e) =>
+                openMenuAt(
+                  e.currentTarget,
+                  [
+                    { header: 'Video size' },
+                    ...(
+                      [
+                        ['fit', 'Fit the screen (whole video)'],
+                        ['fill', 'Fill the screen (crops the edges)'],
+                        ['75', '75%'],
+                        ['50', '50%'],
+                      ] as const
+                    ).map(([value, label]) => ({
+                      label,
+                      hint: value === videoFit ? '✓' : undefined,
+                      onSelect: () => useLibrary.getState().updateSettings({ videoFit: value }),
+                    })),
+                  ],
+                  'below-start',
+                )
+              }
+            >
+              <Proportions size={16} />
+            </button>
+          </>
+        )}
         <button
           className="relative grid size-8 place-items-center rounded-full text-secondary hover:bg-white/12 hover:text-primary"
           aria-label={windowFull ? 'Exit full screen' : 'Full screen'}
@@ -290,12 +396,13 @@ export function FullScreenPlayer() {
       </div>
 
       {/* Wide windows: player and lyrics side by side, centred. Narrow or portrait windows:
-          one column, and the lyrics or queue take the artwork's place. */}
+          one column, and the lyrics or queue take the artwork's place. Not drawn under a video. */}
       <div
         className={
-          stacked
+          (showVideo && videoUrl ? '[content-visibility:hidden] ' : '') +
+          (stacked
             ? 'flex h-full flex-col items-center justify-center gap-5 px-5 pt-14 pb-8'
-            : `grid h-full items-center justify-center gap-x-[clamp(40px,6vw,120px)] px-[clamp(28px,6vw,120px)] pt-14 pb-10 ${column ? 'grid-cols-[var(--col)_minmax(0,760px)]' : 'grid-cols-[var(--col)]'}`
+            : `grid h-full items-center justify-center gap-x-[clamp(40px,6vw,120px)] px-[clamp(28px,6vw,120px)] pt-14 pb-10 ${column ? 'grid-cols-[var(--col)_minmax(0,760px)]' : 'grid-cols-[var(--col)]'}`)
         }
       >
         <section className={`np-column flex w-(--col) min-w-0 flex-none flex-col ${stacked && column ? 'order-2' : ''}`} aria-label="Player">

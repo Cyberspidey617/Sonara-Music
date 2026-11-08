@@ -182,6 +182,7 @@ export interface OnlineMusicVideo {
 
 /** The music video's picture: the most pixels high to stream. */
 export type VideoQuality = 1080 | 720 | 480 | 360;
+export type VideoFit = 'fit' | 'fill' | '75' | '50';
 
 /** A listen of 30 seconds or more, sent again as it goes on (same id). */
 export interface PlayRecord {
@@ -298,6 +299,8 @@ export interface Settings {
   lyricsTiming: Record<string, LyricsTiming>;
   /** Music videos: the highest quality to stream. */
   videoQuality: VideoQuality;
+  /** Music videos: fit the screen, fill it (cropping the edges), or a smaller size. */
+  videoFit: VideoFit;
 
   // Full-screen player
   backdrop: Backdrop;
@@ -448,6 +451,7 @@ export const DEFAULT_SETTINGS: Settings = {
   lyricsTranslateTo: 'en',
   lyricsTiming: {},
   videoQuality: 1080,
+  videoFit: 'fit',
   backdrop: 'artwork',
   backdropMotion: 1,
   artworkScale: 1,
