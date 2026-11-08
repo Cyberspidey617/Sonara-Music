@@ -41,10 +41,9 @@ const DESKTOP_UA =
 
 /** Itags in order of preference, per quality setting (audio-only formats). */
 type YouTubeQuality = Exclude<AudioQuality, 'lossless'>;
-/** What a stream is for: the song's audio at a quality, or 'video', a music video's picture (no sound). */
-type StreamKind = AudioQuality | 'video';
-/** Video-only formats, up to 1080p: H.264, then VP9. */
-const VIDEO_ITAGS = [137, 248, 136, 247, 135, 244, 134, 243];
+/** What a stream is for: the song's audio at a quality, or a music video's picture (no sound) up to a height. */
+type StreamKind = AudioQuality | `video-${number}`;
+export const VIDEO_HEIGHTS = [1080, 720, 480, 360];
 const ITAG_PREFERENCE: Record<YouTubeQuality, number[]> = {
   // Opus ~160 kbps, AAC 128 kbps, then the smaller ones.
   high: [251, 140, 250, 249, 139],
@@ -124,7 +123,8 @@ async function resolveWith(yt: Innertube, videoId: string, client: ClientName, q
   const status: string | undefined = info.playability_status?.status;
   const reason: string = info.playability_status?.reason ?? status ?? 'no status';
   if (status !== 'OK') return `${status}: ${reason}`;
-  const video = quality === 'video';
+  const video = quality.startsWith('video-');
+  const maxHeight = video ? Number(quality.slice(6)) || 1080 : 0;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const formats: any[] = (info.streaming_data?.adaptive_formats ?? []).filter((f: any) => (video ? f.has_video && !f.has_audio : f.has_audio && !f.has_video));
   if (!formats.length) return `no ${video ? 'video' : 'audio'} formats in the response`;
@@ -132,7 +132,18 @@ async function resolveWith(yt: Innertube, videoId: string, client: ClientName, q
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const usable = formats.filter((f: any) => !f.is_drc && (f.audio_track ? f.audio_track.audio_is_default !== false : true));
   const pool = usable.length ? usable : formats;
-  const order = itag ? [itag] : video ? VIDEO_ITAGS : ITAG_PREFERENCE[quality === 'lossless' ? 'high' : quality];
+  // A video: the tallest picture up to the chosen height, H.264 before VP9 before AV1 (easier to decode).
+  const codecRank = (f: { mime_type?: string }) => (/avc1/.test(String(f.mime_type)) ? 0 : /vp0?9/.test(String(f.mime_type)) ? 1 : 2);
+  const videoOrder = video
+    ? pool
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .filter((f: any) => (f.height ?? 0) <= maxHeight && (f.url || f.signature_cipher || f.cipher))
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .sort((a: any, b: any) => (b.height ?? 0) - (a.height ?? 0) || codecRank(a) - codecRank(b) || (b.bitrate ?? 0) - (a.bitrate ?? 0))
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .map((f: any) => f.itag as number)
+    : [];
+  const order = itag ? [itag] : video ? videoOrder : ITAG_PREFERENCE[quality === 'lossless' ? 'high' : (quality as YouTubeQuality)];
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let format: any = null;
   for (const wanted of order) {
@@ -145,10 +156,10 @@ async function resolveWith(yt: Innertube, videoId: string, client: ClientName, q
   format ??= pool
     .slice()
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    .filter((f: any) => !video || (f.height ?? 0) <= 1080)
+    .filter((f: any) => !video || (f.height ?? 0) <= maxHeight)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     .sort((a: any, b: any) => (b.bitrate ?? 0) - (a.bitrate ?? 0))[0];
-  if (!format) return 'no video format up to 1080p';
+  if (!format) return `no video format up to ${maxHeight}p`;
   if (!format.url && !format.signature_cipher && !format.cipher) return 'only SABR streams (no direct URL)';
   const url = await format.decipher(yt.session.player);
   if (!url) return 'decipher produced no URL';
@@ -340,8 +351,10 @@ export async function handleStreamRequest(request: Request, defaultQuality: () =
   const url = new URL(request.url);
   const videoId = decodeURIComponent(url.pathname.replace(/^\/+/, '')).split('/')[0] ?? '';
   const q = url.searchParams.get('q');
-  // q=video: a music video's picture, for the full-screen player.
-  let quality: StreamKind = q === 'normal' || q === 'low' || q === 'high' || q === 'lossless' || q === 'video' ? q : defaultQuality();
+  // q=video: a music video's picture, for the full-screen player, up to h pixels high.
+  const height = Number(url.searchParams.get('h'));
+  let quality: StreamKind =
+    q === 'video' ? `video-${VIDEO_HEIGHTS.includes(height) ? height : 1080}` : q === 'normal' || q === 'low' || q === 'high' || q === 'lossless' ? q : defaultQuality();
   if (!/^[\w-]{11}$/.test(videoId)) return new Response('bad video id', { status: 400 });
 
   // Lossless when available: your own copy of the song, if you have one.

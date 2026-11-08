@@ -16,6 +16,7 @@ import { NowPlayingQuality } from '@/components/QualityBadge';
 import { rgb, tintFor } from '@/lib/palette';
 import { useLibrary } from '@/state/library';
 import { useOnline } from '@/state/online';
+import type { OnlineMusicVideo } from '@shared/types';
 import { LyricsView } from './LyricsView';
 import { MusicVideo } from './MusicVideo';
 import { ArtworkBackdrop, MeshBackdrop, SolidBackdrop } from './MeshBackdrop';
@@ -127,29 +128,31 @@ export function FullScreenPlayer() {
   const artScale = useLibrary((s) => s.settings.artworkScale) || 1;
   const [solid, setSolid] = useState<string | null>(null);
   // This song's music video: one you attached, or else its video on YouTube; and whether it's on screen.
-  const [videoUrl, setVideoUrl] = useState<string | null>(null);
-  const [videoAttached, setVideoAttached] = useState(false);
+  const [attachedUrl, setAttachedUrl] = useState<string | null>(null);
+  const [found, setFound] = useState<OnlineMusicVideo | null>(null);
   const [showVideo, setShowVideo] = useState(false);
+  const videoQuality = useLibrary((s) => s.settings.videoQuality) || 1080;
+  const videoAttached = !!attachedUrl;
+  const videoUrl = attachedUrl ?? (found ? `ytstream://track/${encodeURIComponent(found.videoId)}?q=video&h=${videoQuality}` : null);
   const videoKey = track?.videoId;
   const online = useOnline((s) => s.online);
   useEffect(() => {
     setShowVideo(false);
-    setVideoUrl(null);
-    setVideoAttached(false);
+    setAttachedUrl(null);
+    setFound(null);
     if (!videoKey) return;
     let alive = true;
     void (async () => {
       const attached = await api.musicVideo(videoKey).catch(() => null);
       if (!alive) return;
       if (attached) {
-        setVideoUrl(attached);
-        setVideoAttached(true);
+        setAttachedUrl(attached);
         return;
       }
       const song = usePlayer.getState().queue[usePlayer.getState().index]?.track;
       if (!online || !song || song.videoId !== videoKey) return;
       const found = await api.onlineMusicVideo(song).catch(() => null);
-      if (alive) setVideoUrl(found);
+      if (alive) setFound(found);
     })();
     return () => {
       alive = false;
@@ -218,6 +221,13 @@ export function FullScreenPlayer() {
           }}
         />
       )}
+      {showVideo && !videoAttached && found && !found.synced && (
+        <div className="pointer-events-none absolute inset-x-0 top-[60px] z-30 flex justify-center px-4">
+          <div className="glass max-w-[560px] animate-rise rounded-pill px-4 py-1.5 text-center type-callout text-secondary">
+            The official video{found.channel ? ` from ${found.channel}` : ''}: it isn’t the same length as the song, so it may not be in sync.
+          </div>
+        </div>
+      )}
       {/* The window's drag strip, with the close, music video and full-screen buttons. */}
       <div className="app-drag absolute inset-x-0 top-0 z-30 flex h-[52px] items-center pl-3">
         {/* Related controls share one piece of glass. */}
@@ -230,10 +240,33 @@ export function FullScreenPlayer() {
             className="relative grid size-8 animate-glyph place-items-center rounded-full text-secondary hover:bg-white/12 hover:text-primary aria-pressed:bg-white/16 aria-pressed:text-primary"
             aria-label={showVideo ? 'Hide the music video' : 'Show the music video'}
             aria-pressed={showVideo}
-            title={showVideo ? 'Hide the music video (Esc)' : 'Music video'}
+            title={showVideo ? 'Hide the music video (Esc)' : !videoAttached && found && !found.synced ? 'Official music video (may not be in sync with the song)' : 'Music video'}
             onClick={() => setShowVideo((v) => !v)}
           >
             <Clapperboard size={16} />
+          </button>
+        )}
+        {showVideo && !videoAttached && found && (
+          <button
+            className="relative flex h-8 animate-glyph items-center gap-1 rounded-full pr-2 pl-2.5 type-callout-emphasized text-secondary tabular-nums hover:bg-white/12 hover:text-primary"
+            aria-label={`Video quality: ${videoQuality}p`}
+            title="Video quality"
+            onClick={(e) =>
+              openMenuAt(
+                e.currentTarget,
+                [
+                  { header: 'Video quality' },
+                  ...([1080, 720, 480, 360] as const).map((q) => ({
+                    label: `${q}p${q === 1080 ? ' (Full HD)' : q === 720 ? ' (HD)' : ''}`,
+                    hint: q === videoQuality ? '✓' : undefined,
+                    onSelect: () => useLibrary.getState().updateSettings({ videoQuality: q }),
+                  })),
+                ],
+                'below-start',
+              )
+            }
+          >
+            {videoQuality}p <ChevronDown size={13} className="opacity-70" />
           </button>
         )}
         <button
@@ -313,8 +346,7 @@ export function FullScreenPlayer() {
                       onSelect: () =>
                         void api.attachMusicVideo(track.videoId, track.title).then((url) => {
                           if (!url) return;
-                          setVideoUrl(url);
-                          setVideoAttached(true);
+                          setAttachedUrl(url);
                           setShowVideo(true);
                           toast(`Music video attached to “${track.title}”`);
                         }),
@@ -327,8 +359,7 @@ export function FullScreenPlayer() {
                             onSelect: () =>
                               void api.removeMusicVideo(track.videoId).then(() => {
                                 setShowVideo(false);
-                                setVideoUrl(null);
-                                setVideoAttached(false);
+                                setAttachedUrl(null);
                               }),
                           },
                         ]

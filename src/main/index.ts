@@ -498,14 +498,13 @@ function registerIpc() {
   ipcMain.on('plays:record', (_event, record: PlayRecord) => recordPlay(record));
   handle('wrapped:get', (month?: string) => wrapped(typeof month === 'string' ? month : undefined));
   handle('video:online', async (track: Track) => {
-    const id = await findMusicVideo({
+    return findMusicVideo({
       videoId: String(track.videoId),
       title: String(track.title ?? ''),
-      artist: String(track.artists?.[0]?.name ?? ''),
+      artists: (track.artists ?? []).map((a) => String(a?.name ?? '')).filter(Boolean),
       duration: Number(track.duration) || undefined,
       isVideo: track.isVideo === true,
     });
-    return id ? `ytstream://track/${encodeURIComponent(id)}?q=video` : null;
   });
   handle('video:attach', (key: string, title: string) => attachMusicVideo(win, String(key), String(title ?? '')));
   handle('video:remove', (key: string) => removeMusicVideo(String(key)));

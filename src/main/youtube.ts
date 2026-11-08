@@ -726,40 +726,77 @@ export async function findOnYouTube(title: string, artist: string): Promise<stri
 }
 
 /** Not a music video: a lyric video, the audio on a still picture, a fan edit. */
-const NOT_A_VIDEO = /\b(lyrics?|lyrical|audio|visuali[sz]er|full song|jukebox|bass boosted|lofi|tutorial|status|whatsapp|shorts?|teaser|trailer)\b/;
-const musicVideos = new Map<string, string | null>();
+const NOT_A_VIDEO = /\b(lyrics?|lyrical|audio|visuali[sz]er|full song|jukebox|bass boosted|lofi|tutorial|status|whatsapp|shorts?|teaser|trailer|eclipsa|8d|reaction|making of)\b/;
+/** Says it is the video. */
+const IS_A_VIDEO = /\b(official (music )?video|music video|video song|full video|official mv|m\/v|[48]k video|hd video)\b/;
+/** Record labels and music channels whose uploads are the real thing. */
+const LABELS =
+  /\b(vevo|t series|saregama|sony music|zee music|tips (music|official)|yrf|yash raj|eros now|speed records|desi melodies|white hill|think music|aditya music|lahari|muzik ?247|goodwill|satyam audios|manorama music|mango music|venus|times music|junglee music|universal music|warner|atlantic records|columbia|interscope|republic records|capitol|def jam|island records|rca records|epic records|emi|hybe|big hit|smtown|jyp|yg entertainment|1thek|stone music|geet mp3|panorama music|sun ?tv|sony music south|divo|saregama tamil|saregama malayalam|think originals|amara muzik|mass audios|wave music)\b/;
+
+export interface FoundVideo {
+  videoId: string;
+  /** As long as the song (within 3 s), so it plays in time with it. */
+  synced: boolean;
+  title: string;
+  channel: string;
+}
+
+const musicVideos = new Map<string, FoundVideo | null>();
 
 /**
- * A song's music video on YouTube Music, as a videoId, or null. Only one as long as the song (within
- * 3 s) counts, so it plays in time with it; a video with a longer intro or a skit would drift apart.
+ * A song's music video on YouTube: from the artist's own channel or a label (never a reupload),
+ * a real video (not the audio on a still picture or a lyric video). One as long as the song comes
+ * first, since it plays in time with it; otherwise the official video, which may not.
  */
-export async function findMusicVideo(track: { videoId: string; title: string; artist: string; duration?: number; isVideo?: boolean }): Promise<string | null> {
-  if (track.isVideo) return track.videoId;
+export async function findMusicVideo(track: { videoId: string; title: string; artists: string[]; duration?: number; isVideo?: boolean }): Promise<FoundVideo | null> {
+  if (track.isVideo) return { videoId: track.videoId, synced: true, title: track.title, channel: track.artists[0] ?? '' };
   if (musicVideos.has(track.videoId)) return musicVideos.get(track.videoId)!;
   // A song from a search suggestion comes without its length: ask for it.
   const duration = track.duration ?? (isYouTubeId(track.videoId) ? (await getTrack(track.videoId).catch(() => null))?.duration : undefined);
-  if (!duration) return null;
   const yt = await getInnertube();
   const wanted = comparable(track.title);
   const wantedFull = comparable(track.title, true);
-  const artist = comparable(track.artist);
-  const results = await yt.music.search(`${track.title} ${track.artist}`.trim(), { type: 'video' });
-  let found: string | null = null;
-  for (const row of searchRows(results.contents as AnyNode[]).slice(0, 6)) {
-    const video = trackFromListItem(row);
-    if (!video?.duration || Math.abs(video.duration - duration) > 3) continue;
-    const full = comparable(video.title, true);
-    if (NOT_A_VIDEO.test(full) || (VERSION.test(full) && !VERSION.test(wantedFull))) continue;
-    const byline = comparable(video.artists.map((a) => a.name).join(' '));
-    const titled = overlap(wanted, comparable(video.title)) >= 0.75 || full.includes(wanted);
-    const byArtist = !artist || !byline || byline.includes(artist) || artist.includes(byline) || full.includes(artist);
-    if (titled && byArtist) {
-      found = video.videoId;
-      break;
-    }
-  }
+  const artists = track.artists.map((a) => comparable(a)).filter(Boolean);
+  const seen = new Set<string>();
+  /** The real videos a search finds: title matches, from the artist or a label, not audio or lyrics. */
+  const search = async (query: string) => {
+    const results = await yt.music.search(query, { type: 'video' });
+    const rows = searchRows(results.contents as AnyNode[])
+      .slice(0, 8)
+      .map((row) => trackFromListItem(row))
+      .filter((v): v is Track => !!v && !seen.has(v.videoId) && (overlap(wanted, comparable(v.title)) >= 0.75 || comparable(v.title, true).includes(wanted)))
+      .slice(0, 5);
+    rows.forEach((r) => seen.add(r.videoId));
+    // Search shortens titles ("Khat" for "Khat (Official Audio)") and leaves out the channel: ask for both.
+    const details = await Promise.all(
+      rows.map(async (row) => {
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const info: any = await yt.getBasicInfo(row.videoId);
+          return { videoId: row.videoId, title: String(info.basic_info?.title ?? row.title), channel: String(info.basic_info?.author ?? ''), seconds: Number(info.basic_info?.duration) || row.duration };
+        } catch {
+          return null;
+        }
+      }),
+    );
+    return details.filter((d): d is NonNullable<typeof d> => {
+      if (!d) return false;
+      const title = comparable(d.title, true);
+      if (NOT_A_VIDEO.test(title) || (VERSION.test(title) && !VERSION.test(wantedFull))) return false;
+      const channel = comparable(d.channel);
+      const byArtist = artists.some((a) => channel.includes(a) || (channel.length > 3 && a.includes(channel)));
+      return byArtist || LABELS.test(channel) || /vevo$/.test(channel.replace(/ /g, ''));
+    });
+  };
+  let candidates = await search(`${track.title} ${track.artists[0] ?? ''}`.trim());
+  // Labels name the video "… Video Song" or "… 8K Video", which a plain search can miss.
+  if (!candidates.some((c) => duration && c.seconds && Math.abs(c.seconds - duration) <= 3)) candidates = [...candidates, ...(await search(`${wanted} video song`))];
+  const inTime = candidates.find((c) => duration && c.seconds && Math.abs(c.seconds - duration) <= 3);
+  const official = candidates.find((c) => IS_A_VIDEO.test(comparable(c.title, true))) ?? candidates[0];
+  const pick = inTime ?? official;
+  const found = pick ? { videoId: pick.videoId, synced: pick === inTime, title: pick.title, channel: pick.channel } : null;
   if (musicVideos.size > 300) musicVideos.clear();
   musicVideos.set(track.videoId, found);
-  log.info(`[${track.videoId}] music video: ${found ?? 'none in time with the song'}`);
+  log.info(`[${track.videoId}] music video: ${found ? `${found.videoId} (${found.synced ? 'in time' : 'may not be in time'}, ${found.channel})` : 'none'}`);
   return found;
 }

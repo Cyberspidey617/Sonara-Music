@@ -171,6 +171,18 @@ export interface LyricsTiming {
   lines?: Record<string, number>;
 }
 
+/** A song's music video found on YouTube. */
+export interface OnlineMusicVideo {
+  videoId: string;
+  /** As long as the song, so it plays in time with it; otherwise it may not. */
+  synced: boolean;
+  title: string;
+  channel: string;
+}
+
+/** The music video's picture: the most pixels high to stream. */
+export type VideoQuality = 1080 | 720 | 480 | 360;
+
 /** A listen of 30 seconds or more, sent again as it goes on (same id). */
 export interface PlayRecord {
   id: string;
@@ -284,6 +296,8 @@ export interface Settings {
   lyricsTranslateTo: string;
   /** Lyric timing you adjusted, per song (by videoId). */
   lyricsTiming: Record<string, LyricsTiming>;
+  /** Music videos: the highest quality to stream. */
+  videoQuality: VideoQuality;
 
   // Full-screen player
   backdrop: Backdrop;
@@ -326,6 +340,8 @@ export interface Settings {
   taste: Taste;
   /** The taste picker was finished or skipped. */
   tasteSeen: boolean;
+  /** The version whose What's New you've seen (shown once after each update). */
+  lastSeenVersion: string;
   startPage: StartPage;
   sidebarSearch: boolean;
   sidebarRecent: boolean;
@@ -431,6 +447,7 @@ export const DEFAULT_SETTINGS: Settings = {
   lyricsTranslation: true,
   lyricsTranslateTo: 'en',
   lyricsTiming: {},
+  videoQuality: 1080,
   backdrop: 'artwork',
   backdropMotion: 1,
   artworkScale: 1,
@@ -452,6 +469,7 @@ export const DEFAULT_SETTINGS: Settings = {
   guideSeen: false,
   taste: { languages: [], genres: [], artists: [] },
   tasteSeen: false,
+  lastSeenVersion: '',
   startPage: 'home',
   sidebarSearch: true,
   sidebarRecent: true,
@@ -587,8 +605,8 @@ export interface ObsidianApi {
   onImportProgress(handler: (done: number, total: number) => void): () => void;
   /** A song's attached music video (its address for the player), or null. Keyed by the song's id. */
   musicVideo(key: string): Promise<string | null>;
-  /** The song's music video on YouTube (as long as the song, so they play in time), or null. */
-  onlineMusicVideo(track: Track): Promise<string | null>;
+  /** The song's music video on YouTube, or null. */
+  onlineMusicVideo(track: Track): Promise<OnlineMusicVideo | null>;
   /** A listen of 30 seconds or more, for Wrapped. */
   recordPlay(record: PlayRecord): void;
   /** A month of your listening (the latest one with listening when none is given). */

@@ -31,6 +31,7 @@ import { WindowControls } from './WindowControls';
 import { FirstRunGuide } from './FirstRunGuide';
 import { TastePicker } from './TastePicker';
 import { UpdateDialog } from './UpdateDialog';
+import { WhatsNew } from './WhatsNew';
 import { OfflinePill } from './OfflinePill';
 import { WrappedPage } from '@/pages/WrappedPage';
 import { Segmented } from '@/components/Segmented';
@@ -212,6 +213,7 @@ export function AppShell() {
       <FirstRunGuide />
       <TastePicker />
       <UpdateDialog />
+      <WhatsNew />
       <WindowControls />
     </div>
   );
