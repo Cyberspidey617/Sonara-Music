@@ -18,9 +18,14 @@ const NOTES: { version: string; notes: Note[] }[] = [
         body: 'No more stutter after skipping ahead: the picture waits for the new spot to load and starts again in time. Videos that are a different length from the song now play with their own sound (the song goes on silently), at the same volume.',
       },
       {
+        icon: Sparkles,
+        title: 'Your seek bar, your way',
+        body: 'Settings › Player › Seek bar: Rounded, Line or a moving Wave, in white, your accent or any colour, as thick as you like, with the knob and times shown as you choose. Every seek bar follows it, the mini player’s too.',
+      },
+      {
         icon: Clapperboard,
         title: 'Video controls',
-        body: 'A seek bar with play and skip under the video, a size menu (fit, fill, 75%, 50%) that keeps each video’s own shape, and controls that fade away while you watch, coming back when you move the mouse.',
+        body: 'A seek bar with play and skip under the video, a size menu (original ratio, fill, 75%, 50%) that keeps each video’s own shape, and controls that fade away while you watch, coming back when you move the mouse.',
       },
     ],
   },
@@ -94,15 +99,13 @@ export function WhatsNew() {
         return;
       }
       const notes = NOTES.filter((n) => compare(n.version, before) > 0 && compare(n.version, current) <= 0);
+      // Seen as soon as it's shown: once per update, even if Sonara is closed with it open.
+      updateSettings({ lastSeenVersion: current });
       if (notes.length) setShown({ current, notes });
-      else updateSettings({ lastSeenVersion: current });
     });
   }, []);
   if (!shown) return null;
-  const close = () => {
-    useLibrary.getState().updateSettings({ lastSeenVersion: shown.current });
-    setShown(null);
-  };
+  const close = () => setShown(null);
   return (
     <Modal title={`What’s new in Sonara ${shown.current}`} onClose={close} width={500}>
       <div className="no-scrollbar max-h-[min(62vh,560px)] overflow-y-auto px-7">

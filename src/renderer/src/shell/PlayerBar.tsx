@@ -1,4 +1,5 @@
 import { Ellipsis, ListMusic, Maximize2, MicVocal, PictureInPicture2, Repeat, Repeat1, Shuffle, SlidersVertical } from 'lucide-react';
+import { SeekTrack, useSeekLook } from '@/components/SeekTrack';
 import { api, isElectron } from '@/lib/api';
 import { Artwork } from '@/components/Artwork';
 import { ExplicitBadge, LogoMark, NextGlyph, PauseGlyph, PlayGlyph, PreviousGlyph } from '@/components/icons';
@@ -38,6 +39,7 @@ function Lcd() {
   const setFullScreen = useUi((s) => s.setFullScreen);
   const fullScreen = useUi((s) => s.fullScreen);
   const { bar, elapsed, remaining, dragging, handlers } = useScrubber();
+  const look = useSeekLook();
 
   if (!track) {
     return (
@@ -76,10 +78,10 @@ function Lcd() {
         )}
       </div>
       <div className="group/scrub absolute inset-x-0 bottom-0 h-3.5 cursor-pointer touch-none" data-scrubber data-dragging={dragging || undefined} {...handlers}>
-        <span ref={elapsed} className="pointer-events-none absolute bottom-[11px] left-0 type-[600_11px/13px] tabular-nums text-primary opacity-0 transition-opacity group-hover/scrub:opacity-100 group-data-dragging/scrub:opacity-100" />
-        <span ref={remaining} className="pointer-events-none absolute right-0 bottom-[11px] type-[600_11px/13px] tabular-nums text-primary opacity-0 transition-opacity group-hover/scrub:opacity-100 group-data-dragging/scrub:opacity-100" />
-        <div className="absolute inset-x-0 bottom-1.5 h-0.5 overflow-hidden rounded-[1px] bg-quaternary transition-[height,bottom] duration-100 group-hover/scrub:bottom-[5px] group-hover/scrub:h-1 group-data-dragging/scrub:bottom-[5px] group-data-dragging/scrub:h-1">
-          <div ref={bar} className={`size-full origin-left scale-x-(--progress) [--progress:0] ${status === 'loading' ? 'animate-pulse bg-primary' : 'bg-secondary group-hover/scrub:bg-primary'}`} />
+        <span ref={elapsed} className={`pointer-events-none absolute bottom-[11px] left-0 type-[600_11px/13px] tabular-nums text-primary opacity-0 transition-opacity group-hover/scrub:opacity-100 group-data-dragging/scrub:opacity-100 ${look.times ? '' : 'hidden'}`} />
+        <span ref={remaining} className={`pointer-events-none absolute right-0 bottom-[11px] type-[600_11px/13px] tabular-nums text-primary opacity-0 transition-opacity group-hover/scrub:opacity-100 group-data-dragging/scrub:opacity-100 ${look.times ? '' : 'hidden'}`} />
+        <div className="absolute inset-x-0 bottom-0">
+          <SeekTrack look={look} size="small" playing={status === 'playing'} loading={status === 'loading'} barRef={bar} />
         </div>
       </div>
     </div>

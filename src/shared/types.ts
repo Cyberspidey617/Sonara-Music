@@ -184,6 +184,22 @@ export interface OnlineMusicVideo {
 export type VideoQuality = 1080 | 720 | 480 | 360;
 export type VideoFit = 'fit' | 'fill' | '75' | '50';
 
+/** How the seek bars look: Rounded (thick), Line (thin) or Wave (the played part a moving wave). */
+export type SeekStyle = 'rounded' | 'line' | 'wave';
+export type SeekColor = 'white' | 'accent' | 'custom';
+/** When the knob shows: on hover, always, or only while dragging. */
+export type SeekKnob = 'hover' | 'always' | 'drag';
+export interface SeekLook {
+  style: SeekStyle;
+  color: SeekColor;
+  custom: string;
+  /** A factor of the style's own thickness. */
+  thickness: number;
+  knob: SeekKnob;
+  /** The elapsed and remaining times beside it. */
+  times: boolean;
+}
+
 /** A listen of 30 seconds or more, sent again as it goes on (same id). */
 export interface PlayRecord {
   id: string;
@@ -301,6 +317,13 @@ export interface Settings {
   videoQuality: VideoQuality;
   /** Music videos: fit the screen, fill it (cropping the edges), or a smaller size. */
   videoFit: VideoFit;
+  // Seek bars (all of them: full-screen, video, player bar, mini player)
+  seekStyle: SeekStyle;
+  seekColor: SeekColor;
+  seekCustomColor: string;
+  seekThickness: number;
+  seekKnob: SeekKnob;
+  seekTimes: boolean;
 
   // Full-screen player
   backdrop: Backdrop;
@@ -452,6 +475,12 @@ export const DEFAULT_SETTINGS: Settings = {
   lyricsTiming: {},
   videoQuality: 1080,
   videoFit: 'fit',
+  seekStyle: 'rounded',
+  seekColor: 'white',
+  seekCustomColor: '#a78bfa',
+  seekThickness: 1,
+  seekKnob: 'hover',
+  seekTimes: true,
   backdrop: 'artwork',
   backdropMotion: 1,
   artworkScale: 1,
@@ -539,6 +568,8 @@ export interface PlaybackState {
   position?: number;
   duration?: number;
   accent?: string;
+  /** How the seek bar looks, for the mini player's. */
+  seek?: SeekLook;
   /** The songs after this one (up to 20), with their places in the queue, for the mini player's Up Next. */
   upNext?: { index: number; title: string; artist: string; thumbnail?: string }[];
 }
@@ -691,4 +722,16 @@ export interface ObsidianApi {
   searchYourMusic(query: string): Promise<Track[]>;
   /** A YouTube video for a local or server song, so radio can follow it. */
   findOnYouTube(title: string, artist: string): Promise<string | null>;
+}
+
+/** The seek bars' look, from the settings (or a draft of them). */
+export function seekLookOf(s: Partial<Settings>): SeekLook {
+  return {
+    style: s.seekStyle ?? DEFAULT_SETTINGS.seekStyle,
+    color: s.seekColor ?? DEFAULT_SETTINGS.seekColor,
+    custom: s.seekCustomColor ?? DEFAULT_SETTINGS.seekCustomColor,
+    thickness: s.seekThickness ?? DEFAULT_SETTINGS.seekThickness,
+    knob: s.seekKnob ?? DEFAULT_SETTINGS.seekKnob,
+    times: s.seekTimes ?? DEFAULT_SETTINGS.seekTimes,
+  };
 }

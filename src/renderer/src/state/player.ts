@@ -8,7 +8,7 @@
 import { attachEqualizer } from '@/lib/equalizer';
 import { markOffline } from './online';
 import { create } from 'zustand';
-import { isYouTubeId, type AudioFormat, type Track, type TrackSource } from '@shared/types';
+import { isYouTubeId, seekLookOf, type AudioFormat, type Track, type TrackSource } from '@shared/types';
 import { api, isElectron } from '@/lib/api';
 import { artworkAtPixels, largeArtwork } from '@/lib/artwork';
 import { artistLine, uid } from '@/lib/format';
@@ -253,10 +253,16 @@ function reportPlayback() {
     position,
     duration,
     accent: getComputedStyle(document.documentElement).getPropertyValue('--keyColor').trim() || undefined,
+    seek: seekLookOf(useLibrary.getState().settings),
     upNext: queue.slice(index + 1, index + 21).map((q, i) => ({ index: index + 1 + i, title: q.track.title, artist: artistLine(q.track), thumbnail: q.track.thumbnail ? artworkAtPixels(q.track.thumbnail, 96) : undefined })),
   });
   if ('mediaSession' in navigator) navigator.mediaSession.playbackState = status === 'playing' ? 'playing' : status === 'paused' ? 'paused' : 'none';
 }
+
+// The mini player draws its seek bar in the chosen look: tell it when the look changes.
+useLibrary.subscribe((s, before) => {
+  if (JSON.stringify(seekLookOf(s.settings)) !== JSON.stringify(seekLookOf(before.settings))) reportPlayback();
+});
 
 // ---- Queue helpers ---------------------------------------------------------------------
 

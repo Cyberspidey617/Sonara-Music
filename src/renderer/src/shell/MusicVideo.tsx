@@ -4,8 +4,6 @@ import { api } from '@/lib/api';
 import { useLibrary } from '@/state/library';
 import { getPlayhead, listeningVolume, setSongSilenced, usePlayer } from '@/state/player';
 
-/** The song and the video's sound this far apart: the song was moved (a seek, a skip). */
-const JUMP = 1.5;
 /** The picture against its clock: drift the eye can't see. */
 const SETTLED = 0.03;
 /** The picture against its clock: past this, lips visibly don't match. */
@@ -80,45 +78,76 @@ export function MusicVideo({
     a?.addEventListener('playing', onPlaying);
     a?.addEventListener('ended', onEnded);
 
+    const moveTo = (to: number) => {
+      v.currentTime = Math.max(0, Math.min(to, (v.duration || Infinity) - 0.1));
+      v.playbackRate = 1;
+      jumpedAt = performance.now();
+    };
+    /** Keeps the picture with a clock: by speed when close, holding still when ahead, jumping when far. */
+    const follow = (clock: number, limit: number, want: boolean) => {
+      const off = v.currentTime - clock;
+      if (holding) {
+        if (!want || off <= SETTLED) {
+          holding = false;
+          if (want) void v.play().catch(() => undefined);
+        } else if (off > HOLD_MAX) {
+          holding = false;
+          moveTo(clock + lead);
+        }
+      } else if (off > limit && off <= HOLD_MAX && !loading()) {
+        holding = true;
+        v.playbackRate = 1;
+        v.pause();
+      } else if (Math.abs(off) > limit) moveTo(clock + lead);
+      else if (Math.abs(off) > SETTLED) v.playbackRate = Math.min(1.15, Math.max(0.85, 1 - off * 0.6));
+      else if (v.playbackRate !== 1) v.playbackRate = 1;
+    };
+
+    // The song a moment ago: a jump in it (more than time explains) is a seek or a skip.
+    let lastSong = getPlayhead();
+    let lastAt = performance.now();
+    // Where the song was moved to, for a video with its own sound to go to.
+    let target: number | null = null;
+
     let timer = 0;
     const tick = () => {
       const now = performance.now();
       const song = getPlayhead();
       const want = songPlaying();
-      if (a && Number.isFinite(song)) {
-        if (!a.paused && !a.ended && Math.abs(a.currentTime - song) > JUMP) a.pause(); // the song was moved
-        else if (!a.paused && loading() && !holding) a.pause(); // the picture is loading: wait for it
-        else if (a.paused && !a.ended && want && !loading() && !holding && Math.abs(v.currentTime - song) <= JUMP) {
+      const moved = Number.isFinite(song) && Number.isFinite(lastSong) && Math.abs(song - lastSong - (want ? (now - lastAt) / 1000 : 0)) > 1;
+      lastSong = song;
+      lastAt = now;
+      const settling = jumpedAt !== 0 && loading() && now - jumpedAt < LOAD_TIMEOUT;
+
+      if (a) {
+        // A video with its own sound runs on its own time, as any video does: the song (silent) only
+        // matters when you move it, and then the video goes to the same point.
+        if (moved) {
+          target = song;
+          a.pause();
+        }
+        if (target !== null && !settling && v.readyState >= 1) {
+          if (Math.abs(v.currentTime - target) > PICTURE_JUMP) moveTo(target + lead);
+          target = null;
+        }
+        if (holding && a.paused) {
+          // Nothing to wait for while the sound is stopped.
+          holding = false;
+          if (want) void v.play().catch(() => undefined);
+        }
+        if (!want || a.ended) {
+          if (!a.paused) a.pause();
+        } else if (!a.paused && loading() && !holding) {
+          a.pause(); // the picture is loading: the sound waits for it
+        } else if (a.paused && target === null && !settling && !loading()) {
           a.currentTime = v.currentTime; // start together, from the picture's moment
           void a.play().catch(() => undefined);
         }
-      }
-      const heard = !!a && !a.paused && !a.seeking && a.readyState >= 2;
-      const clock = heard ? a.currentTime : song;
-      const limit = heard ? PICTURE_JUMP : 0.4;
-      const settling = jumpedAt && loading() && now - jumpedAt < LOAD_TIMEOUT;
-      if (!settling && Number.isFinite(clock) && v.readyState >= 1) {
-        const off = v.currentTime - clock;
-        const moveTo = (to: number) => {
-          v.currentTime = Math.max(0, Math.min(to, (v.duration || Infinity) - 0.1));
-          v.playbackRate = 1;
-          jumpedAt = now;
-        };
-        if (holding) {
-          if (!want || off <= SETTLED) {
-            holding = false;
-            if (want) void v.play().catch(() => undefined);
-          } else if (off > HOLD_MAX) {
-            holding = false;
-            moveTo(clock + lead);
-          }
-        } else if (off > limit && off <= HOLD_MAX && !loading()) {
-          holding = true;
-          v.playbackRate = 1;
-          v.pause();
-        } else if (Math.abs(off) > limit) moveTo(clock + lead);
-        else if (Math.abs(off) > SETTLED) v.playbackRate = Math.min(1.15, Math.max(0.85, 1 - off * 0.6));
-        else if (v.playbackRate !== 1) v.playbackRate = 1;
+        // The picture follows its own sound.
+        if (!a.paused && !a.seeking && a.readyState >= 2 && !settling) follow(a.currentTime, PICTURE_JUMP, want);
+      } else if (!settling && Number.isFinite(song) && v.readyState >= 1) {
+        // A video in time with the song follows the song, which is heard.
+        follow(song, 0.4, want);
       }
       timer = window.setTimeout(tick, 100);
     };

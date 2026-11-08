@@ -318,10 +318,13 @@ function chunkedBody(videoId: string, quality: StreamKind, first: ResolvedStream
     }
   };
 
+  // googlevideo sometimes drops a connection partway through a chunk ("terminated"): the stream
+  // picks up again from the same byte instead of failing, which would make the player stall.
+  let drops = 0;
   return new ReadableStream<Uint8Array>({
     async pull(ctrl) {
-      try {
-        for (;;) {
+      for (;;) {
+        try {
           if (!reader && !(await openNext())) {
             ctrl.close();
             return;
@@ -332,13 +335,22 @@ function chunkedBody(videoId: string, quality: StreamKind, first: ResolvedStream
             continue;
           }
           position += value.byteLength;
+          drops = 0;
           ctrl.enqueue(value);
           return;
+        } catch (error) {
+          if (controller.signal.aborted) return;
+          if (reader && drops < 4) {
+            drops++;
+            log.warn(`[${videoId}] connection dropped at byte ${position}; picking up again (${drops})`);
+            reader.cancel().catch(() => undefined);
+            reader = null;
+            continue;
+          }
+          log.error(`[${videoId}] stream failed at byte ${position}: ${String(error)}`);
+          ctrl.error(error);
+          return;
         }
-      } catch (error) {
-        if (controller.signal.aborted) return;
-        log.error(`[${videoId}] stream failed at byte ${position}: ${String(error)}`);
-        ctrl.error(error);
       }
     },
     cancel() {

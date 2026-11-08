@@ -1,11 +1,12 @@
 import { EqualizerPanel } from '@/components/Equalizer';
+import { SeekTrack } from '@/components/SeekTrack';
 import { useQueryClient } from '@tanstack/react-query';
 import appIcon from '@/assets/app-icon.png';
 import { Check, Clock, Download, FolderOpen, FolderPlus, Heart, House, Loader2, RefreshCw, RotateCcw, Server, Sparkles, Trash2 } from 'lucide-react';
 import { SHORTCUTS } from '@/components/Dialogs';
 import { createContext, useContext, useEffect, useState, type CSSProperties, type ReactNode } from 'react';
 import { create } from 'zustand';
-import { DEFAULT_SETTINGS, type AudioQuality, type DownloadQuality, type MiniPlayerWhen, type Settings, type SpatialAudio, type UpdateState } from '@shared/types';
+import { DEFAULT_SETTINGS, seekLookOf, type AudioQuality, type DownloadQuality, type MiniPlayerWhen, type Settings, type SpatialAudio, type UpdateState } from '@shared/types';
 import { api } from '@/lib/api';
 import { ACCENTS, LYRIC_FONTS, THEMES, themeVars, useThemeColors } from '@/lib/appearance';
 import { artworkAtPixels, largeArtwork } from '@/lib/artwork';
@@ -557,6 +558,58 @@ function PlayerTab() {
         <Slider label="Artwork size" value={s.artworkScale} min={0.7} max={1.3} step={0.05} defaultValue={1} format={percent} onChange={(artworkScale) => set({ artworkScale })} />
       </Row>
     </Section>
+    <Section title="Seek bar" footer={<ResetButton keys={['seekStyle', 'seekColor', 'seekCustomColor', 'seekThickness', 'seekKnob', 'seekTimes']} />}>
+      <Row title="Style" detail="For every seek bar: the full-screen player, music videos, the player bar and the mini player. Wave moves while music plays.">
+        <Segmented
+          label="Seek bar style"
+          value={s.seekStyle ?? 'rounded'}
+          options={[
+            { value: 'rounded', label: 'Rounded' },
+            { value: 'line', label: 'Line' },
+            { value: 'wave', label: 'Wave' },
+          ]}
+          onChange={(seekStyle) => set({ seekStyle })}
+        />
+      </Row>
+      <Row title="Colour" detail="Accent follows the song when the accent does.">
+        <div className="flex items-center gap-3">
+          {s.seekColor === 'custom' && (
+            <label className="relative grid size-8 cursor-pointer place-items-center overflow-hidden rounded-full ring-1 ring-white/20" title="Seek bar colour">
+              <input type="color" className="absolute inset-0 cursor-pointer opacity-0" value={s.seekCustomColor ?? '#a78bfa'} onChange={(e) => set({ seekCustomColor: e.target.value })} />
+              <span className="size-full" style={{ background: s.seekCustomColor ?? '#a78bfa' }} />
+            </label>
+          )}
+          <Segmented
+            label="Seek bar colour"
+            value={s.seekColor ?? 'white'}
+            options={[
+              { value: 'white', label: 'White' },
+              { value: 'accent', label: 'Accent' },
+              { value: 'custom', label: 'Custom' },
+            ]}
+            onChange={(seekColor) => set({ seekColor })}
+          />
+        </div>
+      </Row>
+      <Row title="Thickness">
+        <Slider label="Seek bar thickness" value={s.seekThickness ?? 1} min={0.5} max={2} step={0.1} defaultValue={1} format={percent} onChange={(seekThickness) => set({ seekThickness })} />
+      </Row>
+      <Row title="Knob" detail="The round handle at the playing point.">
+        <Segmented
+          label="Seek bar knob"
+          value={s.seekKnob ?? 'hover'}
+          options={[
+            { value: 'hover', label: 'On hover' },
+            { value: 'always', label: 'Always' },
+            { value: 'drag', label: 'While dragging' },
+          ]}
+          onChange={(seekKnob) => set({ seekKnob })}
+        />
+      </Row>
+      <Row title="Times" detail="The time played and the time left, beside the bar.">
+        <Toggle label="Seek bar times" on={s.seekTimes ?? true} onChange={(seekTimes) => set({ seekTimes })} />
+      </Row>
+    </Section>
     <Section
       title="Waveform"
       footer={<ResetButton keys={['waveColor', 'waveCustomColor', 'waveBars', 'waveThickness', 'waveHeight', 'waveSensitivity', 'waveAutoLevel', 'waveSmoothing', 'waveShape', 'waveStyle', 'waveIdle']} />}
@@ -966,8 +1019,15 @@ function PlayerPreview() {
           <span className="flex min-w-0 flex-col gap-1">
             <span className="truncate type-title-1-emphasized text-primary">{track?.title ?? 'Nightfall'}</span>
             <span className="truncate type-title-3 text-secondary">{track ? track.artists.map((a) => a.name).join(', ') : 'Pebble'}</span>
-            <span className="mt-3 block h-1 w-48 overflow-hidden rounded-full bg-white/20">
-              <span className="block h-full w-2/5 bg-white/85" />
+            {/* The draft's seek bar, two fifths of the way in. */}
+            <span className="group/scrub mt-2 block w-56 [--progress:0.4]">
+              <SeekTrack look={seekLookOf(s)} playing={playing} />
+              {(s.seekTimes ?? true) && (
+                <span className="flex justify-between type-[500_11px/13px] tabular-nums text-tertiary">
+                  <span>1:24</span>
+                  <span>-2:06</span>
+                </span>
+              )}
             </span>
           </span>
         </div>

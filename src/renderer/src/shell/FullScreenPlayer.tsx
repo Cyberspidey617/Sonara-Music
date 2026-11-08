@@ -23,25 +23,21 @@ import { ArtworkBackdrop, MeshBackdrop, SolidBackdrop } from './MeshBackdrop';
 import { SleepCountdown, SleepTimerButton } from './SleepTimer';
 import { UpNext } from './UpNext';
 import { useScrubber } from './useScrubber';
+import { SeekTrack, useSeekLook } from '@/components/SeekTrack';
 import { VolumeIcon, VolumeSlider } from './VolumeControl';
 
 /** Obsidian's seek bar: a thick rounded track that thickens further under the pointer. */
+/** The full-screen player's seek bar (and the music video's), in the look chosen in Settings. */
 function Scrubber() {
   const { bar, elapsed, remaining, dragging, handlers } = useScrubber();
+  const look = useSeekLook();
+  const playing = usePlayer((s) => s.status === 'playing');
   return (
     <div className="group/scrub mt-5" data-dragging={dragging || undefined}>
-      <div className="relative flex h-5 cursor-pointer touch-none items-center [--progress:0]" data-progress-host {...handlers}>
-        <div className="relative h-1.5 flex-1 overflow-hidden rounded-full bg-quaternary transition-[height] duration-150 group-hover/scrub:h-2.5 group-data-dragging/scrub:h-2.5">
-          <div ref={bar} className="size-full origin-left scale-x-(--progress) rounded-full bg-secondary transition-colors [--progress:0] group-hover/scrub:bg-primary group-data-dragging/scrub:bg-primary" />
-        </div>
-        {/* The thumb: hidden at rest, a small knob on hover, and while dragging a capsule
-            of clear glass that magnifies the track beneath it (iOS 26's sliders). */}
-        <span
-          aria-hidden="true"
-          className="pointer-events-none absolute top-1/2 left-[calc(var(--progress)*100%)] h-3 w-3 -translate-x-1/2 -translate-y-1/2 scale-0 rounded-full bg-white shadow-[0_1px_4px_rgb(0_0_0/0.4)] transition-[scale,width,height,background-color,box-shadow] duration-300 ease-(--ease-spring) group-hover/scrub:scale-100 group-data-dragging/scrub:h-[26px] group-data-dragging/scrub:w-[42px] group-data-dragging/scrub:scale-100 group-data-dragging/scrub:bg-white/15 group-data-dragging/scrub:shadow-[inset_0_1px_0_rgb(255_255_255/0.6),inset_0_-1px_1px_rgb(255_255_255/0.2),0_6px_18px_rgb(0_0_0/0.3)] group-data-dragging/scrub:backdrop-blur-[1px] group-data-dragging/scrub:backdrop-brightness-125 group-data-dragging/scrub:backdrop-saturate-150"
-        />
+      <div className="relative flex cursor-pointer touch-none items-center" {...handlers}>
+        <SeekTrack look={look} playing={playing} barRef={bar} />
       </div>
-      <div className="mt-1 flex justify-between type-[500_12px/14px] tabular-nums text-tertiary">
+      <div className={`mt-1 flex justify-between type-[500_12px/14px] tabular-nums text-tertiary ${look.times ? '' : 'hidden'}`}>
         <span ref={elapsed} />
         <span ref={remaining} />
       </div>
@@ -375,7 +371,7 @@ export function FullScreenPlayer() {
                     { header: 'Video size' },
                     ...(
                       [
-                        ['fit', 'Fit the screen (whole video)'],
+                        ['fit', 'Original ratio (the whole video, as large as fits)'],
                         ['fill', 'Fill the screen (crops the edges)'],
                         ['75', '75%'],
                         ['50', '50%'],

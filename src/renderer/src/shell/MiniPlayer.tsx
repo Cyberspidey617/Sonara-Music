@@ -11,6 +11,8 @@ import {
   type MiniLayout,
   type PlaybackState,
 } from "@shared/types";
+import { SeekTrack } from "@/components/SeekTrack";
+import { seekLookOf } from "@shared/types";
 import { api } from "@/lib/api";
 import {
   LogoMark,
@@ -102,8 +104,7 @@ export function MiniPlayer() {
       const elapsed =
         (state.position || 0) +
         (state.playing ? (performance.now() - state.at) / 1000 : 0);
-      if (bar.current)
-        bar.current.style.transform = `scaleX(${duration ? Math.min(1, elapsed / duration) : 0})`;
+      track.current?.style.setProperty("--progress", String(duration ? Math.min(1, elapsed / duration) : 0));
       if (state.playing) frame = requestAnimationFrame(draw);
     };
     draw();
@@ -303,7 +304,7 @@ export function MiniPlayer() {
             {/* The progress line: click (or drag along) it to move through the song. */}
             <div
               data-seek
-              className={`group/seek absolute inset-x-4 bottom-0 h-3.5 ${state.duration ? "cursor-pointer" : "pointer-events-none"}`}
+              className={`group/scrub absolute inset-x-4 bottom-0 h-3.5 ${state.duration ? "cursor-pointer" : "pointer-events-none"}`}
               role="slider"
               aria-label="Song position"
               aria-valuemin={0}
@@ -315,14 +316,13 @@ export function MiniPlayer() {
               }}
               onPointerMove={(e) => e.buttons === 1 && seek(e.clientX)}
             >
-              <div
-                ref={track}
-                className="absolute inset-x-2 bottom-1.5 h-0.5 overflow-hidden rounded-full bg-white/10 transition-[height] duration-200 group-hover/seek:h-1"
-              >
-                <div
-                  ref={bar}
-                  className="h-full origin-left"
-                  style={{ background: accent, transform: "scaleX(0)" }}
+              <div ref={track} className="absolute inset-x-2 bottom-0 [--progress:0]">
+                <SeekTrack
+                  look={state.seek ?? seekLookOf({ seekColor: "accent" })}
+                  size="small"
+                  playing={state.playing}
+                  accent={accent}
+                  barRef={bar}
                 />
               </div>
             </div>
