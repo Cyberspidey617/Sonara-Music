@@ -3,7 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { app } from 'electron';
-import type { PlayRecord, Track, Wrapped, WrappedArtist, WrappedSong } from '../shared/types';
+import type { ListeningProfile, PlayRecord, Track, Wrapped, WrappedArtist, WrappedSong } from '../shared/types';
 import { log } from './log';
 
 interface Play {
@@ -246,5 +246,41 @@ export function wrapped(month?: string): Wrapped {
     hours,
     days: days.map((d) => Math.round(d)),
     ...(top.day && { topDay: { day: top.day, minutes: Math.round(top.minutes) } }),
+  };
+}
+
+/** Your listening in the last `days` days: the songs and artists you play most, and when. */
+export function listeningProfile(days = 60): ListeningProfile {
+  const since = Date.now() - days * 86_400_000;
+  const months = new Set<string>();
+  for (let t = since; t <= Date.now() + 86_400_000; t += 20 * 86_400_000) months.add(monthOf(t));
+  months.add(monthOf(Date.now()));
+  const songs = new Map<string, { track: Track; plays: number; lastAt: number }>();
+  const artists = new Map<string, { name: string; id?: string; plays: number }>();
+  const hours = Array<number>(24).fill(0);
+  let plays = 0;
+  for (const month of months) {
+    for (const play of load(month)) {
+      if (play.at < since) continue;
+      plays++;
+      hours[new Date(play.at).getHours()]! += 1;
+      const song = songs.get(play.track.videoId) ?? { track: play.track, plays: 0, lastAt: 0 };
+      song.plays++;
+      song.lastAt = Math.max(song.lastAt, play.at);
+      song.track = play.track;
+      songs.set(play.track.videoId, song);
+      for (const a of play.track.artists) {
+        const key = a.id ?? a.name.toLowerCase();
+        const artist = artists.get(key) ?? { name: a.name, ...(a.id && { id: a.id }), plays: 0 };
+        artist.plays++;
+        artists.set(key, artist);
+      }
+    }
+  }
+  return {
+    plays,
+    songs: [...songs.values()].sort((a, b) => b.plays - a.plays || b.lastAt - a.lastAt).slice(0, 80),
+    artists: [...artists.values()].sort((a, b) => b.plays - a.plays).slice(0, 25),
+    hours,
   };
 }

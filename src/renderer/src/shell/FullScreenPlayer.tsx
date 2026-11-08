@@ -1,5 +1,6 @@
 import { hasViewTransitions, transition } from '@/lib/motion';
-import { ChevronDown, Clapperboard, Ellipsis, Proportions, ListMusic, Maximize, MicVocal, Minimize, Plus, Repeat, Repeat1, Shuffle, SlidersVertical, X } from 'lucide-react';
+import { ShuffleGlyph } from '@/components/ShuffleGlyph';
+import { ChevronDown, Clapperboard, Ellipsis, Proportions, ListMusic, Maximize, MicVocal, Minimize, Plus, Repeat, Repeat1, SlidersVertical, X } from 'lucide-react';
 import { useEffect, useState, type CSSProperties } from 'react';
 import { Artwork } from '@/components/Artwork';
 import { ExplicitBadge, NextGlyph, PauseGlyph, PlayGlyph, PreviousGlyph } from '@/components/icons';
@@ -57,13 +58,14 @@ function Transport() {
   const playing = usePlayer((s) => s.status === 'playing' || s.status === 'loading');
   const hasNext = usePlayer((s) => s.index + 1 < s.queue.length || s.repeat === 'all' || s.radioLoading);
   const shuffle = usePlayer((s) => s.shuffle);
+  const smart = usePlayer((s) => s.smart);
   const repeat = usePlayer((s) => s.repeat);
   const { togglePlay, next, previous, toggleShuffle, cycleRepeat } = usePlayer.getState();
   return (
     <div className="mx-auto mt-3 flex w-full max-w-[400px] items-center justify-between">
-      <button className={`${round} size-11 text-tertiary hover:text-primary aria-pressed:text-primary`} aria-label="Shuffle" aria-pressed={shuffle} onClick={toggleShuffle}>
-        <Shuffle size={20} strokeWidth={2.2} />
-      </button>
+<button className={`${round} size-11 text-tertiary hover:text-primary aria-pressed:text-primary`} aria-label={smart ? 'Smart Shuffle' : 'Shuffle'} aria-pressed={shuffle} title={smart ? 'Smart Shuffle: recommendations mixed in (click to turn off)' : shuffle ? 'Shuffle (click again for Smart Shuffle)' : 'Shuffle (S)'} onClick={toggleShuffle}>
+            <ShuffleGlyph smart={smart} size={20} />
+          </button>
       {/* Clear glass over the artwork's colours; play is the one filled, primary control. */}
       <button className={`${glassCircle} size-14`} disabled={!track} aria-label="Previous" onClick={previous}>
         <PreviousGlyph size={24} className="relative z-1" />

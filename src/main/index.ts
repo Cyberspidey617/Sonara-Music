@@ -9,7 +9,7 @@ import { importSpotify, isSpotifyLink } from './spotify';
 import { checkForUpdate, downloadUpdate, installUpdate, updateState, watchForUpdates } from './update';
 import { keepCovers, openCovers, serveCover } from './covers';
 import { attachMusicVideo, musicVideoUrl, removeMusicVideo, serveMusicVideo } from './videos';
-import { flushPlays, recordPlay, wrapped } from './plays';
+import { flushPlays, listeningProfile, recordPlay, wrapped } from './plays';
 import { getScanState, localAlbum, localAlbums, localTracks, openLibrary, scan, searchLocal } from './library';
 import { clearMatches } from './lossless';
 import { handleMediaRequest, serveFile } from './media';
@@ -497,6 +497,7 @@ function registerIpc() {
   handle('video:get', (key: string) => musicVideoUrl(String(key)));
   ipcMain.on('plays:record', (_event, record: PlayRecord) => recordPlay(record));
   handle('wrapped:get', (month?: string) => wrapped(typeof month === 'string' ? month : undefined));
+  handle('plays:profile', (days?: number) => listeningProfile(Number(days) || 60));
   handle('video:online', async (track: Track) => {
     return findMusicVideo({
       videoId: String(track.videoId),

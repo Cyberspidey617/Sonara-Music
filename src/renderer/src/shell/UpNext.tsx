@@ -1,4 +1,4 @@
-import { Ellipsis, Loader2, Radio, X } from 'lucide-react';
+import { Ellipsis, Loader2, Radio, Sparkle, X } from 'lucide-react';
 import { useState, type CSSProperties } from 'react';
 import { Artwork } from '@/components/Artwork';
 import { Equalizer, ExplicitBadge } from '@/components/icons';
@@ -47,6 +47,7 @@ function Row({ item, index, order = 0, current, playing, onDragStart, onDrop }: 
         <div className="flex min-w-0 items-center">
           <span className={`truncate type-body-reduced ${current ? 'text-key' : 'text-primary'}`}>{track.title}</span>
           {track.explicit && <ExplicitBadge />}
+          {item.smart && <Sparkle size={11} className="ml-1.5 flex-none fill-current text-key" aria-label="Smart Shuffle recommendation" />}
         </div>
         <span className="truncate type-callout text-secondary">{artistLine(track)}</span>
       </div>

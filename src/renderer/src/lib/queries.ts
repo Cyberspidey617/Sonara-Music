@@ -1,7 +1,7 @@
 import { QueryCache, QueryClient, useQuery } from '@tanstack/react-query';
 import { markOffline } from '@/state/online';
 import type { Taste } from '@shared/types';
-import { madeForYou } from './taste';
+import { daypart, madeForYou, type TasteSignals } from './taste';
 import { api, errorMessage } from './api';
 
 export const queryClient = new QueryClient({
@@ -13,13 +13,15 @@ export const queryClient = new QueryClient({
 
 export const useHome = () => useQuery({ queryKey: ['home'], queryFn: () => api.home(), staleTime: 30 * 60_000 });
 export const useSearch = (q: string) => useQuery({ queryKey: ['search', q], queryFn: () => api.search(q), enabled: q.trim().length > 0 });
-/** Home's "Made for you", from your music taste; refreshed a few times a day. */
-export const useMadeForYou = (taste: Taste) =>
+/** Home's "Made for you": your picks, your listening and what you've told Sonara; refreshed a few times a day. */
+export const useMadeForYou = (taste: Taste, feedback: Pick<TasteSignals, 'notInterested' | 'notInterestedArtists' | 'tasteExcluded' | 'notes'>) =>
   useQuery({
-    queryKey: ['made-for-you', taste.languages, taste.genres, taste.artists.map((a) => a.id)],
-    queryFn: () => madeForYou(taste),
-    enabled: taste.languages.length + taste.genres.length + taste.artists.length > 0,
-    staleTime: 6 * 60 * 60_000,
+    // A new part of the day brings a new daylist.
+    queryKey: ['made-for-you', taste.languages, taste.genres, taste.artists.map((a) => a.id), feedback, daypart().name],
+    queryFn: async () => madeForYou(taste, { ...feedback, profile: await api.listeningProfile(60).catch(() => null) }),
+    staleTime: 3 * 60 * 60_000,
+    // Saying "Not interested" refreshes it: the old shelves stay up meanwhile.
+    placeholderData: (previous) => previous,
   });
 export const useSuggestions = (q: string) =>
   useQuery({ queryKey: ['suggest', q], queryFn: () => api.suggest(q), enabled: q.trim().length > 1, staleTime: 60 * 60_000, placeholderData: (prev) => prev });

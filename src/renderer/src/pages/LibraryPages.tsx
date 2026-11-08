@@ -1,4 +1,5 @@
 import { DownloadButton } from '@/components/Downloads';
+import { PlaylistRecommendations } from '@/components/PlaylistRecommendations';
 import { Clock, Ellipsis, Heart, ListMusic, Pencil, Shuffle, Trash2 } from 'lucide-react';
 import type { Track } from '@shared/types';
 import { formatTotal, plural } from '@/lib/format';
@@ -141,7 +142,10 @@ export function LocalPlaylistPage({ id }: { id: string }) {
       />
       <div className="px-(--body-gutter) pb-10">
         {playlist.tracks.length ? (
-          <TrackList tracks={playlist.tracks} source={{ label: playlist.name }} onRemove={remove} />
+          <>
+            <TrackList tracks={playlist.tracks} source={{ label: playlist.name }} onRemove={remove} />
+            <PlaylistRecommendations playlistId={id} name={playlist.name} tracks={playlist.tracks} />
+          </>
         ) : (
           <EmptyState icon={<ListMusic size={36} strokeWidth={1.5} />} title="This playlist is empty" body="Add songs from any list with “Add to Playlist…” in its menu, or right-click a song." />
         )}

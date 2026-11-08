@@ -1,4 +1,4 @@
-import { Disc3, FolderOpen, HardDriveDownload, Heart, HeartOff, Link2, ListEnd, ListPlus, ListStart, Radio, Trash2, User } from 'lucide-react';
+import { Disc3, FolderOpen, HardDriveDownload, Heart, HeartOff, Link2, ListEnd, ListPlus, ListStart, Radio, SlidersHorizontal, ThumbsDown, Trash2, User, UserX } from 'lucide-react';
 import { api } from '@/lib/api';
 import { downloadTracks, useDownloads } from '@/state/downloads';
 import type { Track } from '@shared/types';
@@ -22,6 +22,51 @@ function downloadEntries(track: Track): MenuEntry[] {
     ];
   if (d && d.state !== 'error') return [{ label: `Cancel Download (${d.total ? Math.round((d.received / d.total) * 100) : 0}%)`, icon: <HardDriveDownload {...ICON} />, onSelect: () => void api.cancelDownload(track.videoId) }];
   return [{ label: 'Download…', icon: <HardDriveDownload {...ICON} />, onSelect: () => downloadTracks([track]) }];
+}
+
+/** Tell Sonara what you think: not this song, not this artist, or don't learn from this song. */
+function feedbackEntries(track: Track): MenuEntry[] {
+  const { settings, updateSettings } = useLibrary.getState();
+  const notInterested = settings.notInterested ?? [];
+  const noArtists = settings.notInterestedArtists ?? [];
+  const excluded = settings.tasteExcluded ?? [];
+  const songNo = notInterested.includes(track.videoId);
+  const artist = track.artists[0];
+  const sameArtist = (n: { id?: string; name: string }) => (artist?.id && n.id ? n.id === artist.id : n.name.toLowerCase() === artist?.name.toLowerCase());
+  const artistNo = !!artist && noArtists.some(sameArtist);
+  const isExcluded = excluded.includes(track.videoId);
+  const set = (patch: Parameters<typeof updateSettings>[0], message: string, undo: Parameters<typeof updateSettings>[0]) => {
+    updateSettings(patch);
+    toast(message, { label: 'Undo', run: () => updateSettings(undo) });
+  };
+  const entries: MenuEntry[] = [
+    {
+      label: songNo ? 'Recommend this song again' : 'Not interested',
+      icon: <ThumbsDown {...ICON} />,
+      onSelect: () =>
+        songNo
+          ? set({ notInterested: notInterested.filter((id) => id !== track.videoId) }, 'Sonara may recommend this song again', { notInterested })
+          : set({ notInterested: [...notInterested, track.videoId] }, 'We’ll recommend less of this', { notInterested }),
+    },
+  ];
+  if (artist)
+    entries.push({
+      label: artistNo ? `Recommend ${artist.name} again` : `Not interested in ${artist.name}`,
+      icon: <UserX {...ICON} />,
+      onSelect: () =>
+        artistNo
+          ? set({ notInterestedArtists: noArtists.filter((n) => !sameArtist(n)) }, `Sonara may recommend ${artist.name} again`, { notInterestedArtists: noArtists })
+          : set({ notInterestedArtists: [...noArtists, { name: artist.name, ...(artist.id && { id: artist.id }) }] }, `You won’t get recommendations for ${artist.name}`, { notInterestedArtists: noArtists }),
+    });
+  entries.push({
+    label: isExcluded ? 'Include in your taste profile' : 'Exclude from your taste profile',
+    icon: <SlidersHorizontal {...ICON} />,
+    onSelect: () =>
+      isExcluded
+        ? set({ tasteExcluded: excluded.filter((id) => id !== track.videoId) }, 'Listening to this song shapes your recommendations again', { tasteExcluded: excluded })
+        : set({ tasteExcluded: [...excluded, track.videoId] }, 'Listening to this song won’t shape your recommendations', { tasteExcluded: excluded }),
+  });
+  return entries;
 }
 
 /** The actions every track offers, in its "…" menu and on right-click. */
@@ -56,6 +101,7 @@ export function trackMenu(track: Track, extra: { removeFromPlaylist?: () => void
     },
     { label: 'Add to Playlist…', icon: <ListPlus {...ICON} />, onSelect: () => useUi.getState().openDialog({ kind: 'add-to-playlist', tracks: [track] }) },
   ];
+  entries.push({ separator: true }, ...feedbackEntries(track));
   if (artist || track.album?.id) entries.push({ separator: true });
   if (artist) entries.push({ label: `Go to ${artist.name}`, icon: <User {...ICON} />, onSelect: () => go({ name: 'artist', id: artist.id! }) });
   if (track.album?.id) entries.push({ label: 'Go to Album', icon: <Disc3 {...ICON} />, onSelect: () => go(albumRoute(track.album!.id!)) });

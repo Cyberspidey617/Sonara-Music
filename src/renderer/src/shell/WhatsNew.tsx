@@ -10,6 +10,26 @@ type Note = { icon: LucideIcon; title: string; body: string; open?: () => void; 
 /** What each version brought, newest first. Shown once, after Sonara updates to it. */
 const NOTES: { version: string; notes: Note[] }[] = [
   {
+    version: '2.2.7',
+    notes: [
+      {
+        icon: Sparkles,
+        title: 'Made for you, by what you play',
+        body: 'Home now learns from your listening: New for you (songs like your favourites you haven’t heard), On repeat, your most played artists, and a daylist for the time of day. Your first picks still count.',
+      },
+      {
+        icon: Sparkles,
+        title: 'Not interested, and your taste profile',
+        body: 'Say “Not interested” to a song or an artist from its menu, or keep a song out of your taste. Add notes like “90s Tamil melodies” in Settings › Playback, and each becomes a shelf on Home.',
+      },
+      {
+        icon: Sparkles,
+        title: 'Smart Shuffle and playlist recommendations',
+        body: 'Press shuffle again for Smart Shuffle: songs like yours mixed into the queue, each marked with a sparkle. Your playlists now end with songs that fit them, one click to add.',
+      },
+    ],
+  },
+  {
     version: '2.2.6',
     notes: [
       {

@@ -2,11 +2,11 @@ import { EqualizerPanel } from '@/components/Equalizer';
 import { SeekTrack } from '@/components/SeekTrack';
 import { useQueryClient } from '@tanstack/react-query';
 import appIcon from '@/assets/app-icon.png';
-import { Check, Clock, Download, FolderOpen, FolderPlus, Heart, House, Loader2, RefreshCw, RotateCcw, Server, Sparkles, Trash2 } from 'lucide-react';
+import { Check, Clock, Download, FolderOpen, FolderPlus, Heart, House, Loader2, RefreshCw, RotateCcw, Server, Sparkles, Trash2, X } from 'lucide-react';
 import { SHORTCUTS } from '@/components/Dialogs';
 import { createContext, useContext, useEffect, useState, type CSSProperties, type ReactNode } from 'react';
 import { create } from 'zustand';
-import { DEFAULT_SETTINGS, seekLookOf, type AudioQuality, type DownloadQuality, type MiniPlayerWhen, type Settings, type SpatialAudio, type UpdateState } from '@shared/types';
+import { DEFAULT_SETTINGS, seekLookOf, type ListeningProfile, type AudioQuality, type DownloadQuality, type MiniPlayerWhen, type Settings, type SpatialAudio, type UpdateState } from '@shared/types';
 import { api } from '@/lib/api';
 import { ACCENTS, LYRIC_FONTS, THEMES, themeVars, useThemeColors } from '@/lib/appearance';
 import { artworkAtPixels, largeArtwork } from '@/lib/artwork';
@@ -188,6 +188,7 @@ function PlaybackTab() {
             <Sparkles size={15} /> {s.taste.languages.length + s.taste.genres.length + s.taste.artists.length ? 'Change' : 'Pick'}
           </button>
         </Row>
+        <TasteProfile />
       </Section>
       <Section title="Playback">
         <Row title="Crossfade" detail="Blend the end of one song into the next.">
@@ -767,6 +768,126 @@ function ShortcutsDetail({ on }: { on: boolean }) {
           {navigator.userAgent.includes('Linux') ? ' On Linux, your desktop may use them (GNOME switches workspaces with Ctrl + Alt + arrows), or need its global shortcuts support (Wayland).' : ''}
         </span>
       )}
+    </>
+  );
+}
+
+/**
+ * Your taste profile: what Sonara learned from your listening, notes that ask for more of something,
+ * and what you said no to, each one undoable. Saved at once, like the rest of Playback.
+ */
+function TasteProfile() {
+  const settings = useLibrary((l) => l.settings);
+  const update = useLibrary.getState().updateSettings;
+  const notes = settings.tasteNotes ?? [];
+  const noSongs = settings.notInterested ?? [];
+  const noArtists = settings.notInterestedArtists ?? [];
+  const excluded = settings.tasteExcluded ?? [];
+  const [draft, setDraft] = useState('');
+  const [learned, setLearned] = useState<ListeningProfile | null>(null);
+  useEffect(() => {
+    void api.listeningProfile(60).then(setLearned, () => undefined);
+  }, []);
+  const learnedArtists = (learned?.artists ?? []).slice(0, 6).map((a) => a.name);
+  const addNote = () => {
+    const note = draft.trim().slice(0, 60);
+    if (!note || notes.includes(note)) return;
+    update({ tasteNotes: [...notes, note].slice(-5) });
+    setDraft('');
+    toast('Got it. Home will show more of this.');
+  };
+  const chip = 'inline-flex items-center gap-1 rounded-pill bg-white/8 py-1 pr-1.5 pl-3 type-callout text-primary';
+  const remove = 'grid size-5 place-items-center rounded-full text-secondary hover:bg-white/12 hover:text-primary';
+  return (
+    <>
+      <Row
+        title="Learned from your listening"
+        detail={
+          learned && learned.plays >= 10
+            ? `From your last 60 days (${learned.plays} listens): ${learnedArtists.join(', ')}. Home’s “Made for you” follows what you play.`
+            : 'Once you’ve listened a while (songs count after 30 seconds), Home’s “Made for you” follows what you play, not only your picks.'
+        }
+      />
+      <Row title="Tell us more" detail="“I want more of…”: a few words, like “90s Tamil melodies” or “calm piano for studying”. Each becomes a shelf on Home (up to 5).">
+        <div className="flex w-[300px] max-w-full flex-col items-end gap-2">
+          <form
+            className="flex w-full items-center gap-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              addNote();
+            }}
+          >
+            <input
+              className="h-9 min-w-0 flex-1 rounded-[10px] bg-white/8 px-3 type-body-reduced text-primary outline-none placeholder:text-tertiary focus:bg-white/12"
+              placeholder="I want more of…"
+              maxLength={60}
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+            />
+            <button type="submit" className={button} disabled={!draft.trim()}>
+              Add
+            </button>
+          </form>
+          {notes.length > 0 && (
+            <div className="flex flex-wrap justify-end gap-1.5">
+              {notes.map((note) => (
+                <span key={note} className={chip}>
+                  {note}
+                  <button className={remove} aria-label={`Delete the note “${note}”`} onClick={() => update({ tasteNotes: notes.filter((n) => n !== note) })}>
+                    <X size={12} />
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      </Row>
+      <Row
+        title="Not interested"
+        detail={
+          noSongs.length || noArtists.length
+            ? 'Sonara won’t recommend these, on Home, in Smart Shuffle or in autoplay. Remove one to see it again.'
+            : 'Say “Not interested” in any song’s menu, for the song or its artist.'
+        }
+      >
+        {(noSongs.length > 0 || noArtists.length > 0) && (
+          <div className="flex max-w-[320px] flex-wrap justify-end gap-1.5">
+            {noArtists.map((a) => (
+              <span key={a.id ?? a.name} className={chip}>
+                {a.name}
+                <button className={remove} aria-label={`Recommend ${a.name} again`} onClick={() => update({ notInterestedArtists: noArtists.filter((n) => n !== a) })}>
+                  <X size={12} />
+                </button>
+              </span>
+            ))}
+            {noSongs.length > 0 && (
+              <span className={chip}>
+                {noSongs.length} {noSongs.length === 1 ? 'song' : 'songs'}
+                <button className={remove} aria-label="Recommend these songs again" onClick={() => update({ notInterested: [] })}>
+                  <X size={12} />
+                </button>
+              </span>
+            )}
+          </div>
+        )}
+      </Row>
+      <Row
+        title="Excluded from your taste"
+        detail={
+          excluded.length
+            ? `Listening to ${excluded.length === 1 ? 'this song' : `these ${excluded.length} songs`} doesn’t shape your recommendations (they still count in Wrapped).`
+            : 'Sleep sounds or a song for someone else? “Exclude from your taste profile” in its menu keeps it out of your recommendations.'
+        }
+      >
+        {excluded.length > 0 && (
+          <button className={button} onClick={() => update({ tasteExcluded: [] })}>
+            Include all again
+          </button>
+        )}
+      </Row>
+      <Row title="Smart Shuffle" detail="The shuffle button offers Smart Shuffle too: your songs shuffled, with recommendations like them mixed in (marked with a sparkle in Up Next).">
+        <Toggle label="Smart Shuffle" on={settings.smartShuffle ?? true} onChange={(smartShuffle) => update({ smartShuffle })} />
+      </Row>
     </>
   );
 }

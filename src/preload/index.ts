@@ -24,6 +24,7 @@ const api: ObsidianApi = {
   onlineMusicVideo: (track) => ipcRenderer.invoke('video:online', track),
   recordPlay: (record) => ipcRenderer.send('plays:record', record),
   wrapped: (month) => ipcRenderer.invoke('wrapped:get', month),
+  listeningProfile: (days) => ipcRenderer.invoke('plays:profile', days),
   attachMusicVideo: (key, title) => ipcRenderer.invoke('video:attach', key, title),
   removeMusicVideo: (key) => ipcRenderer.invoke('video:remove', key),
   onUpdateState: (handler) => {

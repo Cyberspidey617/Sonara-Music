@@ -13,6 +13,7 @@ import { api, isElectron } from '@/lib/api';
 import { artworkAtPixels, largeArtwork } from '@/lib/artwork';
 import { artistLine, uid } from '@/lib/format';
 import { streamUrl } from '@/lib/stream';
+import { recommendable, recommendForPlaylist } from '@/lib/taste';
 import { useLibrary } from './library';
 import { toast } from './ui';
 
@@ -26,6 +27,8 @@ export interface QueueItem {
   auto?: boolean;
   /** Added with Play Next or Add to Queue: it plays before the rest of the album, playlist or radio. */
   queued?: boolean;
+  /** A Smart Shuffle recommendation, mixed in among your songs. */
+  smart?: boolean;
 }
 
 export interface PlaySource {
@@ -46,6 +49,8 @@ interface PlayerState {
   position: number;
   duration: number;
   shuffle: boolean;
+  /** Smart Shuffle: shuffled, with recommendations like your songs mixed in. */
+  smart: boolean;
   repeat: RepeatMode;
   volume: number;
   muted: boolean;
@@ -305,7 +310,8 @@ async function fillRadio(seed: Track, replaceUpcoming = false) {
     const tracks = await api.upNext(ytId, `RDAMVM${ytId}`);
     const state = usePlayer.getState();
     const have = new Set(state.queue.map((q) => q.track.videoId));
-    const fresh = tracks.filter((t) => !have.has(t.videoId)).slice(0, 40).map((t) => item(t, 'auto'));
+    const { notInterested = [], notInterestedArtists = [] } = settings();
+    const fresh = tracks.filter((t) => !have.has(t.videoId) && recommendable(t, { notInterested, notInterestedArtists })).slice(0, 40).map((t) => item(t, 'auto'));
     if (!fresh.length) return;
     // A fresh radio replaces what autoplay found before, but keeps songs you've queued meanwhile.
     const base = replaceUpcoming ? state.queue.filter((q, i) => i <= state.index || !q.auto) : state.queue;
@@ -316,6 +322,38 @@ async function fillRadio(seed: Track, replaceUpcoming = false) {
   } finally {
     usePlayer.setState({ radioLoading: false });
   }
+}
+
+/** Bumped whenever Smart Shuffle's picks no longer apply (turned off, or something else played). */
+let smartFor = 0;
+
+/**
+ * Smart Shuffle: songs like the ones in the queue (YouTube Music's radio for a few of them), mixed in
+ * after every third of your songs, each marked as a recommendation.
+ */
+async function addSmartPicks() {
+  const ticket = ++smartFor;
+  const { queue } = usePlayer.getState();
+  const mine = queue.filter((q) => !q.auto && !q.smart).map((q) => q.track);
+  const { notInterested = [], notInterestedArtists = [] } = settings();
+  const picks = await recommendForPlaylist(shuffled(mine).slice(0, 12), { notInterested, notInterestedArtists }).catch(() => [] as Track[]);
+  if (ticket !== smartFor || !usePlayer.getState().smart) return;
+  if (!picks.length) {
+    toast('No recommendations found for Smart Shuffle');
+    return;
+  }
+  const state = usePlayer.getState();
+  const head = state.queue.slice(0, state.index + 1);
+  const upcoming = state.queue.slice(state.index + 1).filter((q) => !q.smart);
+  const out: QueueItem[] = [];
+  let used = 0;
+  upcoming.forEach((q, i) => {
+    out.push(q);
+    // After every third of your songs (not among songs you queued to play next, nor autoplay's).
+    if (!q.queued && !q.auto && (i + 1) % 3 === 0 && used < picks.length) out.push({ ...item(picks[used++]!), smart: true });
+  });
+  usePlayer.setState({ queue: [...head, ...out] });
+  toast('Added Smart Shuffle recommendations to the queue');
 }
 
 function maybeFillRadio() {
@@ -602,6 +640,7 @@ export const usePlayer = create<PlayerState>((set, get) => ({
   position: 0,
   duration: 0,
   shuffle: false,
+  smart: false,
   repeat: 'off',
   volume: 0.8,
   muted: false,
@@ -613,6 +652,8 @@ export const usePlayer = create<PlayerState>((set, get) => ({
   playTracks: (tracks, start = 0, options = {}) => {
     if (!tracks.length) return;
     radioFor = null;
+    smartFor += 1;
+    set({ smart: false });
     const items = tracks.map((t) => item(t));
     if (options.shuffle) {
       const order = shuffled(items);
@@ -633,7 +674,8 @@ export const usePlayer = create<PlayerState>((set, get) => ({
 
   startRadio: (track) => {
     radioFor = null;
-    set({ queue: [item(track)], original: null, shuffle: false, source: { label: `${track.title} Radio` } });
+    smartFor += 1;
+    set({ queue: [item(track)], original: null, shuffle: false, smart: false, source: { label: `${track.title} Radio` } });
     load(0);
     void fillRadio(track, true);
   },
@@ -775,6 +817,20 @@ export const usePlayer = create<PlayerState>((set, get) => ({
   },
 
   toggleShuffle: () => {
+    // Off → Shuffle → Smart Shuffle (when it's on in Settings) → off.
+    if (get().shuffle && !get().smart && settings().smartShuffle !== false && isElectron && navigator.onLine) {
+      set({ smart: true });
+      void addSmartPicks();
+      return;
+    }
+    if (get().smart) {
+      smartFor += 1;
+      const { queue, index } = get();
+      const current = queue[index];
+      const kept = queue.filter((q, i) => !q.smart || i === index);
+      set({ smart: false, queue: kept, index: current ? kept.indexOf(current) : index });
+      toast('Removed Smart Shuffle recommendations');
+    }
     const { shuffle, queue, index, original } = get();
     if (preloaded) resetDeck(preloaded.deck);
     if (!shuffle) {

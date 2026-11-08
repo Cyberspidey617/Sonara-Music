@@ -364,6 +364,16 @@ export interface Settings {
   guideSeen: boolean;
   /** Your music taste, for Home's "Made for you" (picked after the guide; Settings › Playback). */
   taste: Taste;
+  /** Songs not to recommend (videoIds). */
+  notInterested: string[];
+  /** Artists not to recommend. */
+  notInterestedArtists: ArtistRef[];
+  /** Songs whose listens don't shape your recommendations (videoIds). */
+  tasteExcluded: string[];
+  /** "I want more of…": notes that become Home shelves. */
+  tasteNotes: string[];
+  /** The shuffle button also offers Smart Shuffle (recommendations mixed into the queue). */
+  smartShuffle: boolean;
   /** The taste picker was finished or skipped. */
   tasteSeen: boolean;
   /** The version whose What's New you've seen (shown once after each update). */
@@ -392,6 +402,17 @@ export interface Taste {
   languages: string[];
   genres: string[];
   artists: { id: string; name: string; thumbnail?: string }[];
+}
+
+/** What you've listened to lately (30 seconds or more), for recommendations. */
+export interface ListeningProfile {
+  /** Listens counted. */
+  plays: number;
+  /** Most played first. */
+  songs: { track: Track; plays: number; lastAt: number }[];
+  artists: { name: string; id?: string; plays: number }[];
+  /** Listens by hour of the day (0–23). */
+  hours: number[];
 }
 
 /** A 10-band graphic equalizer (32 Hz – 16 kHz), in dB. */
@@ -501,6 +522,11 @@ export const DEFAULT_SETTINGS: Settings = {
   playerStyle: 'pebble',
   guideSeen: false,
   taste: { languages: [], genres: [], artists: [] },
+  notInterested: [],
+  notInterestedArtists: [],
+  tasteExcluded: [],
+  tasteNotes: [],
+  smartShuffle: true,
   tasteSeen: false,
   lastSeenVersion: '',
   startPage: 'home',
@@ -646,6 +672,8 @@ export interface ObsidianApi {
   recordPlay(record: PlayRecord): void;
   /** A month of your listening (the latest one with listening when none is given). */
   wrapped(month?: string): Promise<Wrapped>;
+  /** What you've listened to in the last `days` days, for recommendations. */
+  listeningProfile(days?: number): Promise<ListeningProfile>;
   /** Asks for a video file and attaches it to the song; null if cancelled. */
   attachMusicVideo(key: string, title: string): Promise<string | null>;
   removeMusicVideo(key: string): Promise<void>;

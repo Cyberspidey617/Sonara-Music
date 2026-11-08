@@ -96,7 +96,11 @@ function QuickTiles() {
 /** Shelves from your music taste (the picker after the guide; Settings › Playback). */
 function MadeForYou() {
   const taste = useLibrary((s) => s.settings.taste);
-  const { data, isLoading } = useMadeForYou(taste);
+  const notInterested = useLibrary((s) => s.settings.notInterested ?? []);
+  const notInterestedArtists = useLibrary((s) => s.settings.notInterestedArtists ?? []);
+  const tasteExcluded = useLibrary((s) => s.settings.tasteExcluded ?? []);
+  const notes = useLibrary((s) => s.settings.tasteNotes ?? []);
+  const { data, isLoading } = useMadeForYou(taste, { notInterested, notInterestedArtists, tasteExcluded, notes });
   if (isLoading) return <ShelfSkeleton />;
   if (!data?.length) return null;
   return (

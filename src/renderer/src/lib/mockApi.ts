@@ -157,6 +157,7 @@ export function createMockApi(): ObsidianApi {
     musicVideo: async () => null,
     onlineMusicVideo: async () => null,
     recordPlay: () => undefined,
+    listeningProfile: async () => ({ plays: 0, songs: [], artists: [], hours: Array(24).fill(0) }),
     wrapped: async (month) => ({ month: month ?? new Date().toISOString().slice(0, 7), months: [], partial: true, plays: 0, minutes: 0, songs: 0, artists: 0, topSongs: [], topArtists: [], genres: [], genresPending: 0, hours: Array(24).fill(0), days: Array(30).fill(0) }),
     attachMusicVideo: async () => null,
     removeMusicVideo: async () => undefined,

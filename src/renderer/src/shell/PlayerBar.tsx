@@ -1,4 +1,5 @@
-import { Ellipsis, ListMusic, Maximize2, MicVocal, PictureInPicture2, Repeat, Repeat1, Shuffle, SlidersVertical } from 'lucide-react';
+import { Ellipsis, ListMusic, Maximize2, MicVocal, PictureInPicture2, Repeat, Repeat1, SlidersVertical } from 'lucide-react';
+import { ShuffleGlyph } from '@/components/ShuffleGlyph';
 import { SeekTrack, useSeekLook } from '@/components/SeekTrack';
 import { api, isElectron } from '@/lib/api';
 import { Artwork } from '@/components/Artwork';
@@ -183,6 +184,7 @@ export function PlayerBar() {
   const playing = usePlayer((s) => s.status === 'playing' || s.status === 'loading');
   const hasNext = usePlayer((s) => s.index + 1 < s.queue.length || s.repeat === 'all' || s.radioLoading);
   const shuffle = usePlayer((s) => s.shuffle);
+  const smart = usePlayer((s) => s.smart);
   const repeat = usePlayer((s) => s.repeat);
   const { togglePlay, next, previous, toggleShuffle, cycleRepeat, toggleMute } = usePlayer.getState();
   const pill = useRef<HTMLDivElement>(null);
@@ -216,8 +218,8 @@ export function PlayerBar() {
         {/* The full bar; it crossfades with the pebble as the capsule grows and shrinks. */}
         <div className={`absolute inset-0 grid grid-cols-[auto_minmax(0,1fr)_auto] items-center px-3 ${pebble ? 'pointer-events-none' : ''}`} inert={pebble || undefined}>
         <div className={`flex items-center justify-between gap-2 pr-2 @min-[760px]:w-[208px] @min-[760px]:gap-0 ${reveal(pebble, 'delay-[60ms]', 'delay-[140ms]')}`}>
-          <button className={`${toggle} @max-[760px]:hidden`} aria-label="Shuffle" aria-pressed={shuffle} title="Shuffle (S)" onClick={toggleShuffle}>
-            <Shuffle size={17} strokeWidth={2.2} />
+<button className={`${toggle} @max-[760px]:hidden`} aria-label={smart ? 'Smart Shuffle' : 'Shuffle'} aria-pressed={shuffle} title={smart ? 'Smart Shuffle: recommendations mixed in (click to turn off)' : shuffle ? 'Shuffle (click again for Smart Shuffle)' : 'Shuffle (S)'} onClick={toggleShuffle}>
+            <ShuffleGlyph smart={smart} size={17} />
           </button>
           <div className="flex items-center gap-1">
             <button className={transport} disabled={!track} aria-label="Previous" title="Previous (Ctrl+←)" onClick={previous}>
