@@ -136,6 +136,15 @@ export function FullScreenPlayer() {
   const videoUrl = attachedUrl ?? (found ? `ytstream://track/${encodeURIComponent(found.videoId)}?q=video&h=${videoQuality}` : null);
   const videoKey = track?.videoId;
   const online = useOnline((s) => s.online);
+  // The "may not be in sync" note: shown when the video opens, then it fades away.
+  const unsynced = showVideo && !videoAttached && !!found && !found.synced;
+  const [syncNote, setSyncNote] = useState(false);
+  useEffect(() => {
+    setSyncNote(unsynced);
+    if (!unsynced) return;
+    const timer = setTimeout(() => setSyncNote(false), 6000);
+    return () => clearTimeout(timer);
+  }, [unsynced, found?.videoId]);
   useEffect(() => {
     setShowVideo(false);
     setAttachedUrl(null);
@@ -221,8 +230,8 @@ export function FullScreenPlayer() {
           }}
         />
       )}
-      {showVideo && !videoAttached && found && !found.synced && (
-        <div className="pointer-events-none absolute inset-x-0 top-[60px] z-30 flex justify-center px-4">
+      {unsynced && found && (
+        <div className={`pointer-events-none absolute inset-x-0 top-[60px] z-30 flex justify-center px-4 transition-opacity duration-700 ${syncNote ? 'opacity-100' : 'opacity-0'}`} aria-hidden={!syncNote}>
           <div className="glass max-w-[560px] animate-rise rounded-pill px-4 py-1.5 text-center type-callout text-secondary">
             The official video{found.channel ? ` from ${found.channel}` : ''}: it isn’t the same length as the song, so it may not be in sync.
           </div>
