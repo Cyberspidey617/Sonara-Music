@@ -169,6 +169,11 @@ export function FullScreenPlayer() {
   const [attachedUrl, setAttachedUrl] = useState<string | null>(null);
   const [found, setFound] = useState<OnlineMusicVideo | null>(null);
   const [showVideo, setShowVideo] = useState(false);
+  // Once opened, the video stays loaded (paused while hidden), so switching back is instant.
+  const [videoLoaded, setVideoLoaded] = useState(false);
+  useEffect(() => {
+    if (showVideo) setVideoLoaded(true);
+  }, [showVideo]);
   const videoQuality = useLibrary((s) => s.settings.videoQuality) || 1080;
   const videoAttached = !!attachedUrl;
   const videoUrl = attachedUrl ?? (found ? `ytstream://track/${encodeURIComponent(found.videoId)}?q=video&h=${videoQuality}` : null);
@@ -214,6 +219,7 @@ export function FullScreenPlayer() {
   }, [unsynced, found?.videoId]);
   useEffect(() => {
     setShowVideo(false);
+    setVideoLoaded(false);
     setAttachedUrl(null);
     setFound(null);
     if (!videoKey) return;
@@ -281,16 +287,20 @@ export function FullScreenPlayer() {
       aria-modal="true"
       aria-label="Now Playing"
     >
-      {/* Under the video nothing is drawn: the backdrop and the player would only cost frames. */}
-      {showVideo && videoUrl ? null : backdrop === 'artwork' ? (
-        <ArtworkBackdrop artworkUrl={artUrl} speed={playing ? motion : 0} />
-      ) : backdrop === 'solid' ? (
-        <SolidBackdrop color={solid} />
-      ) : (
-        <MeshBackdrop artworkUrl={artUrl} playing={playing} speed={motion} />
-      )}
-      {showVideo && videoUrl && (
+      {/* Under the video the backdrop is kept but not drawn (and stands still): hidden, not removed, so
+          switching back to it is instant. */}
+      <div className={showVideo && videoUrl ? 'invisible contents' : 'contents'}>
+        {backdrop === 'artwork' ? (
+          <ArtworkBackdrop artworkUrl={artUrl} speed={playing && !showVideo ? motion : 0} />
+        ) : backdrop === 'solid' ? (
+          <SolidBackdrop color={solid} />
+        ) : (
+          <MeshBackdrop artworkUrl={artUrl} playing={playing && !showVideo} speed={motion} />
+        )}
+      </div>
+      {videoLoaded && videoUrl && (
         <MusicVideo
+          active={showVideo}
           url={videoUrl}
           // In time with the song: the song is heard, as before. Not in time: the video's own sound,
           // with the song going on silently.
@@ -399,7 +409,7 @@ export function FullScreenPlayer() {
           one column, and the lyrics or queue take the artwork's place. Not drawn under a video. */}
       <div
         className={
-          (showVideo && videoUrl ? '[content-visibility:hidden] ' : '') +
+          (showVideo && videoUrl ? 'invisible ' : '') +
           (stacked
             ? 'flex h-full flex-col items-center justify-center gap-5 px-5 pt-14 pb-8'
             : `grid h-full items-center justify-center gap-x-[clamp(40px,6vw,120px)] px-[clamp(28px,6vw,120px)] pt-14 pb-10 ${column ? 'grid-cols-[var(--col)_minmax(0,760px)]' : 'grid-cols-[var(--col)]'}`)

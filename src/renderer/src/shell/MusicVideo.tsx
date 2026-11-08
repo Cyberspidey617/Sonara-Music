@@ -31,12 +31,15 @@ const LOAD_TIMEOUT = 6000;
  * two start again together, from the picture's moment.
  */
 export function MusicVideo({
+  active,
   url,
   audioUrl,
   fit,
   onError,
   onClose,
 }: {
+  /** On screen; hidden, it stays loaded but paused, so showing it again is instant. */
+  active: boolean;
   url: string;
   /** The video's own sound, as a stream of its own; null to hear the song. */
   audioUrl: string | null;
@@ -53,6 +56,11 @@ export function MusicVideo({
     const v = video.current;
     const a = audioUrl ? audio.current : null;
     if (!v) return;
+    if (!active) {
+      v.pause();
+      a?.pause();
+      return;
+    }
     const songPlaying = () => usePlayer.getState().status === 'playing';
     const loading = () => v.seeking || v.readyState < 3;
     let jumpedAt = 0;
@@ -122,17 +130,17 @@ export function MusicVideo({
       a?.removeEventListener('ended', onEnded);
       setSongSilenced(false);
     };
-  }, [url, audioUrl]);
+  }, [url, audioUrl, active]);
 
   // Plays and pauses with the song (the video's own sound is started by the loop above, with the picture).
   useEffect(() => {
     const v = video.current;
     if (v) {
-      if (playing) void v.play().catch(() => undefined);
+      if (playing && active) void v.play().catch(() => undefined);
       else v.pause();
     }
-    if (!playing) audio.current?.pause();
-  }, [playing, url, audioUrl]);
+    if (!playing || !active) audio.current?.pause();
+  }, [playing, url, audioUrl, active]);
 
   // The video's sound as loud as the song: your volume, and, with "Same loudness for every song" on,
   // turned down by YouTube's loudness figure for it, as the song is.
@@ -168,6 +176,7 @@ export function MusicVideo({
 
   // Esc closes the video first, before the full-screen player itself.
   useEffect(() => {
+    if (!active) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
       e.preventDefault();
@@ -176,7 +185,7 @@ export function MusicVideo({
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
-  }, [onClose]);
+  }, [onClose, active]);
 
   // The picture keeps its own shape: a box of its ratio, as large as the size allows.
   const scale = fit === '75' ? 0.75 : fit === '50' ? 0.5 : 1;
@@ -184,7 +193,11 @@ export function MusicVideo({
 
   return (
     // Above everything in the player (the lyrics panel's controls too), under its top strip.
-    <div className="absolute inset-0 z-20 grid animate-fade-in place-items-center bg-black" onClick={() => usePlayer.getState().togglePlay()}>
+    <div
+      className={`absolute inset-0 z-20 grid place-items-center bg-black transition-opacity duration-300 ${active ? '' : 'pointer-events-none opacity-0'}`}
+      aria-hidden={!active}
+      onClick={() => usePlayer.getState().togglePlay()}
+    >
       <video
         ref={video}
         src={url}
