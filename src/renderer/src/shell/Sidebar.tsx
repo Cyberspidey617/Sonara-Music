@@ -1,5 +1,5 @@
 import { useDownloads } from '@/state/downloads';
-import { Clock, Download, HardDrive, HardDriveDownload, Heart, House, ListMusic, Plus, Search, Settings } from 'lucide-react';
+import { Clock, Download, HardDrive, HardDriveDownload, Heart, House, ListMusic, Plus, Search, Settings, Sparkles } from 'lucide-react';
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { useLiquidLens } from '@/lib/glass';
 import { useLibrary } from '@/state/library';
@@ -116,6 +116,7 @@ export function Sidebar() {
         {showMusic && <NavItem route={{ name: 'music' }} label="Your Music" icon={<HardDrive size={17} strokeWidth={2} />} active={is('music') || is('musicAlbum')} />}
         <NavItem route={{ name: 'downloads' }} label={`Downloads${activeDownloads ? ` · ${activeDownloads}` : ''}`} icon={<HardDriveDownload size={17} strokeWidth={2} />} active={is('downloads')} />
         {showRecent && <NavItem route={{ name: 'recent' }} label="Recently Played" icon={<Clock size={17} strokeWidth={2} />} active={is('recent')} />}
+        <NavItem route={{ name: 'wrapped' }} label="Wrapped" icon={<Sparkles size={17} strokeWidth={2} />} active={is('wrapped')} />
 
         <div className="relative">
           {header('Playlists')}

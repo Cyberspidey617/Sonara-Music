@@ -41,6 +41,10 @@ const DESKTOP_UA =
 
 /** Itags in order of preference, per quality setting (audio-only formats). */
 type YouTubeQuality = Exclude<AudioQuality, 'lossless'>;
+/** What a stream is for: the song's audio at a quality, or 'video', a music video's picture (no sound). */
+type StreamKind = AudioQuality | 'video';
+/** Video-only formats, up to 1080p: H.264, then VP9. */
+const VIDEO_ITAGS = [137, 248, 136, 247, 135, 244, 134, 243];
 const ITAG_PREFERENCE: Record<YouTubeQuality, number[]> = {
   // Opus ~160 kbps, AAC 128 kbps, then the smaller ones.
   high: [251, 140, 250, 249, 139],
@@ -66,6 +70,8 @@ export interface ResolvedStream {
   expiresAt: number;
   userAgent: string;
   loudnessDb?: number;
+  /** A music video's picture, not a song's audio. */
+  video?: boolean;
 }
 
 const resolved = new Map<string, ResolvedStream>();
@@ -73,7 +79,7 @@ const inflight = new Map<string, Promise<ResolvedStream>>();
 const excluded = new Map<string, Map<ClientName, number>>();
 const unplayable = new Map<string, { reason: string; at: number }>();
 
-const keyOf = (videoId: string, quality: AudioQuality) => `${videoId}:${quality}`;
+const keyOf = (videoId: string, quality: StreamKind) => `${videoId}:${quality}`;
 
 function excludeClient(videoId: string, client: ClientName, why: string) {
   log.warn(`[${videoId}] ${client} refused: ${why}`);
@@ -112,20 +118,21 @@ async function contentLengthOf(url: string, userAgent: string): Promise<number> 
   return Number(total);
 }
 
-async function resolveWith(yt: Innertube, videoId: string, client: ClientName, quality: AudioQuality, itag?: number): Promise<ResolvedStream | string> {
+async function resolveWith(yt: Innertube, videoId: string, client: ClientName, quality: StreamKind, itag?: number): Promise<ResolvedStream | string> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const info: any = await yt.getBasicInfo(videoId, { client: client as never });
   const status: string | undefined = info.playability_status?.status;
   const reason: string = info.playability_status?.reason ?? status ?? 'no status';
   if (status !== 'OK') return `${status}: ${reason}`;
+  const video = quality === 'video';
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const formats: any[] = (info.streaming_data?.adaptive_formats ?? []).filter((f: any) => f.has_audio && !f.has_video);
-  if (!formats.length) return 'no audio formats in the response';
+  const formats: any[] = (info.streaming_data?.adaptive_formats ?? []).filter((f: any) => (video ? f.has_video && !f.has_audio : f.has_audio && !f.has_video));
+  if (!formats.length) return `no ${video ? 'video' : 'audio'} formats in the response`;
   // Prefer the original-language, non-DRC track.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const usable = formats.filter((f: any) => !f.is_drc && (f.audio_track ? f.audio_track.audio_is_default !== false : true));
   const pool = usable.length ? usable : formats;
-  const order = itag ? [itag] : ITAG_PREFERENCE[quality === 'lossless' ? 'high' : quality];
+  const order = itag ? [itag] : video ? VIDEO_ITAGS : ITAG_PREFERENCE[quality === 'lossless' ? 'high' : quality];
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let format: any = null;
   for (const wanted of order) {
@@ -135,7 +142,13 @@ async function resolveWith(yt: Innertube, videoId: string, client: ClientName, q
   }
   if (!format && itag) return `itag ${itag} not offered`;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  format ??= pool.slice().sort((a: any, b: any) => (b.bitrate ?? 0) - (a.bitrate ?? 0))[0];
+  format ??= pool
+    .slice()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    .filter((f: any) => !video || (f.height ?? 0) <= 1080)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    .sort((a: any, b: any) => (b.bitrate ?? 0) - (a.bitrate ?? 0))[0];
+  if (!format) return 'no video format up to 1080p';
   if (!format.url && !format.signature_cipher && !format.cipher) return 'only SABR streams (no direct URL)';
   const url = await format.decipher(yt.session.player);
   if (!url) return 'decipher produced no URL';
@@ -147,8 +160,9 @@ async function resolveWith(yt: Innertube, videoId: string, client: ClientName, q
     client,
     url,
     itag: format.itag,
-    mimeType: String(format.mime_type ?? 'audio/webm').split(';')[0]!,
-    codec: /opus/i.test(String(format.mime_type)) ? 'Opus' : /mp4a|mp4/i.test(String(format.mime_type)) ? 'AAC' : 'Audio',
+    mimeType: String(format.mime_type ?? (video ? 'video/mp4' : 'audio/webm')).split(';')[0]!,
+    ...(video && { video: true }),
+    codec: video ? 'Video' : /opus/i.test(String(format.mime_type)) ? 'Opus' : /mp4a|mp4/i.test(String(format.mime_type)) ? 'AAC' : 'Audio',
     sampleRate: Number(format.audio_sample_rate) || undefined,
     bitrate: format.bitrate,
     contentLength,
@@ -158,7 +172,7 @@ async function resolveWith(yt: Innertube, videoId: string, client: ClientName, q
   };
 }
 
-async function walkClients(videoId: string, quality: AudioQuality, itag?: number): Promise<ResolvedStream> {
+async function walkClients(videoId: string, quality: StreamKind, itag?: number): Promise<ResolvedStream> {
   const known = unplayable.get(videoId);
   if (known && Date.now() - known.at < UNPLAYABLE_TTL_MS) throw new UnplayableError(known.reason);
 
@@ -196,7 +210,7 @@ async function walkClients(videoId: string, quality: AudioQuality, itag?: number
 }
 
 /** The stream for a track, reused while its URL is fresh. */
-export async function resolveStream(videoId: string, quality: AudioQuality, options: { fresh?: boolean; itag?: number } = {}): Promise<ResolvedStream> {
+export async function resolveStream(videoId: string, quality: StreamKind, options: { fresh?: boolean; itag?: number } = {}): Promise<ResolvedStream> {
   const key = keyOf(videoId, quality);
   const cached = resolved.get(key);
   if (!options.fresh && cached && cached.expiresAt - Date.now() > 60_000 && (!options.itag || cached.itag === options.itag)) return cached;
@@ -217,7 +231,7 @@ export async function resolveStream(videoId: string, quality: AudioQuality, opti
 
 export function streamInfo(videoId: string): StreamInfo | null {
   for (const stream of resolved.values()) {
-    if (stream.videoId === videoId) {
+    if (stream.videoId === videoId && !stream.video) {
       return {
         videoId,
         source: 'youtube',
@@ -235,7 +249,7 @@ export function streamInfo(videoId: string): StreamInfo | null {
 }
 
 export function loudnessOf(videoId: string): number | undefined {
-  for (const stream of resolved.values()) if (stream.videoId === videoId) return stream.loudnessDb;
+  for (const stream of resolved.values()) if (stream.videoId === videoId && !stream.video) return stream.loudnessDb;
   return undefined;
 }
 
@@ -266,7 +280,7 @@ async function fetchChunk(stream: ResolvedStream, start: number, end: number, si
  * The body for bytes [start, end] of a track: chunk after chunk from
  * googlevideo, re-resolving (same itag, next client) when a URL is refused.
  */
-function chunkedBody(videoId: string, quality: AudioQuality, first: ResolvedStream, start: number, end: number): ReadableStream<Uint8Array> {
+function chunkedBody(videoId: string, quality: StreamKind, first: ResolvedStream, start: number, end: number): ReadableStream<Uint8Array> {
   let stream = first;
   let position = start;
   let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
@@ -326,7 +340,8 @@ export async function handleStreamRequest(request: Request, defaultQuality: () =
   const url = new URL(request.url);
   const videoId = decodeURIComponent(url.pathname.replace(/^\/+/, '')).split('/')[0] ?? '';
   const q = url.searchParams.get('q');
-  let quality: AudioQuality = q === 'normal' || q === 'low' || q === 'high' || q === 'lossless' ? q : defaultQuality();
+  // q=video: a music video's picture, for the full-screen player.
+  let quality: StreamKind = q === 'normal' || q === 'low' || q === 'high' || q === 'lossless' || q === 'video' ? q : defaultQuality();
   if (!/^[\w-]{11}$/.test(videoId)) return new Response('bad video id', { status: 400 });
 
   // Lossless when available: your own copy of the song, if you have one.

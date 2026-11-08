@@ -13,6 +13,7 @@ export type Route =
   | { name: 'music'; tab?: 'songs' | 'albums' | 'server' }
   | { name: 'musicAlbum'; source: 'local' | 'server'; id: string }
   | { name: 'downloads' }
+  | { name: 'wrapped'; month?: string }
   | { name: 'settings'; tab?: SettingsTab };
 
 export type SettingsTab = 'playback' | 'equalizer' | 'music' | 'appearance' | 'lyrics' | 'player' | 'layout' | 'about';

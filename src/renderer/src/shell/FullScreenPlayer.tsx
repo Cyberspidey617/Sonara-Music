@@ -15,6 +15,7 @@ import { toast, useUi } from '@/state/ui';
 import { NowPlayingQuality } from '@/components/QualityBadge';
 import { rgb, tintFor } from '@/lib/palette';
 import { useLibrary } from '@/state/library';
+import { useOnline } from '@/state/online';
 import { LyricsView } from './LyricsView';
 import { MusicVideo } from './MusicVideo';
 import { ArtworkBackdrop, MeshBackdrop, SolidBackdrop } from './MeshBackdrop';
@@ -125,20 +126,35 @@ export function FullScreenPlayer() {
   const motion = useLibrary((s) => (reduceMotion ? 0 : s.settings.backdropMotion));
   const artScale = useLibrary((s) => s.settings.artworkScale) || 1;
   const [solid, setSolid] = useState<string | null>(null);
-  // This song's music video, if one is attached, and whether it's on screen.
+  // This song's music video: one you attached, or else its video on YouTube; and whether it's on screen.
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [videoAttached, setVideoAttached] = useState(false);
   const [showVideo, setShowVideo] = useState(false);
   const videoKey = track?.videoId;
+  const online = useOnline((s) => s.online);
   useEffect(() => {
     setShowVideo(false);
     setVideoUrl(null);
+    setVideoAttached(false);
     if (!videoKey) return;
     let alive = true;
-    void api.musicVideo(videoKey).then((url) => alive && setVideoUrl(url));
+    void (async () => {
+      const attached = await api.musicVideo(videoKey).catch(() => null);
+      if (!alive) return;
+      if (attached) {
+        setVideoUrl(attached);
+        setVideoAttached(true);
+        return;
+      }
+      const song = usePlayer.getState().queue[usePlayer.getState().index]?.track;
+      if (!online || !song || song.videoId !== videoKey) return;
+      const found = await api.onlineMusicVideo(song).catch(() => null);
+      if (alive) setVideoUrl(found);
+    })();
     return () => {
       alive = false;
     };
-  }, [videoKey]);
+  }, [videoKey, online]);
   const artUrl = track ? (largeArtwork(track.thumbnail) ?? track.thumbnail) : undefined;
 
   useEffect(() => {
@@ -192,7 +208,16 @@ export function FullScreenPlayer() {
       ) : (
         <MeshBackdrop artworkUrl={artUrl} playing={playing} speed={motion} />
       )}
-      {showVideo && videoUrl && <MusicVideo url={videoUrl} onClose={() => setShowVideo(false)} />}
+      {showVideo && videoUrl && (
+        <MusicVideo
+          url={videoUrl}
+          onClose={() => setShowVideo(false)}
+          onError={() => {
+            setShowVideo(false);
+            toast('The music video couldn’t be loaded');
+          }}
+        />
+      )}
       {/* The window's drag strip, with the close, music video and full-screen buttons. */}
       <div className="app-drag absolute inset-x-0 top-0 z-30 flex h-[52px] items-center pl-3">
         {/* Related controls share one piece of glass. */}
@@ -283,17 +308,18 @@ export function FullScreenPlayer() {
                     ...trackMenu(track),
                     { separator: true },
                     {
-                      label: videoUrl ? 'Change music video…' : 'Attach a music video…',
+                      label: videoAttached ? 'Change music video…' : 'Attach a music video…',
                       icon: <Clapperboard size={16} />,
                       onSelect: () =>
                         void api.attachMusicVideo(track.videoId, track.title).then((url) => {
                           if (!url) return;
                           setVideoUrl(url);
+                          setVideoAttached(true);
                           setShowVideo(true);
                           toast(`Music video attached to “${track.title}”`);
                         }),
                     },
-                    ...(videoUrl
+                    ...(videoAttached
                       ? [
                           {
                             label: 'Remove music video',
@@ -302,6 +328,7 @@ export function FullScreenPlayer() {
                               void api.removeMusicVideo(track.videoId).then(() => {
                                 setShowVideo(false);
                                 setVideoUrl(null);
+                                setVideoAttached(false);
                               }),
                           },
                         ]

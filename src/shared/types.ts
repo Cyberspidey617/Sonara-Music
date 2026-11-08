@@ -164,6 +164,63 @@ export interface LocalPlaylist {
 export type AudioQuality = 'lossless' | 'high' | 'normal' | 'low';
 
 export type PageTone = 'obsidian' | 'graphite' | 'black' | 'midnight' | 'forest' | 'wine' | 'mocha';
+/** A song's lyric timing as you adjusted it, in ms (+ is later): the whole song, then single lines on top. */
+export interface LyricsTiming {
+  offset?: number;
+  /** By line number. */
+  lines?: Record<string, number>;
+}
+
+/** A listen of 30 seconds or more, sent again as it goes on (same id). */
+export interface PlayRecord {
+  id: string;
+  track: Track;
+  /** When it started (ms). */
+  at: number;
+  seconds: number;
+}
+
+export interface WrappedSong {
+  track: Track;
+  plays: number;
+  minutes: number;
+}
+
+export interface WrappedArtist {
+  name: string;
+  id?: string;
+  plays: number;
+  minutes: number;
+  /** The artwork of their most played song. */
+  thumbnail?: string;
+}
+
+/** A month of your listening, added up. */
+export interface Wrapped {
+  /** 'YYYY-MM'. */
+  month: string;
+  /** Months with listening (and this one), newest first. */
+  months: string[];
+  /** This month: still going. */
+  partial: boolean;
+  plays: number;
+  minutes: number;
+  /** Different songs and artists. */
+  songs: number;
+  artists: number;
+  topSongs: WrappedSong[];
+  topArtists: WrappedArtist[];
+  /** Genres by share of listens (of the songs whose genre is known). */
+  genres: { name: string; share: number }[];
+  /** Songs whose genre is still being looked up. */
+  genresPending: number;
+  /** Listens by hour of the day (0–23). */
+  hours: number[];
+  /** Minutes by day of the month. */
+  days: number[];
+  topDay?: { day: number; minutes: number };
+}
+
 export type LyricsFont = 'inter' | 'dm-sans' | 'system' | 'serif' | 'rounded';
 export type GlassStyle = 'clear' | 'tinted';
 export type Backdrop = 'mesh' | 'artwork' | 'solid';
@@ -225,6 +282,8 @@ export interface Settings {
   lyricsTranslation: boolean;
   /** Google Translate language code, e.g. 'en'. */
   lyricsTranslateTo: string;
+  /** Lyric timing you adjusted, per song (by videoId). */
+  lyricsTiming: Record<string, LyricsTiming>;
 
   // Full-screen player
   backdrop: Backdrop;
@@ -371,6 +430,7 @@ export const DEFAULT_SETTINGS: Settings = {
   lyricsPronunciation: true,
   lyricsTranslation: true,
   lyricsTranslateTo: 'en',
+  lyricsTiming: {},
   backdrop: 'artwork',
   backdropMotion: 1,
   artworkScale: 1,
@@ -527,6 +587,12 @@ export interface ObsidianApi {
   onImportProgress(handler: (done: number, total: number) => void): () => void;
   /** A song's attached music video (its address for the player), or null. Keyed by the song's id. */
   musicVideo(key: string): Promise<string | null>;
+  /** The song's music video on YouTube (as long as the song, so they play in time), or null. */
+  onlineMusicVideo(track: Track): Promise<string | null>;
+  /** A listen of 30 seconds or more, for Wrapped. */
+  recordPlay(record: PlayRecord): void;
+  /** A month of your listening (the latest one with listening when none is given). */
+  wrapped(month?: string): Promise<Wrapped>;
   /** Asks for a video file and attaches it to the song; null if cancelled. */
   attachMusicVideo(key: string, title: string): Promise<string | null>;
   removeMusicVideo(key: string): Promise<void>;

@@ -5,6 +5,7 @@ import { useLibrary } from '@/state/library';
 import { restoreQueue, usePlayer } from '@/state/player';
 import { AppShell } from '@/shell/AppShell';
 import { lastRoute, useNav } from '@/state/nav';
+import { startListeningLog } from '@/lib/listening';
 
 export function App() {
   const loaded = useLibrary((s) => s.loaded);
@@ -25,6 +26,7 @@ export function App() {
         const settings = useLibrary.getState().settings;
         usePlayer.setState({ volume: settings.volume });
         restoreQueue();
+        startListeningLog();
         const nav = useNav.getState();
         if (settings.startPage === 'liked') nav.go({ name: 'liked' }, { replace: true });
         else if (settings.startPage === 'music') nav.go({ name: 'music' }, { replace: true });

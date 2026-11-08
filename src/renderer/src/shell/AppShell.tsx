@@ -32,6 +32,7 @@ import { FirstRunGuide } from './FirstRunGuide';
 import { TastePicker } from './TastePicker';
 import { UpdateDialog } from './UpdateDialog';
 import { OfflinePill } from './OfflinePill';
+import { WrappedPage } from '@/pages/WrappedPage';
 import { Segmented } from '@/components/Segmented';
 
 function RoutePage({ route }: { route: Route }) {
@@ -60,6 +61,8 @@ function RoutePage({ route }: { route: Route }) {
       return <SettingsPage tab={route.tab} />;
     case 'downloads':
       return <DownloadsPage />;
+    case 'wrapped':
+      return <WrappedPage key={route.month ?? 'latest'} month={route.month} />;
   }
 }
 

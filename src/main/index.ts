@@ -3,12 +3,13 @@ import { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu, nativeImage,
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { isYouTubeId, type AppCommand, type MiniGrow, type MiniLayout, type LibraryData, type LibraryScanState, type PlaybackState, type ServerLogin, type Track, type DownloadQuality } from '../shared/types';
+import { isYouTubeId, type AppCommand, type MiniGrow, type MiniLayout, type LibraryData, type LibraryScanState, type PlaybackState, type ServerLogin, type Track, type DownloadQuality, type PlayRecord } from '../shared/types';
 import { initMiniPlayer } from './mini';
 import { importSpotify, isSpotifyLink } from './spotify';
 import { checkForUpdate, downloadUpdate, installUpdate, updateState, watchForUpdates } from './update';
 import { keepCovers, openCovers, serveCover } from './covers';
 import { attachMusicVideo, musicVideoUrl, removeMusicVideo, serveMusicVideo } from './videos';
+import { flushPlays, recordPlay, wrapped } from './plays';
 import { getScanState, localAlbum, localAlbums, localTracks, openLibrary, scan, searchLocal } from './library';
 import { clearMatches } from './lossless';
 import { handleMediaRequest, serveFile } from './media';
@@ -28,6 +29,7 @@ import {
   getTrack,
   getUpNext,
   findOnYouTube,
+  findMusicVideo,
   importPlaylist,
   search,
   suggest,
@@ -493,6 +495,18 @@ function registerIpc() {
   handle('app:update-download', () => downloadUpdate());
   ipcMain.on('app:update-install', () => installUpdate());
   handle('video:get', (key: string) => musicVideoUrl(String(key)));
+  ipcMain.on('plays:record', (_event, record: PlayRecord) => recordPlay(record));
+  handle('wrapped:get', (month?: string) => wrapped(typeof month === 'string' ? month : undefined));
+  handle('video:online', async (track: Track) => {
+    const id = await findMusicVideo({
+      videoId: String(track.videoId),
+      title: String(track.title ?? ''),
+      artist: String(track.artists?.[0]?.name ?? ''),
+      duration: Number(track.duration) || undefined,
+      isVideo: track.isVideo === true,
+    });
+    return id ? `ytstream://track/${encodeURIComponent(id)}?q=video` : null;
+  });
   handle('video:attach', (key: string, title: string) => attachMusicVideo(win, String(key), String(title ?? '')));
   handle('video:remove', (key: string) => removeMusicVideo(String(key)));
   ipcMain.on('mini:interactive', (_event, on: boolean) => miniPlayer?.setInteractive(on === true));
@@ -605,6 +619,7 @@ if (!app.requestSingleInstanceLock()) {
     quitting = true;
     saveWindowState();
     flush();
+    flushPlays();
   });
   app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') app.quit();

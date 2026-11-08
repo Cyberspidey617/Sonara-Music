@@ -1,6 +1,7 @@
 // Registers <am-lyrics>: Apple Music–style word-by-word lyrics (MPL-2.0).
 import '@uimaxbai/am-lyrics/am-lyrics.js';
-import { ChevronDown, Languages, Loader2, MicVocal, Speech } from 'lucide-react';
+import { ChevronDown, Languages, Loader2, MicVocal, Speech, Timer } from 'lucide-react';
+import { LyricsResync, retime, useLyricsTiming, type TimedLine } from './LyricsResync';
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { create } from 'zustand';
 import { pronunciationKind, romanizeLines, translateLines, TRANSLATE_LANGUAGES } from '@/lib/lyricsTools';
@@ -50,10 +51,10 @@ function cleanTitle(title: string): string {
     .trim();
 }
 
-type LyricLine = { text: { text: string; romanizedText?: string }[]; romanizedText?: string; translation?: string };
+type LyricLine = Omit<TimedLine, 'text'> & { text: (TimedLine['text'][number] & { romanizedText?: string })[]; romanizedText?: string; translation?: string };
 
 /** The pronunciation / translation toolbar over the lyrics: one capsule of clear glass. */
-function LyricsTools({ kind }: { kind: 'indic' | 'online' | 'none' | null }) {
+function LyricsTools({ kind, onResync, resynced }: { kind: 'indic' | 'online' | 'none' | null; onResync?: () => void; resynced?: boolean }) {
   const on = useLibrary((s) => s.settings.lyricsPronunciation);
   const tr = useLibrary((s) => s.settings.lyricsTranslation);
   const to = useLibrary((s) => s.settings.lyricsTranslateTo) || 'en';
@@ -104,6 +105,15 @@ function LyricsTools({ kind }: { kind: 'indic' | 'online' | 'none' | null }) {
         <ChevronDown size={14} className="-mr-1 opacity-70" />
         {translationHint && <Hint text={translationHint} />}
       </button>
+      {onResync && (
+        <button
+          className={`${btn} ${state(!!resynced)}`}
+          title={resynced ? 'You adjusted the timing: click to change it' : 'Lyrics early or late? Adjust when each line shows'}
+          onClick={onResync}
+        >
+          <Timer size={15} /> Resync
+        </button>
+      )}
     </div>
   );
 }
@@ -240,37 +250,48 @@ function SyncedLyrics({ track, full, onMissing }: { track: Track; full: boolean;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [track.videoId, full, scale, font, align, blur, controls, motion]);
 
-  // Pronunciation / translation: computed for the loaded lines, written back onto them.
+  // Pronunciation / translation: worked out for the loaded lines.
+  const [alt, setAlt] = useState<{ roman: string[]; trans: string[]; wantRoman: boolean; wantTrans: boolean } | null>(null);
   useEffect(() => {
-    const el = element.current as unknown as { lyrics?: LyricLine[]; showRomanization: boolean; showTranslation: boolean } | null;
+    const el = element.current as unknown as { showRomanization: boolean; showTranslation: boolean } | null;
     if (!el || !loaded) return;
     // Turning one off hides it at once, without waiting for the other to be worked out.
     if (!wantRoman) el.showRomanization = false;
     if (!wantTrans) el.showTranslation = false;
     let alive = true;
     const texts = loaded.map((l) => l.text.map((x) => x.text).join(''));
-    void withAlternates(texts, wantRoman && kind !== 'none', wantTrans, to).then(({ roman, trans }) => {
-      if (!alive) return;
-      const next = loaded.map((l, i) => ({
-        ...l,
-        // Keep word-level pronunciation a source already had.
-        romanizedText: l.text.some((x) => x.romanizedText) ? l.romanizedText : roman[i] || l.romanizedText,
-        translation: trans[i] || undefined,
-      })) as LyricLine[] & { __ours?: boolean };
-      next.__ours = true;
-      el.lyrics = next;
-      el.showRomanization = wantRoman;
-      el.showTranslation = wantTrans;
-    });
+    void withAlternates(texts, wantRoman && kind !== 'none', wantTrans, to).then(({ roman, trans }) => alive && setAlt({ roman, trans, wantRoman, wantTrans }));
     return () => {
       alive = false;
     };
   }, [loaded, wantRoman, wantTrans, to, kind]);
 
+  // The lines am-lyrics shows: your timing, then pronunciation and translation, written back onto them.
+  const timing = useLyricsTiming(track.videoId);
+  const [resyncing, setResyncing] = useState(false);
+  useEffect(() => {
+    const el = element.current as unknown as { lyrics?: LyricLine[]; showRomanization: boolean; showTranslation: boolean } | null;
+    if (!el || !loaded || (!alt && !timing && !(el.lyrics as { __ours?: boolean } | undefined)?.__ours)) return;
+    const next = retime(loaded, timing).map((l, i) => ({
+      ...l,
+      // Keep word-level pronunciation a source already had.
+      romanizedText: l.text.some((x) => x.romanizedText) ? l.romanizedText : alt?.roman[i] || l.romanizedText,
+      translation: alt?.trans[i] || undefined,
+    })) as LyricLine[] & { __ours?: boolean };
+    next.__ours = true;
+    el.lyrics = next;
+    if (alt) {
+      el.showRomanization = alt.wantRoman;
+      el.showTranslation = alt.wantTrans;
+    }
+  }, [loaded, alt, timing]);
+
   return (
     <div className="relative size-full min-h-0">
-      {controls && loaded && <LyricsTools kind={kind} />}
-      <div ref={host} className="size-full min-h-0" />
+      {controls && loaded && !resyncing && <LyricsTools kind={kind} onResync={() => setResyncing(true)} resynced={!!timing} />}
+      {/* Hidden, not removed, while you resync: it keeps its place and timing. */}
+      <div ref={host} className={`size-full min-h-0 ${resyncing ? 'invisible' : ''}`} />
+      {resyncing && loaded && <LyricsResync videoId={track.videoId} lines={loaded} onClose={() => setResyncing(false)} />}
     </div>
   );
 }

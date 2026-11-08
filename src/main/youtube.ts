@@ -24,6 +24,7 @@ import type {
   Shelf,
   Track,
 } from '../shared/types';
+import { isYouTubeId } from '../shared/types';
 import { log } from './log';
 
 // ---- The player-script evaluator ------------------------------------------------
@@ -722,4 +723,43 @@ export async function findOnYouTube(title: string, artist: string): Promise<stri
     if (track) return track.videoId;
   }
   return null;
+}
+
+/** Not a music video: a lyric video, the audio on a still picture, a fan edit. */
+const NOT_A_VIDEO = /\b(lyrics?|lyrical|audio|visuali[sz]er|full song|jukebox|bass boosted|lofi|tutorial|status|whatsapp|shorts?|teaser|trailer)\b/;
+const musicVideos = new Map<string, string | null>();
+
+/**
+ * A song's music video on YouTube Music, as a videoId, or null. Only one as long as the song (within
+ * 3 s) counts, so it plays in time with it; a video with a longer intro or a skit would drift apart.
+ */
+export async function findMusicVideo(track: { videoId: string; title: string; artist: string; duration?: number; isVideo?: boolean }): Promise<string | null> {
+  if (track.isVideo) return track.videoId;
+  if (musicVideos.has(track.videoId)) return musicVideos.get(track.videoId)!;
+  // A song from a search suggestion comes without its length: ask for it.
+  const duration = track.duration ?? (isYouTubeId(track.videoId) ? (await getTrack(track.videoId).catch(() => null))?.duration : undefined);
+  if (!duration) return null;
+  const yt = await getInnertube();
+  const wanted = comparable(track.title);
+  const wantedFull = comparable(track.title, true);
+  const artist = comparable(track.artist);
+  const results = await yt.music.search(`${track.title} ${track.artist}`.trim(), { type: 'video' });
+  let found: string | null = null;
+  for (const row of searchRows(results.contents as AnyNode[]).slice(0, 6)) {
+    const video = trackFromListItem(row);
+    if (!video?.duration || Math.abs(video.duration - duration) > 3) continue;
+    const full = comparable(video.title, true);
+    if (NOT_A_VIDEO.test(full) || (VERSION.test(full) && !VERSION.test(wantedFull))) continue;
+    const byline = comparable(video.artists.map((a) => a.name).join(' '));
+    const titled = overlap(wanted, comparable(video.title)) >= 0.75 || full.includes(wanted);
+    const byArtist = !artist || !byline || byline.includes(artist) || artist.includes(byline) || full.includes(artist);
+    if (titled && byArtist) {
+      found = video.videoId;
+      break;
+    }
+  }
+  if (musicVideos.size > 300) musicVideos.clear();
+  musicVideos.set(track.videoId, found);
+  log.info(`[${track.videoId}] music video: ${found ?? 'none in time with the song'}`);
+  return found;
 }

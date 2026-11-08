@@ -11,7 +11,7 @@ const SETTLED = 0.06;
  * equalizer, crossfade and so on); the video is muted and follows it: playing and pausing with the
  * song, and moved back into time if it drifts. Click it to play or pause; Esc closes it.
  */
-export function MusicVideo({ url, onClose }: { url: string; onClose: () => void }) {
+export function MusicVideo({ url, onClose, onError }: { url: string; onClose: () => void; onError?: () => void }) {
   const video = useRef<HTMLVideoElement>(null);
   const playing = usePlayer((s) => s.status === 'playing');
 
@@ -59,7 +59,7 @@ export function MusicVideo({ url, onClose }: { url: string; onClose: () => void 
   return (
     // Above everything in the player (the lyrics panel's controls too), under its top strip.
     <div className="absolute inset-0 z-20 grid animate-fade-in place-items-center bg-black" onClick={() => usePlayer.getState().togglePlay()}>
-      <video ref={video} src={url} muted playsInline preload="auto" className="size-full object-contain" onLoadedMetadata={(e) => (e.currentTarget.currentTime = getPlayhead())} />
+      <video ref={video} src={url} muted playsInline preload="auto" className="size-full object-contain" onLoadedMetadata={(e) => (e.currentTarget.currentTime = getPlayhead())} onError={onError} />
     </div>
   );
 }
