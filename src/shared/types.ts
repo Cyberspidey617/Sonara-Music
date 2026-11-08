@@ -531,6 +531,8 @@ export interface ObsidianApi {
   attachMusicVideo(key: string, title: string): Promise<string | null>;
   removeMusicVideo(key: string): Promise<void>;
   updateState(): Promise<UpdateState>;
+  /** System-wide shortcuts the system kept for itself (e.g. 'CommandOrControl+Alt+Right'). */
+  takenShortcuts(): Promise<string[]>;
   /** Whether YouTube Music can be reached right now. */
   isOnline(): Promise<boolean>;
   /** Looks for a newer release now (Settings › About). */

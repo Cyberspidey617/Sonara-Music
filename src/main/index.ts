@@ -44,6 +44,9 @@ protocol.registerSchemesAsPrivileged([
 ]);
 
 app.setAppUserModelId('com.obsidian.music.pc');
+// Wayland lets no app grab keys itself: system-wide shortcuts go through the desktop's global
+// shortcuts portal (KDE, GNOME 48 and later), which Electron uses only when asked to.
+if (process.platform === 'linux') app.commandLine.appendSwitch('enable-features', 'GlobalShortcutsPortal');
 // Renamed to Sonara: keep reading the library from the folder the app has always used.
 app.setPath('userData', path.join(app.getPath('appData'), 'Obsidian Music'));
 // A plain Chrome user agent: some lyric providers refuse "Electron".
@@ -479,6 +482,7 @@ function registerIpc() {
   ipcMain.on('mini:move-start', () => miniPlayer?.moveStart());
   handle('app:check-update', () => checkForUpdate());
   handle('app:update-state', () => updateState());
+  handle('shortcuts:taken', () => takenShortcuts);
   handle('app:online', async () => {
     try {
       return (await fetch('https://music.youtube.com/', { method: 'HEAD', signal: AbortSignal.timeout(5000) })).ok;
@@ -499,8 +503,12 @@ function registerIpc() {
  * System-wide shortcuts: they work while other apps are in front. A combination another app
  * already holds is skipped (and logged); the rest still register.
  */
+/** Shortcuts the system kept for itself (another app, or the desktop's own keys), as Settings shows them. */
+let takenShortcuts: string[] = [];
+
 function registerShortcuts() {
   globalShortcut.unregisterAll();
+  takenShortcuts = [];
   if (getLibrary().settings.globalShortcuts === false) return;
   const keys: [string, () => void][] = [
     ['CommandOrControl+Alt+Space', () => send('play-pause')],
@@ -508,6 +516,9 @@ function registerShortcuts() {
     ['CommandOrControl+Alt+P', () => send('play-pause')],
     ['CommandOrControl+Alt+Right', () => send('next')],
     ['CommandOrControl+Alt+Left', () => send('previous')],
+    // GNOME and others switch workspaces with Ctrl+Alt+arrows: N (next) and B (back) always work too.
+    ['CommandOrControl+Alt+N', () => send('next')],
+    ['CommandOrControl+Alt+B', () => send('previous')],
     ['CommandOrControl+Alt+Up', () => send('volume-up')],
     ['CommandOrControl+Alt+Down', () => send('volume-down')],
     ['CommandOrControl+Alt+L', () => send('like')],
@@ -515,9 +526,13 @@ function registerShortcuts() {
   ];
   for (const [accelerator, run] of keys) {
     try {
-      if (!globalShortcut.register(accelerator, run)) log.warn(`shortcut ${accelerator} is taken by another app`);
+      if (!globalShortcut.register(accelerator, run)) {
+        log.warn(`shortcut ${accelerator} is taken by another app`);
+        takenShortcuts.push(accelerator);
+      }
     } catch (error) {
       log.warn(`shortcut ${accelerator} not registered: ${String(error)}`);
+      takenShortcuts.push(accelerator);
     }
   }
 }

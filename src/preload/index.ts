@@ -16,6 +16,7 @@ const api: ObsidianApi = {
   importPlaylist: (urlOrId) => ipcRenderer.invoke('yt:import', urlOrId),
   updateState: () => ipcRenderer.invoke('app:update-state'),
   isOnline: () => ipcRenderer.invoke('app:online'),
+  takenShortcuts: () => ipcRenderer.invoke('shortcuts:taken'),
   checkForUpdate: () => ipcRenderer.invoke('app:check-update'),
   downloadUpdate: () => ipcRenderer.invoke('app:update-download'),
   installUpdate: () => ipcRenderer.send('app:update-install'),

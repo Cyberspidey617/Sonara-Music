@@ -227,7 +227,7 @@ function PlaybackTab() {
             onChange={(miniPlayerWhen) => set({ miniPlayerWhen })}
           />
         </Row>
-        <Row title="System-wide shortcuts" detail="Control Sonara from any app: Ctrl + Alt + Space or P (play / pause), → / ←, ↑ / ↓, L (like) and M (mini player). ⌘ instead of Ctrl on a Mac.">
+        <Row title="System-wide shortcuts" detail={<ShortcutsDetail on={s.globalShortcuts} />}>
           <Toggle label="System-wide shortcuts" on={s.globalShortcuts} onChange={(globalShortcuts) => set({ globalShortcuts })} />
         </Row>
       </Section>
@@ -695,6 +695,29 @@ function LayoutTab() {
 }
 
 /** Settings › About: updates — check, download inside the app, restart into it. */
+/** The system-wide shortcuts, and any the system kept for itself (another app, or the desktop's keys). */
+function ShortcutsDetail({ on }: { on: boolean }) {
+  const [taken, setTaken] = useState<string[]>([]);
+  useEffect(() => {
+    // Asked again when the toggle changes, once the shortcuts have been registered again.
+    const timer = setTimeout(() => void api.takenShortcuts().then(setTaken, () => undefined), 300);
+    return () => clearTimeout(timer);
+  }, [on]);
+  const words = (a: string) =>
+    a.replace('CommandOrControl', navigator.platform.startsWith('Mac') ? '⌘' : 'Ctrl').replace('Right', '→').replace('Left', '←').replace('Up', '↑').replace('Down', '↓').replaceAll('+', ' + ');
+  return (
+    <>
+      Control Sonara from any app: Ctrl + Alt + Space or P (play / pause), → / ← or N / B (next / previous), ↑ / ↓ (volume), L (like) and M (mini player). ⌘ instead of Ctrl on a Mac.
+      {on && taken.length > 0 && (
+        <span className="mt-1 block text-[#ff9f0a]">
+          Kept by your system or another app, so they won’t work here: {taken.map(words).join(', ')}.
+          {navigator.userAgent.includes('Linux') ? ' On Linux, your desktop may use them (GNOME switches workspaces with Ctrl + Alt + arrows), or need its global shortcuts support (Wayland).' : ''}
+        </span>
+      )}
+    </>
+  );
+}
+
 function UpdateSettings() {
   const { s, set } = useSettings();
   const [u, setU] = useState<UpdateState | null>(null);
