@@ -152,6 +152,7 @@ export function createMockApi(): ObsidianApi {
     downloadUpdate: async () => undefined,
     installUpdate: () => undefined,
     onUpdateState: () => () => undefined,
+    isOnline: async () => navigator.onLine,
     musicVideo: async () => null,
     attachMusicVideo: async () => null,
     removeMusicVideo: async () => undefined,

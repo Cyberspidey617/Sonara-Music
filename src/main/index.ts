@@ -7,6 +7,7 @@ import { isYouTubeId, type AppCommand, type MiniGrow, type MiniLayout, type Libr
 import { initMiniPlayer } from './mini';
 import { importSpotify, isSpotifyLink } from './spotify';
 import { checkForUpdate, downloadUpdate, installUpdate, updateState, watchForUpdates } from './update';
+import { keepCovers, openCovers, serveCover } from './covers';
 import { attachMusicVideo, musicVideoUrl, removeMusicVideo, serveMusicVideo } from './videos';
 import { getScanState, localAlbum, localAlbums, localTracks, openLibrary, scan, searchLocal } from './library';
 import { clearMatches } from './lossless';
@@ -273,6 +274,7 @@ function registerProtocols() {
   protocol.handle('media', (request) => {
     const url = new URL(request.url);
     if (url.hostname === 'video') return serveMusicVideo(request);
+    if (url.hostname === 'cover') return serveCover(request);
     if (url.hostname === 'server') {
       const saved = downloadedFile(`srv_${decodeURIComponent(url.pathname.replace(/^\/+/, ''))}`);
       if (saved) return serveFile(saved.path!, request.headers.get('range'));
@@ -324,7 +326,7 @@ export function friendlyError(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
   const cause = error instanceof Error && error.cause instanceof Error ? error.cause.message : '';
   if (/fetch failed|ENOTFOUND|EAI_AGAIN|ECONNREFUSED|ECONNRESET|ETIMEDOUT|ENETUNREACH|network/i.test(`${message} ${cause}`)) {
-    return 'Can’t reach YouTube Music. Check your internet connection and try again.';
+    return 'Check your internet connection.';
   }
   return message;
 }
@@ -477,6 +479,13 @@ function registerIpc() {
   ipcMain.on('mini:move-start', () => miniPlayer?.moveStart());
   handle('app:check-update', () => checkForUpdate());
   handle('app:update-state', () => updateState());
+  handle('app:online', async () => {
+    try {
+      return (await fetch('https://music.youtube.com/', { method: 'HEAD', signal: AbortSignal.timeout(5000) })).ok;
+    } catch {
+      return false;
+    }
+  });
   handle('app:update-download', () => downloadUpdate());
   ipcMain.on('app:update-install', () => installUpdate());
   handle('video:get', (key: string) => musicVideoUrl(String(key)));
@@ -535,6 +544,7 @@ if (!app.requestSingleInstanceLock()) {
     openStore(dataDir);
     openLibrary(dataDir, (state: LibraryScanState) => win?.webContents.send('music:scan-progress', state));
     openServer(dataDir);
+    openCovers(dataDir);
     openDownloads(dataDir, () => getLibrary().settings.downloadFolder ?? '', (items) => win?.webContents.send('downloads:changed', items));
     const country = (() => {
       try {
@@ -549,6 +559,8 @@ if (!app.requestSingleInstanceLock()) {
     installCorsSafetyNet();
     registerIpc();
     createWindow();
+    // Covers for songs downloaded before covers were kept (once there's a connection).
+    setTimeout(() => void keepCovers(listDownloads().filter((d) => d.state === 'done').map((d) => d.track.thumbnail)), 8_000);
     watchForUpdates({
       enabled: () => getLibrary().settings.updateNotices !== false,
       tell: (state) => win?.webContents.send('app:update-state', state),

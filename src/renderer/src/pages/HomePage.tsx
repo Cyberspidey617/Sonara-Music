@@ -11,6 +11,8 @@ import { ErrorState, ShelfSkeleton } from "@/components/States";
 import { Lockup } from "@/components/Lockup";
 import { trackMenu } from "@/components/trackActions";
 import { openContextMenu } from "@/state/menu";
+import { useOnline } from "@/state/online";
+import { OfflineHome } from "./OfflineHome";
 
 function greeting(): string {
   const h = new Date().getHours();
@@ -110,6 +112,11 @@ function MadeForYou() {
 }
 
 export function HomePage() {
+  const online = useOnline((s) => s.online);
+  return online ? <OnlineHome /> : <OfflineHome />;
+}
+
+function OnlineHome() {
   const { data, error, isLoading, refetch } = useHome();
   const history = useLibrary((s) => s.history);
   return (

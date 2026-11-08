@@ -31,19 +31,28 @@ async function measure(url: string): Promise<Rgb[]> {
 async function measureRaw(url: string): Promise<Rgb[]> {
   const known = rawCache.get(url);
   if (known) return known;
-  const image = new Image();
-  image.crossOrigin = 'anonymous';
-  image.referrerPolicy = 'no-referrer';
-  image.decoding = 'async';
-  image.src = artworkAtPixels(url, 60);
-  await image.decode();
+  const src = artworkAtPixels(url, 60);
+  let image: HTMLImageElement | ImageBitmap;
+  if (src.startsWith('media://')) {
+    // A cover kept for offline: read the file and decode it directly (an <img> load of it can
+    // wait forever with no network, while a fetch of the same file answers at once).
+    image = await createImageBitmap(await (await fetch(src)).blob());
+  } else {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.referrerPolicy = 'no-referrer';
+    img.decoding = 'async';
+    img.src = src;
+    await img.decode();
+    image = img;
+  }
   const side = GRID * 3;
   const canvas = document.createElement('canvas');
   canvas.width = canvas.height = side;
   const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
   // Video thumbnails are 16:9 with bars; crop to the middle square.
-  const w = image.naturalWidth;
-  const h = image.naturalHeight;
+  const w = image instanceof HTMLImageElement ? image.naturalWidth : image.width;
+  const h = image instanceof HTMLImageElement ? image.naturalHeight : image.height;
   const s = Math.min(w, h) * (w > h * 1.2 ? 0.75 : 1);
   ctx.drawImage(image, (w - s) / 2, (h - s) / 2, s, s, 0, 0, side, side);
   const { data } = ctx.getImageData(0, 0, side, side);

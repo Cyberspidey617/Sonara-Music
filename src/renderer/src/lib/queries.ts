@@ -1,9 +1,11 @@
-import { QueryClient, useQuery } from '@tanstack/react-query';
+import { QueryCache, QueryClient, useQuery } from '@tanstack/react-query';
+import { markOffline } from '@/state/online';
 import type { Taste } from '@shared/types';
 import { madeForYou } from './taste';
-import { api } from './api';
+import { api, errorMessage } from './api';
 
 export const queryClient = new QueryClient({
+  queryCache: new QueryCache({ onError: (error) => /Check your internet connection/.test(errorMessage(error)) && markOffline() }),
   defaultOptions: {
     queries: { staleTime: 10 * 60_000, gcTime: 30 * 60_000, retry: 1, refetchOnWindowFocus: false },
   },

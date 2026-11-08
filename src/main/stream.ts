@@ -349,7 +349,7 @@ export async function handleStreamRequest(request: Request, defaultQuality: () =
     stream = await resolveStream(videoId, quality);
   } catch (error) {
     const raw = error instanceof Error ? error.message : String(error);
-    const message = /fetch failed|ENOTFOUND|EAI_AGAIN|ECONN|ETIMEDOUT|ENETUNREACH/i.test(raw) ? 'Can’t reach YouTube. Check your internet connection.' : raw;
+    const message = /fetch failed|ENOTFOUND|EAI_AGAIN|ECONN|ETIMEDOUT|ENETUNREACH/i.test(raw) ? 'Check your internet connection.' : raw;
     log.error(`[${videoId}] unplayable: ${raw}`);
     // The renderer reads this header to explain the failure.
     return new Response(message, { status: error instanceof UnplayableError ? 451 : 502, headers: { 'X-Obsidian-Error': encodeURIComponent(message) } });

@@ -9,6 +9,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { isYouTubeId, type AudioFormat, type DownloadItem, type DownloadQuality, type StreamInfo, type Track } from '../shared/types';
+import { keepCover } from './covers';
 import { getEntry } from './library';
 import { log } from './log';
 import { serveServerSong } from './media';
@@ -19,7 +20,9 @@ const ITAGS: Record<DownloadQuality, number[]> = {
   compatible: [140, 139],
   small: [250, 249, 139],
 };
-const CHUNK = 4 * 1024 * 1024;
+const CHUNK = 2 * 1024 * 1024;
+/** Pieces fetched at once: YouTube slows each connection on its own. */
+const AT_ONCE = 4;
 const PARALLEL = 2;
 
 let indexFile = '';
@@ -122,6 +125,8 @@ function pump() {
       next.state = 'done';
       next.error = undefined;
       log.info(`[${next.videoId}] downloaded (${next.quality}) → ${next.path}`);
+      // Its cover too, so it shows (and colours the accent) with no connection.
+      void keepCover(next.track.thumbnail);
     })
     .catch((error: unknown) => {
       if (controller.signal.aborted) return;
@@ -170,27 +175,46 @@ async function run(d: DownloadItem, signal: AbortSignal) {
   d.format = { codec: stream.codec, lossless: false, ...(stream.bitrate && { bitrate: stream.bitrate }), ...(stream.sampleRate && { sampleRate: stream.sampleRate }) };
   const part = `${d.path}.part`;
   const out = await fs.promises.open(part, 'w');
+  const started = Date.now();
   try {
-    let position = 0;
+    // YouTube often slows each connection on its own, so pieces are fetched several at a time,
+    // each written to its place in the file. A refused piece gets a fresh link and goes again.
+    const pieces: number[] = [];
+    for (let at = 0; at < d.total; at += CHUNK) pieces.push(at);
     let refusals = 0;
-    while (position < d.total) {
-      if (signal.aborted) throw new Error('Cancelled');
-      if (stream.expiresAt - Date.now() < 30_000) stream = await resolveStream(track.videoId, 'high', { fresh: true, itag: stream.itag });
-      const end = Math.min(position + CHUNK, d.total) - 1;
-      const response = await fetch(stream.url, { headers: { Range: `bytes=${position}-${end}`, 'User-Agent': stream.userAgent }, signal });
-      if (!response.ok || !response.body) {
-        await response.body?.cancel().catch(() => undefined);
-        if (++refusals > 4) throw new Error(`YouTube refused the download (${response.status}).`);
-        stream = await resolveStream(track.videoId, 'high', { fresh: true, itag: stream.itag });
-        continue;
+    let refreshing: Promise<ResolvedStream> | null = null;
+    const refresh = () => (refreshing ??= resolveStream(track.videoId, 'high', { fresh: true, itag: stream!.itag }).then((s) => ((stream = s), s)).finally(() => (refreshing = null)));
+    d.received = 0;
+    const worker = async () => {
+      for (let start = pieces.shift(); start !== undefined; start = pieces.shift()) {
+        if (signal.aborted) throw new Error('Cancelled');
+        if (stream!.expiresAt - Date.now() < 30_000) await refresh();
+        const end = Math.min(start + CHUNK, d.total) - 1;
+        const response = await fetch(stream!.url, { headers: { Range: `bytes=${start}-${end}`, 'User-Agent': stream!.userAgent }, signal });
+        if (!response.ok || !response.body) {
+          await response.body?.cancel().catch(() => undefined);
+          if (++refusals > 6) throw new Error(`YouTube refused the download (${response.status}).`);
+          pieces.unshift(start);
+          await refresh();
+          continue;
+        }
+        let at = start;
+        for await (const chunk of response.body as unknown as AsyncIterable<Uint8Array>) {
+          await out.write(chunk, 0, chunk.byteLength, at);
+          at += chunk.byteLength;
+          d.received += chunk.byteLength;
+          changed();
+        }
+        if (at <= end) {
+          // Cut short: fetch the rest of this piece again.
+          d.received -= at - start;
+          pieces.unshift(start);
+        }
       }
-      for await (const chunk of response.body as unknown as AsyncIterable<Uint8Array>) {
-        await out.write(chunk);
-        position += chunk.byteLength;
-        d.received = position;
-        changed();
-      }
-    }
+    };
+    await Promise.all(Array.from({ length: Math.min(AT_ONCE, pieces.length) }, worker));
+    const seconds = (Date.now() - started) / 1000;
+    log.info(`[${track.videoId}] ${(d.total / 1e6).toFixed(1)} MB in ${seconds.toFixed(1)} s (${(d.total / 1e6 / Math.max(seconds, 0.1)).toFixed(2)} MB/s) via ${stream!.client}`);
   } catch (error) {
     await out.close();
     await fs.promises.rm(part, { force: true });

@@ -1,4 +1,5 @@
 import { Disc3, User } from 'lucide-react';
+import { useOnline } from '@/state/online';
 import { sizedArtwork } from '@/lib/artwork';
 
 interface ArtworkProps {
@@ -25,6 +26,7 @@ export function preloadArtwork(url: string | undefined, size: number) {
 const radii = { sm: 'rounded-artwork-sm', md: 'rounded-artwork-md', lg: 'rounded-artwork-lg' };
 
 export function Artwork({ url, size, className = '', round = false, radius = 'md', kind = 'music' }: ArtworkProps) {
+  useOnline((s) => s.online); // offline, the kept copy
   const src = sizedArtwork(url, size);
   return (
     <div className={`artwork-stroke overflow-hidden bg-joe ${/\babsolute\b/.test(className) ? '' : 'relative'} ${round ? 'rounded-full' : radii[radius]} ${className}`}>

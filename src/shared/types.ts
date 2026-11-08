@@ -531,6 +531,8 @@ export interface ObsidianApi {
   attachMusicVideo(key: string, title: string): Promise<string | null>;
   removeMusicVideo(key: string): Promise<void>;
   updateState(): Promise<UpdateState>;
+  /** Whether YouTube Music can be reached right now. */
+  isOnline(): Promise<boolean>;
   /** Looks for a newer release now (Settings › About). */
   checkForUpdate(): Promise<UpdateState>;
   /** Downloads the update inside the app (or opens the release page where it can't install itself). */

@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react';
+import { useOnline } from '@/state/online';
+import { artworkAtPixels } from '@/lib/artwork';
 import type { PageTone, Settings } from '@shared/types';
 import { api } from './api';
 import { hexToRgb, readableAccent, rgb, tintFor, vibrantColor, type Rgb } from './palette';
@@ -49,7 +51,10 @@ export const LYRIC_FONTS: Record<Settings['lyricsFont'], { label: string; family
 
 /** The colours of the song playing now, read from its artwork (for the dynamic accent, the glow and the waveform). */
 export function useArtworkColors(enabled: boolean) {
-  const url = usePlayer((s) => s.queue[s.index]?.track.thumbnail);
+  const thumbnail = usePlayer((s) => s.queue[s.index]?.track.thumbnail);
+  const online = useOnline((s) => s.online);
+  // Offline, the copy kept with the download (the same picture, so the same colours).
+  const url = thumbnail && !online ? artworkAtPixels(thumbnail, 544) : thumbnail;
   const [colors, setColors] = useState<{ accent: Rgb | null; tint: Rgb | null }>({ accent: null, tint: null });
   useEffect(() => {
     if (!enabled || !url) {

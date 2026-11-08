@@ -15,6 +15,7 @@ const api: ObsidianApi = {
   track: (videoId) => ipcRenderer.invoke('yt:track', videoId),
   importPlaylist: (urlOrId) => ipcRenderer.invoke('yt:import', urlOrId),
   updateState: () => ipcRenderer.invoke('app:update-state'),
+  isOnline: () => ipcRenderer.invoke('app:online'),
   checkForUpdate: () => ipcRenderer.invoke('app:check-update'),
   downloadUpdate: () => ipcRenderer.invoke('app:update-download'),
   installUpdate: () => ipcRenderer.send('app:update-install'),

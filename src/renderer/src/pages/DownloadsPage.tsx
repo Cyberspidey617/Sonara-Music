@@ -13,12 +13,18 @@ import { toast } from '@/state/ui';
 
 const mb = (bytes: number) => (bytes >= 1e9 ? `${(bytes / 1e9).toFixed(2)} GB` : `${(bytes / 1e6).toFixed(1)} MB`);
 
-function Row({ d, index }: { d: DownloadItem; index: number }) {
+function Row({ d, index, onPlay }: { d: DownloadItem; index: number; onPlay?: () => void }) {
   const k = d.total ? d.received / d.total : 0;
   const active = d.state === 'queued' || d.state === 'downloading';
   const small = 'grid size-8 place-items-center rounded-full text-secondary transition-colors hover:bg-white/10 hover:text-primary';
   return (
-    <div role="listitem" className="group stagger glow relative grid h-16 grid-cols-[48px_minmax(0,1fr)_auto] items-center gap-3 overflow-hidden rounded-[14px] px-2 hover:bg-white/[0.05]" style={{ '--i': index } as CSSProperties}>
+    <div
+      role="listitem"
+      className={`group stagger glow relative grid h-16 grid-cols-[48px_minmax(0,1fr)_auto] items-center gap-3 overflow-hidden rounded-[14px] px-2 hover:bg-white/[0.05] ${onPlay ? 'cursor-pointer' : ''}`}
+      style={{ '--i': index } as CSSProperties}
+      title={onPlay ? `Play “${d.track.title}”` : undefined}
+      onClick={(e) => onPlay && !(e.target as Element).closest('button') && onPlay()}
+    >
       <Artwork url={d.track.thumbnail} size={48} radius="sm" className="size-12" />
       <div className="flex min-w-0 flex-col gap-0.5">
         <span className="truncate type-body-emphasized text-primary">{d.track.title}</span>
@@ -121,7 +127,12 @@ export function DownloadsPage() {
               <h2 className="mb-2 px-2 type-[700_20px/26px] tracking-apple">{title as string}</h2>
               <div role="list" className="flex flex-col gap-0.5">
                 {(items as DownloadItem[]).map((d, i) => (
-                  <Row key={d.videoId} d={d} index={i} />
+                  <Row
+                    key={d.videoId}
+                    d={d}
+                    index={i}
+                    onPlay={d.state === 'done' ? () => usePlayer.getState().playTracks(done.map((x) => x.track), i, { source: { label: 'Downloads' } }) : undefined}
+                  />
                 ))}
               </div>
             </section>

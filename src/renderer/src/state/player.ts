@@ -6,6 +6,7 @@
  * overlap for the crossfade's length. Only the active deck's events count.
  */
 import { attachEqualizer } from '@/lib/equalizer';
+import { markOffline } from './online';
 import { create } from 'zustand';
 import { isYouTubeId, type AudioFormat, type Track, type TrackSource } from '@shared/types';
 import { api, isElectron } from '@/lib/api';
@@ -477,6 +478,7 @@ for (const [i, deck] of decks.entries()) {
     void streamError(track).then((message) => {
       if (usePlayer.getState().queue[usePlayer.getState().index]?.track.videoId !== track.videoId) return;
       usePlayer.setState({ status: 'error', error: message });
+      if (message.startsWith('Check your internet connection')) markOffline();
       reportPlayback();
       const ni = nextIndex(false);
       if (ni !== null && consecutiveErrors < 4) {

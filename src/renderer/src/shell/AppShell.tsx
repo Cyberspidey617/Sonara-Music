@@ -31,6 +31,7 @@ import { WindowControls } from './WindowControls';
 import { FirstRunGuide } from './FirstRunGuide';
 import { TastePicker } from './TastePicker';
 import { UpdateDialog } from './UpdateDialog';
+import { OfflinePill } from './OfflinePill';
 import { Segmented } from '@/components/Segmented';
 
 function RoutePage({ route }: { route: Route }) {
@@ -203,6 +204,7 @@ export function AppShell() {
       {fullScreen && <FullScreenPlayer />}
       <DialogLayer />
       <MenuLayer />
+      <OfflinePill />
       <Toasts />
       <FirstRunGuide />
       <TastePicker />
