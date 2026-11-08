@@ -1,7 +1,7 @@
 {
   "name": "obsidian-music-pc",
   "productName": "Sonara",
-  "version": "2.2.3",
+  "version": "2.2.4",
   "description": "Sonara — a YouTube Music desktop player in Apple's Liquid Glass design",
   "main": "out/main/index.js",
   "author": "Alby Mathew Biju",
