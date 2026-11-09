@@ -1,6 +1,6 @@
-import { Clock, Heart, Plus } from "lucide-react";
+import { Clock, Heart } from "lucide-react";
+import type { Shelf as ShelfData } from "@shared/types";
 import { Mosaic } from "@/components/Mosaic";
-import { useUi } from "@/state/ui";
 import { GettingStarted } from '@/components/GettingStarted';
 import type { CSSProperties } from "react";
 import { useLibrary } from "@/state/library";
@@ -99,57 +99,24 @@ function QuickTiles() {
   );
 }
 
-/** Your playlists (and Liked Songs) as covers: open one, or play it from its cover. */
-function YourPlaylists() {
-  const playlists = useLibrary((s) => s.playlists);
-  const liked = useLibrary((s) => s.liked);
-  if (!playlists.length) return null;
-  const cards = [
-    ...(liked.length ? [{ key: "liked", name: "Liked Songs", tracks: liked, open: () => go({ name: "liked" }) as void }] : []),
-    ...playlists.map((p) => ({ key: p.id, name: p.name, tracks: p.tracks, open: () => go({ name: "local", id: p.id }) as void })),
-  ];
-  return (
-    <ShelfRow
-      title="Your playlists"
-      action={
-        <button className="inline-flex items-center gap-1 type-body-emphasized text-secondary hover:text-primary" onClick={() => useUi.getState().openDialog({ kind: "new-playlist" })}>
-          <Plus size={14} /> New
-        </button>
-      }
-    >
-      {cards.map((card) => (
-        <div key={card.key} className="group w-[150px] flex-none snap-start">
-          <div className="relative cursor-pointer" onClick={card.open}>
-            {card.key === "liked" ? (
-              <div className="grid size-[150px] place-items-center rounded-artwork-md bg-[linear-gradient(135deg,#5b2a86,#fa586a_60%,#f4a261)] text-white shadow-art">
-                <Heart size={48} fill="currentColor" />
-              </div>
-            ) : (
-              <Mosaic tracks={card.tracks} size={150} className="size-[150px] rounded-artwork-md shadow-art" />
-            )}
-            {card.tracks.length > 0 && (
-              <button
-                className="glass-prominent elastic absolute right-2 bottom-2 grid size-10 place-items-center rounded-full opacity-0 transition-opacity group-hover:opacity-100"
-                aria-label={`Play ${card.name}`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  usePlayer.getState().playTracks(card.tracks, 0, { source: { label: card.name } });
-                }}
-              >
-                <PlayGlyph size={17} />
-              </button>
-            )}
-          </div>
-          <button className="mt-2 block w-full truncate text-left type-body-emphasized text-primary hover:underline" onClick={card.open}>
-            {card.name}
-          </button>
-          <span className="block type-callout text-secondary">
-            {card.tracks.length} {card.tracks.length === 1 ? "song" : "songs"}
-          </span>
-        </div>
-      ))}
-    </ShelfRow>
-  );
+/**
+ * YouTube Music's Home shelves, sorted for Home's order: Quick picks; what's trending (charts, top
+ * songs, new releases); playlist shelves (moods, mixes, community playlists), kept for the bottom;
+ * and the rest in between, each in YouTube Music's own order.
+ */
+function groupShelves(shelves: ShelfData[]) {
+  const quick: ShelfData[] = [];
+  const trending: ShelfData[] = [];
+  const playlists: ShelfData[] = [];
+  const rest: ShelfData[] = [];
+  for (const shelf of shelves) {
+    const playlistShare = shelf.items.length ? shelf.items.filter((i) => i.kind === 'playlist').length / shelf.items.length : 0;
+    if (/quick picks/i.test(shelf.title)) quick.push(shelf);
+    else if (/trend|chart|top \d+|top songs|hits|new release|viral/i.test(shelf.title) && playlistShare < 0.5) trending.push(shelf);
+    else if (playlistShare >= 0.5) playlists.push(shelf);
+    else rest.push(shelf);
+  }
+  return { quick, trending, playlists, rest };
 }
 
 /** Shelves from your music taste (the picker after the guide; Settings › Playback). */
@@ -185,15 +152,20 @@ function OnlineHome() {
   // Recently played carries on after the songs the quick picks already show.
   const shownAbove = new Set(history.slice(0, QUICK_SONGS + 3).map((t) => t.videoId));
   const recent = history.filter((t) => !shownAbove.has(t.videoId)).slice(0, 20);
+  const groups = groupShelves(data?.shelves ?? []);
   return (
     <div className="pt-4 pb-10">
       <h1 className="mb-6 px-(--body-gutter) type-header-emphasized">
         {greeting()}
       </h1>
       <GettingStarted />
-      {/* Yours first: quick picks, your playlists, what you played, then what's made for you. */}
+      {/* Yours first, then the rest: your quick tiles, Quick picks, what you played, what's trending,
+          what's made for you, YouTube Music's other shelves, and its playlists at the bottom. */}
       <QuickTiles />
-      <YourPlaylists />
+      {groups.quick.map((shelf, i) => (
+        <ShelfView key={`quick-${i}`} shelf={shelf} />
+      ))}
+      {isLoading && <ShelfSkeleton />}
       {recent.length > 0 && (
         <ShelfRow
           title="Recently played"
@@ -224,14 +196,19 @@ function OnlineHome() {
           ))}
         </ShelfRow>
       )}
+      {groups.trending.map((shelf, i) => (
+        <ShelfView key={`trending-${i}`} shelf={shelf} />
+      ))}
       <MadeForYou />
-      {/* Then the rest: YouTube Music's own shelves. */}
-      <h2 className="mt-4 mb-1 px-(--body-gutter) type-[700_13px/16px] tracking-wide text-secondary uppercase">More to explore</h2>
-      {isLoading &&
-        Array.from({ length: 3 }, (_, i) => <ShelfSkeleton key={i} />)}
       {error && <ErrorState error={error} onRetry={() => void refetch()} />}
-      {data?.shelves.map((shelf, i) => (
-        <ShelfView key={`${shelf.title}-${i}`} shelf={shelf} />
+      {(groups.rest.length > 0 || groups.playlists.length > 0) && (
+        <h2 className="mt-4 mb-1 px-(--body-gutter) type-[700_13px/16px] tracking-wide text-secondary uppercase">More to explore</h2>
+      )}
+      {groups.rest.map((shelf, i) => (
+        <ShelfView key={`rest-${shelf.title}-${i}`} shelf={shelf} />
+      ))}
+      {groups.playlists.map((shelf, i) => (
+        <ShelfView key={`playlists-${shelf.title}-${i}`} shelf={shelf} />
       ))}
     </div>
   );
