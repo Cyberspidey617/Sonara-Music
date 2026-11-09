@@ -10,6 +10,21 @@ type Note = { icon: LucideIcon; title: string; body: string; open?: () => void; 
 /** What each version brought, newest first. Shown once, after Sonara updates to it. */
 const NOTES: { version: string; notes: Note[] }[] = [
   {
+    version: '2.2.9',
+    notes: [
+      {
+        icon: Sparkles,
+        title: 'A Home that puts your music first',
+        body: 'Your songs and playlists at the top, then Quick picks, Recently played, what’s trending and Made for you. Playlists to explore are at the bottom.',
+      },
+      {
+        icon: Clapperboard,
+        title: 'More music videos found',
+        body: 'Official videos from labels Sonara didn’t know by name now show up too, such as Kalyani’s.',
+      },
+    ],
+  },
+  {
     version: '2.2.8',
     notes: [
       {
