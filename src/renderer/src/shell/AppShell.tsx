@@ -1,28 +1,18 @@
-import { DownloadsPage } from '@/pages/DownloadsPage';
 import { SearchBar } from './SearchBar';
 import { hasViewTransitions } from '@/lib/motion';
 import { ChevronLeft, ChevronRight, X } from 'lucide-react';
-import { Suspense, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState, type ComponentType } from 'react';
 import { MenuLayer } from '@/components/MenuLayer';
 import { DialogLayer } from '@/components/Dialogs';
 import { Toasts } from '@/components/Toasts';
 import { useNav, type Route } from '@/state/nav';
 import { useUi } from '@/state/ui';
-import { AlbumPage } from '@/pages/AlbumPage';
-import { ArtistPage } from '@/pages/ArtistPage';
 import { HomePage } from '@/pages/HomePage';
-import { LikedPage, LocalPlaylistPage, RecentPage } from '@/pages/LibraryPages';
-import { PlaylistPage } from '@/pages/PlaylistPage';
-import { SearchPage } from '@/pages/SearchPage';
-import { SettingsPage } from '@/pages/SettingsPage';
-import { YourAlbumPage, YourMusicPage } from '@/pages/YourMusicPage';
 import { useAppearance } from '@/lib/appearance';
 import { artworkAtPixels } from '@/lib/artwork';
 import { rgb, type Rgb } from '@/lib/palette';
 import { usePlayer } from '@/state/player';
 import type { PageBackground as PageBackgroundKind } from '@shared/types';
-import { FullScreenPlayer } from './FullScreenPlayer';
-import { LyricsView } from './LyricsView';
 import { PlayerBar } from './PlayerBar';
 import { Sidebar } from './Sidebar';
 import { UpNext } from './UpNext';
@@ -33,8 +23,39 @@ import { TastePicker } from './TastePicker';
 import { UpdateDialog } from './UpdateDialog';
 import { WhatsNew } from './WhatsNew';
 import { OfflinePill } from './OfflinePill';
-import { WrappedPage } from '@/pages/WrappedPage';
 import { Segmented } from '@/components/Segmented';
+
+/*
+ * Pages, the full-screen player and the lyrics load when first opened, so starting Sonara only reads
+ * Home and the player bar. A few seconds after start the rest load in the background anyway, so
+ * opening any of them later is as quick as before.
+ */
+const loaders: (() => Promise<unknown>)[] = [];
+function onDemand<M, K extends keyof M>(load: () => Promise<M>, name: K) {
+  loaders.push(load);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return lazy(async () => ({ default: (await load())[name] as M[K] & ComponentType<any> }));
+}
+const SettingsPage = onDemand(() => import('@/pages/SettingsPage'), 'SettingsPage');
+const WrappedPage = onDemand(() => import('@/pages/WrappedPage'), 'WrappedPage');
+const DownloadsPage = onDemand(() => import('@/pages/DownloadsPage'), 'DownloadsPage');
+const SearchPage = onDemand(() => import('@/pages/SearchPage'), 'SearchPage');
+const ArtistPage = onDemand(() => import('@/pages/ArtistPage'), 'ArtistPage');
+const AlbumPage = onDemand(() => import('@/pages/AlbumPage'), 'AlbumPage');
+const PlaylistPage = onDemand(() => import('@/pages/PlaylistPage'), 'PlaylistPage');
+const LikedPage = onDemand(() => import('@/pages/LibraryPages'), 'LikedPage');
+const RecentPage = onDemand(() => import('@/pages/LibraryPages'), 'RecentPage');
+const LocalPlaylistPage = onDemand(() => import('@/pages/LibraryPages'), 'LocalPlaylistPage');
+const YourMusicPage = onDemand(() => import('@/pages/YourMusicPage'), 'YourMusicPage');
+const YourAlbumPage = onDemand(() => import('@/pages/YourMusicPage'), 'YourAlbumPage');
+const FullScreenPlayer = onDemand(() => import('./FullScreenPlayer'), 'FullScreenPlayer');
+const LyricsView = onDemand(() => import('./LyricsView'), 'LyricsView');
+
+/** The rest of the app, fetched once Sonara has started and is idle. */
+function preloadPages() {
+  const run = () => loaders.forEach((load) => void load().catch(() => undefined));
+  window.setTimeout(() => ('requestIdleCallback' in window ? window.requestIdleCallback(run, { timeout: 4000 }) : run()), 2500);
+}
 
 function RoutePage({ route }: { route: Route }) {
   switch (route.name) {
@@ -122,7 +143,13 @@ function SidePanel() {
           <X size={16} />
         </button>
       </div>
-      <div className="relative min-h-0 flex-1 [mask-image:linear-gradient(180deg,transparent,#000_24px,#000_calc(100%-90px),transparent)]">{panel === 'lyrics' ? <LyricsView /> : <UpNext />}</div>
+      <div className="relative min-h-0 flex-1 [mask-image:linear-gradient(180deg,transparent,#000_24px,#000_calc(100%-90px),transparent)]">{panel === 'lyrics' ? (
+          <Suspense fallback={null}>
+            <LyricsView />
+          </Suspense>
+        ) : (
+          <UpNext />
+        )}</div>
     </aside>
   );
 }
@@ -152,6 +179,7 @@ function PageBackground({ kind, accent }: { kind: PageBackgroundKind; accent: Rg
 }
 
 export function AppShell() {
+  useEffect(preloadPages, []);
   useKeyboardShortcuts();
   const { glow, accent, background } = useAppearance();
   const entry = useNav((s) => s.stack[s.index]!);
@@ -205,7 +233,11 @@ export function AppShell() {
       <div className={`scroll-edge-bottom pointer-events-none absolute bottom-0 left-0 z-10 h-[72px] ${sidePanel ? 'right-(--side-panel-width)' : 'right-0'}`} aria-hidden="true" />
       <SidePanel />
       <PlayerBar />
-      {fullScreen && <FullScreenPlayer />}
+      {fullScreen && (
+        <Suspense fallback={null}>
+          <FullScreenPlayer />
+        </Suspense>
+      )}
       <DialogLayer />
       <MenuLayer />
       <OfflinePill />

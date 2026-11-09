@@ -240,9 +240,54 @@ function createWindow() {
     if (!url.startsWith(APP_ORIGIN) && !(isDev && url.startsWith(process.env['ELECTRON_RENDERER_URL']!))) event.preventDefault();
   });
 
+  watchForCrashes(win);
   if (isDev) void win.loadURL(process.env['ELECTRON_RENDERER_URL']!);
   else void win.loadURL(`${APP_ORIGIN}/index.html`);
 }
+
+/**
+ * If the window's page crashes or stops responding, it comes back by itself: reloaded, with your
+ * queue and place (they're saved as you listen). Three times in a few minutes means something keeps
+ * breaking it; then it stays as it is rather than looping, and the log says why.
+ */
+function watchForCrashes(window: BrowserWindow) {
+  const recoveries: number[] = [];
+  let hung: NodeJS.Timeout | null = null;
+  const recover = (why: string) => {
+    const now = Date.now();
+    while (recoveries.length && now - recoveries[0]! > 5 * 60_000) recoveries.shift();
+    if (recoveries.length >= 3) {
+      log.error(`window ${why} again; not reloading (3 recoveries in 5 minutes)`);
+      return;
+    }
+    recoveries.push(now);
+    log.warn(`window ${why}; reloading it`);
+    if (!window.isDestroyed()) window.webContents.reload();
+  };
+  window.webContents.on('render-process-gone', (_event, details) => {
+    if (details.reason === 'clean-exit' || quitting) return;
+    recover(`crashed (${details.reason}, exit code ${details.exitCode})`);
+  });
+  // A page that stays frozen for 10 seconds is reloaded; one that recovers on its own is left alone.
+  window.on('unresponsive', () => {
+    if (hung) return;
+    hung = setTimeout(() => {
+      hung = null;
+      recover('stopped responding');
+    }, 10_000);
+  });
+  window.on('responsive', () => {
+    if (hung) clearTimeout(hung);
+    hung = null;
+  });
+  if (!watchingChildren) {
+    watchingChildren = true;
+    app.on('child-process-gone', (_event, details) => {
+      if (details.reason !== 'clean-exit') log.warn(`${details.type} process gone: ${details.reason} (${details.exitCode})`);
+    });
+  }
+}
+let watchingChildren = false;
 
 // ---- Protocols -------------------------------------------------------------------------
 

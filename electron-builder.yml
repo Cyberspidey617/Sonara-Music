@@ -13,6 +13,16 @@ extraResources:
     to: .
     filter: ['**/*']
 asar: true
+# Electron fuses: switches baked into the executable. Off, nothing else on the PC can run code as
+# Sonara by starting it as plain Node (ELECTRON_RUN_AS_NODE), through NODE_OPTIONS, or with
+# --inspect; and Sonara only loads its own app.asar, checked against the hash in the executable.
+electronFuses:
+  runAsNode: false
+  enableNodeOptionsEnvironmentVariable: false
+  enableNodeCliInspectArguments: false
+  enableEmbeddedAsarIntegrityValidation: true
+  onlyLoadAppFromAsar: true
+  grantFileProtocolExtraPrivileges: false
 npmRebuild: false
 win:
   icon: build/icon.ico

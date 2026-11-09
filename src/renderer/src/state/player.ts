@@ -115,11 +115,45 @@ export const audioDecks: readonly HTMLAudioElement[] = decks;
 const activeDeck = () => decks[active]!;
 const idleIndex = () => 1 - active;
 
+/**
+ * While a music video that isn't the same length as the song plays with its own sound, the video is
+ * the song: the seek bar shows its time, seeking moves it, and the next song comes when it ends (the
+ * song, silent meanwhile, ending first changes nothing).
+ */
+export interface VideoClock {
+  time: () => number;
+  duration: () => number;
+  seek: (seconds: number) => void;
+}
+let videoClock: VideoClock | null = null;
+/** The song reached its end while a video was the clock: it moves on once the video is gone. */
+let songEndedUnderVideo = false;
+
+export function setVideoClock(clock: VideoClock | null) {
+  videoClock = clock;
+  if (!clock && songEndedUnderVideo) {
+    songEndedUnderVideo = false;
+    onEnded();
+  }
+}
+
+/** The video (being the song) is over: on to the next song. */
+export function videoEnded() {
+  videoClock = null;
+  songEndedUnderVideo = false;
+  onEnded();
+}
+
 export function getPlayhead(): number {
+  if (videoClock) return videoClock.time() || 0;
   return activeDeck().currentTime || 0;
 }
 
 export function getDuration(): number {
+  if (videoClock) {
+    const v = videoClock.duration();
+    if (Number.isFinite(v) && v > 0) return v;
+  }
   const d = activeDeck().duration;
   return Number.isFinite(d) ? d : usePlayer.getState().duration;
 }
@@ -503,8 +537,8 @@ for (const [i, deck] of decks.entries()) {
   });
   deck.addEventListener('timeupdate', () => {
     if (!mine()) return;
-    const position = deck.currentTime;
-    const duration = Number.isFinite(deck.duration) ? deck.duration : usePlayer.getState().duration;
+    const position = getPlayhead();
+    const duration = getDuration();
     usePlayer.setState({ position });
     if (performance.now() - lastPositionState > 1000) {
       lastPositionState = performance.now();
@@ -512,7 +546,8 @@ for (const [i, deck] of decks.entries()) {
       reportPlayback(); // keeps the mini player's progress line current
       persistSoon();
     }
-    if (!duration) return;
+    // Under a video that's the clock, the song's own end doesn't start the next one.
+    if (!duration || videoClock) return;
     const remaining = duration - position;
     if (remaining < 30) preloadNext();
     const crossfade = settings().crossfade;
@@ -522,7 +557,9 @@ for (const [i, deck] of decks.entries()) {
     }
   });
   deck.addEventListener('ended', () => {
-    if (mine()) onEnded();
+    if (!mine()) return;
+    if (videoClock) songEndedUnderVideo = true;
+    else onEnded();
   });
   deck.addEventListener('error', () => {
     if (!deck.getAttribute('src')) return;
@@ -796,6 +833,11 @@ export const usePlayer = create<PlayerState>((set, get) => ({
   },
 
   seek: (seconds) => {
+    if (videoClock) {
+      videoClock.seek(Math.max(0, seconds));
+      set({ position: seconds });
+      return;
+    }
     const deck = activeDeck();
     stopFade();
     const duration = getDuration();

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { VideoFit } from '@shared/types';
 import { api } from '@/lib/api';
 import { useLibrary } from '@/state/library';
-import { getPlayhead, listeningVolume, setSongSilenced, usePlayer } from '@/state/player';
+import { getPlayhead, listeningVolume, setSongSilenced, setVideoClock, usePlayer, videoEnded } from '@/state/player';
 
 /** The picture against its clock: drift the eye can't see. */
 const SETTLED = 0.03;
@@ -47,6 +47,7 @@ export function MusicVideo({
 }) {
   const video = useRef<HTMLVideoElement>(null);
   const audio = useRef<HTMLAudioElement>(null);
+  const startAt = useRef(0);
   const playing = usePlayer((s) => s.status === 'playing');
   const [ratio, setRatio] = useState(16 / 9);
 
@@ -66,14 +67,20 @@ export function MusicVideo({
     let lead = 0.5;
     let holding = false;
 
+    // Where the song was when the video opened: the video starts there.
+    startAt.current = getPlayhead();
     const onCanPlay = () => {
       if (!jumpedAt) return;
       lead = Math.min(3, Math.max(0.2, (performance.now() - jumpedAt) / 1000 + 0.15));
       jumpedAt = 0;
     };
-    // The song is heard until the video's sound is playing; when the video ends first, the song again.
+    // The song is heard until the video's sound is playing. A video with its own sound is the song from
+    // then on (see VideoClock): when it ends, the next song plays.
     const onPlaying = () => setSongSilenced(true);
-    const onEnded = () => setSongSilenced(false);
+    const onEnded = () => {
+      setSongSilenced(false);
+      videoEnded();
+    };
     v.addEventListener('canplay', onCanPlay);
     a?.addEventListener('playing', onPlaying);
     a?.addEventListener('ended', onEnded);
@@ -103,31 +110,33 @@ export function MusicVideo({
       else if (v.playbackRate !== 1) v.playbackRate = 1;
     };
 
-    // The song a moment ago: a jump in it (more than time explains) is a seek or a skip.
-    let lastSong = getPlayhead();
-    let lastAt = performance.now();
-    // Where the song was moved to, for a video with its own sound to go to.
+    // Where you seeked to, for a video with its own sound to go to.
     let target: number | null = null;
+    if (a)
+      setVideoClock({
+        time: () => target ?? (a.readyState >= 1 ? a.currentTime : startAt.current),
+        duration: () => a.duration || v.duration,
+        seek: (seconds) => {
+          target = seconds;
+          a.pause();
+        },
+      });
 
     let timer = 0;
     const tick = () => {
       const now = performance.now();
       const song = getPlayhead();
       const want = songPlaying();
-      const moved = Number.isFinite(song) && Number.isFinite(lastSong) && Math.abs(song - lastSong - (want ? (now - lastAt) / 1000 : 0)) > 1;
-      lastSong = song;
-      lastAt = now;
       const settling = jumpedAt !== 0 && loading() && now - jumpedAt < LOAD_TIMEOUT;
 
       if (a) {
         // A video with its own sound runs on its own time, as any video does: the song (silent) only
         // matters when you move it, and then the video goes to the same point.
-        if (moved) {
-          target = song;
-          a.pause();
-        }
+        // Seeks reach a video with its own sound through its clock (seek → target), not as jumps in
+        // the song, which is silent and no longer the clock.
         if (target !== null && !settling && v.readyState >= 1) {
           if (Math.abs(v.currentTime - target) > PICTURE_JUMP) moveTo(target + lead);
+          if (a.readyState >= 1) a.currentTime = target; // so the clock reads the new place meanwhile
           target = null;
         }
         if (holding && a.paused) {
@@ -158,6 +167,7 @@ export function MusicVideo({
       a?.removeEventListener('playing', onPlaying);
       a?.removeEventListener('ended', onEnded);
       setSongSilenced(false);
+      if (a) setVideoClock(null);
     };
   }, [url, audioUrl, active]);
 
@@ -238,7 +248,7 @@ export function MusicVideo({
         onLoadedMetadata={(e) => {
           const v = e.currentTarget;
           if (v.videoWidth && v.videoHeight) setRatio(v.videoWidth / v.videoHeight);
-          v.currentTime = getPlayhead() + 0.35;
+          v.currentTime = startAt.current + 0.35;
         }}
         onError={onError}
       />

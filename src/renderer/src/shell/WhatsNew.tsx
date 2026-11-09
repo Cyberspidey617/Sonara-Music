@@ -10,6 +10,21 @@ type Note = { icon: LucideIcon; title: string; body: string; open?: () => void; 
 /** What each version brought, newest first. Shown once, after Sonara updates to it. */
 const NOTES: { version: string; notes: Note[] }[] = [
   {
+    version: '2.2.8',
+    notes: [
+      {
+        icon: Clapperboard,
+        title: 'Music videos play to the end',
+        body: 'When the official video is a different length from the song, the video is now the song: the seek bar shows its time, and the next song starts when the video ends, not before.',
+      },
+      {
+        icon: Sparkles,
+        title: 'Steadier and safer',
+        body: 'If Sonara’s window ever crashes or freezes, it comes back by itself with your song where it was. Sonara’s files are now locked against tampering, and its pages load as you open them.',
+      },
+    ],
+  },
+  {
     version: '2.2.7',
     notes: [
       {
