@@ -730,6 +730,8 @@ export async function findOnYouTube(title: string, artist: string): Promise<stri
 
 /** Not a music video: a lyric video, the audio on a still picture, a fan edit. */
 const NOT_A_VIDEO = /\b(lyrics?|lyrical|audio|visuali[sz]er|full song|jukebox|bass boosted|lofi|tutorial|status|whatsapp|shorts?|teaser|trailer|eclipsa|8d|reaction|making of)\b/;
+/** A channel named like a record label or studio, rather than a person's or a fan page's. */
+const LABEL_LIKE = /\b(records|recordings|music|entertainment|productions|studios|films|label)\b/;
 /** Says it is the video. */
 const IS_A_VIDEO = /\b(official (music )?video|music video|video song|full video|official mv|m\/v|[48]k video|hd video)\b/;
 /** Record labels and music channels whose uploads are the real thing. */
@@ -788,7 +790,9 @@ export async function findMusicVideo(track: { videoId: string; title: string; ar
       if (NOT_A_VIDEO.test(title) || (VERSION.test(title) && !VERSION.test(wantedFull))) return false;
       const channel = comparable(d.channel);
       const byArtist = artists.some((a) => channel.includes(a) || (channel.length > 3 && a.includes(channel)));
-      return byArtist || LABELS.test(channel) || /vevo$/.test(channel.replace(/ /g, ''));
+      if (byArtist || LABELS.test(channel) || /vevo$/.test(channel.replace(/ /g, ''))) return true;
+      // A label we don't know by name ("Money Verse Records"): trusted only for its official video.
+      return LABEL_LIKE.test(channel) && IS_A_VIDEO.test(title);
     });
   };
   let candidates = await search(`${track.title} ${track.artists[0] ?? ''}`.trim());
