@@ -144,7 +144,11 @@ export function useLiquidLens(ref: RefObject<HTMLElement | null>, options: { rad
       const h = Math.round(el.offsetHeight);
       if (!w || !h) return;
       const key = `${w}x${h}`;
-      if (key === last) return;
+      if (key === last) {
+        // Back to the size its map was made for (opened and closed again quickly): the lens returns.
+        setResizing(false);
+        return;
+      }
       last = key;
       const r = radius ?? parseFloat(getComputedStyle(el).borderTopLeftRadius) ?? h / 2;
       image.setAttribute('width', String(w));
