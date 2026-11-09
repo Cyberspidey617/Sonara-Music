@@ -75,6 +75,19 @@ function lensMap(w: number, h: number, radius: number, band: number): string {
   return canvas.toDataURL();
 }
 
+/** Maps already drawn, by size: the pebble and the full bar swap between two, drawn once each. */
+const maps = new Map<string, string>();
+function cachedLensMap(w: number, h: number, radius: number, band: number): string {
+  const key = `${w}x${h}x${radius}x${band}`;
+  let url = maps.get(key);
+  if (!url) {
+    url = lensMap(w, h, radius, band);
+    if (maps.size > 24) maps.clear();
+    maps.set(key, url);
+  }
+  return url;
+}
+
 let lensCount = 0;
 
 /**
@@ -88,6 +101,7 @@ export function useLiquidLens(ref: RefObject<HTMLElement | null>, options: { rad
   const blurScale = useLibrary((s) => s.settings.glassBlur ?? 1);
   const [id] = useState(() => `lens-${++lensCount}`);
   const [ready, setReady] = useState(false);
+  const [resizing, setResizing] = useState(false);
   const [reduce, setReduce] = useState(reducedTransparency?.matches ?? false);
   const filterRef = useRef<SVGFilterElement | null>(null);
 
@@ -135,11 +149,15 @@ export function useLiquidLens(ref: RefObject<HTMLElement | null>, options: { rad
       const r = radius ?? parseFloat(getComputedStyle(el).borderTopLeftRadius) ?? h / 2;
       image.setAttribute('width', String(w));
       image.setAttribute('height', String(h));
-      image.setAttribute('href', lensMap(w, h, Math.min(r, h / 2), band));
+      image.setAttribute('href', cachedLensMap(w, h, Math.min(r, h / 2), band));
+      setResizing(false);
       setReady(true);
     };
     build();
     const observer = new ResizeObserver(() => {
+      // Growing or shrinking: the lens (made for the old size) is set aside until the new one is in,
+      // so a map of the wrong size never bends the rim in the wrong place.
+      if (`${Math.round(el.offsetWidth)}x${Math.round(el.offsetHeight)}` !== last) setResizing(true);
       if (timer) clearTimeout(timer);
       timer = setTimeout(build, 120);
     });
@@ -153,7 +171,8 @@ export function useLiquidLens(ref: RefObject<HTMLElement | null>, options: { rad
   }, [ref, id, radius, band, strength, reduce, key]);
 
   if (!ready || reduce || !supportsLens) return undefined;
-  const value = `url(#${id}) blur(${blur * blurScale}px) saturate(1.9) brightness(1.06)`;
+  const frosting = `blur(${blur * blurScale}px) saturate(1.9) brightness(1.06)`;
+  const value = resizing ? frosting : `url(#${id}) ${frosting}`;
   return { backdropFilter: value, WebkitBackdropFilter: value } as CSSProperties;
 }
 
