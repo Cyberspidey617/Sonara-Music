@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { app } from 'electron';
 import type { ListeningProfile, PlayRecord, Track, Wrapped, WrappedArtist, WrappedSong } from '../shared/types';
+import { keepCover } from './covers';
 import { log } from './log';
 
 interface Play {
@@ -83,6 +84,8 @@ export function recordPlay(record: PlayRecord) {
   else {
     list.push({ id: String(record.id), track: slim(record.track), at: record.at, s: Math.round(record.seconds) });
     queueGenre(record.track);
+    // Its cover too, for offline.
+    if (record.track.thumbnail) void keepCover(String(record.track.thumbnail));
   }
   dirty.add(month);
   saveTimer ??= setTimeout(flushPlays, 5000);
@@ -283,4 +286,26 @@ export function listeningProfile(days = 60): ListeningProfile {
     artists: [...artists.values()].sort((a, b) => b.plays - a.plays).slice(0, 25),
     hours,
   };
+}
+
+/** The whole listening log, by month, for a backup. */
+export function exportPlays(): Record<string, Play[]> {
+  const out: Record<string, Play[]> = {};
+  for (const month of playMonths()) out[month] = load(month);
+  return out;
+}
+
+/** Replaces the listening log with a backup's (months the backup doesn't have are emptied). */
+export function importPlays(backup: Record<string, unknown[]>) {
+  const valid = (p: unknown): p is Play => {
+    const x = p as Play;
+    return !!x && typeof x.id === 'string' && !!x.track?.videoId && Number.isFinite(x.at) && Number.isFinite(x.s);
+  };
+  const incoming = Object.entries(backup).filter(([month, list]) => /^\d{4}-\d{2}$/.test(month) && Array.isArray(list));
+  for (const month of playMonths()) if (!incoming.some(([m]) => m === month)) (months.set(month, []), dirty.add(month));
+  for (const [month, list] of incoming) {
+    months.set(month, list.filter(valid));
+    dirty.add(month);
+  }
+  flushPlays();
 }

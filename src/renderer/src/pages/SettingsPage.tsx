@@ -3,10 +3,10 @@ import { SeekTrack } from '@/components/SeekTrack';
 import { useQueryClient } from '@tanstack/react-query';
 import appIcon from '@/assets/app-icon.png';
 import { Check, Clock, Download, FolderOpen, FolderPlus, Heart, House, Loader2, RefreshCw, RotateCcw, Server, Sparkles, Trash2, X } from 'lucide-react';
-import { SHORTCUTS } from '@/components/Dialogs';
+import { Modal, SHORTCUTS } from '@/components/Dialogs';
 import { createContext, useContext, useEffect, useState, type CSSProperties, type ReactNode } from 'react';
 import { create } from 'zustand';
-import { DEFAULT_SETTINGS, seekLookOf, type ListeningProfile, type AudioQuality, type DownloadQuality, type MiniPlayerWhen, type Settings, type SpatialAudio, type UpdateState } from '@shared/types';
+import { DEFAULT_SETTINGS, seekLookOf, type BackupInfo, type ListeningProfile, type ProxyMode, type AudioQuality, type DownloadQuality, type MiniPlayerWhen, type Settings, type SpatialAudio, type UpdateState } from '@shared/types';
 import { api } from '@/lib/api';
 import { ACCENTS, LYRIC_FONTS, THEMES, themeVars, useThemeColors } from '@/lib/appearance';
 import { artworkAtPixels, largeArtwork } from '@/lib/artwork';
@@ -944,6 +944,187 @@ function UpdateSettings() {
   );
 }
 
+/** Backups of everything that's yours: weekly by themselves, or by hand, and restorable. */
+function YourData() {
+  const [info, setInfo] = useState<BackupInfo | null>(null);
+  const refresh = () => void api.backups().then(setInfo, () => undefined);
+  useEffect(refresh, []);
+  const when = info?.latest ? new Date(info.latest).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : null;
+  return (
+    <Section title="Your data">
+      <Row
+        title="Back up"
+        detail="One file with your liked songs, playlists, history, settings and listening (for Wrapped and recommendations). Keep it somewhere safe, or move it to another PC."
+      >
+        <button
+          className={button}
+          onClick={() =>
+            void api.exportBackup().then((file) => {
+              if (file) toast('Backup saved');
+            })
+          }
+        >
+          <Download size={15} /> Back up…
+        </button>
+      </Row>
+      <Row title="Restore" detail="Replaces what's here with a backup (what's here is backed up first), then restarts Sonara.">
+        <button
+          className={button}
+          onClick={() =>
+            void api.importBackup().then((r) => {
+              if (r.error) toast(r.error);
+            })
+          }
+        >
+          <RotateCcw size={15} /> Restore…
+        </button>
+      </Row>
+      <Row
+        title="Automatic backups"
+        detail={`Sonara backs itself up once a week, and before restoring or resetting; the last 8 are kept. ${when ? `Latest: ${when}.` : 'None yet.'}`}
+      >
+        <div className="flex items-center gap-2">
+          <button className={button} onClick={() => void api.backupNow().then((f) => (f ? toast('Backed up') : toast('Backup failed')), () => undefined).finally(refresh)}>
+            Back up now
+          </button>
+          <button className={button} onClick={() => void api.openBackups()}>
+            <FolderOpen size={15} /> Open
+          </button>
+        </div>
+      </Row>
+    </Section>
+  );
+}
+
+/** The proxy: off (as before), the system's, or one you give. */
+function NetworkSettings() {
+  const mode = useLibrary((l) => l.settings.proxy ?? 'off');
+  const saved = useLibrary((l) => l.settings.proxyUrl ?? '');
+  const [url, setUrl] = useState(saved);
+  const [bad, setBad] = useState(false);
+  const update = useLibrary.getState().updateSettings;
+  const useCustom = async () => {
+    const ok = await api.validProxy(url);
+    setBad(!ok);
+    if (ok) {
+      update({ proxy: 'custom', proxyUrl: url.trim() });
+      toast('Using your proxy');
+    }
+  };
+  return (
+    <Section title="Network">
+      <Row
+        title="Proxy"
+        detail="For networks that block YouTube (a college or office). System uses your PC's proxy settings for everything; Custom goes through the one you give."
+      >
+        <Segmented<ProxyMode>
+          label="Proxy"
+          value={mode}
+          options={[
+            { value: 'off', label: 'Off' },
+            { value: 'system', label: 'System' },
+            { value: 'custom', label: 'Custom' },
+          ]}
+          onChange={(proxy) => (proxy === 'custom' ? void useCustom() : update({ proxy }))}
+        />
+      </Row>
+      {(mode === 'custom' || url) && (
+        <Row title="Proxy address" detail={bad ? 'That isn’t a proxy address: like http://10.0.0.1:3128 or socks5://127.0.0.1:1080.' : 'http, https or socks5, with the port: e.g. http://10.0.0.1:3128'}>
+          <form
+            className="flex items-center gap-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void useCustom();
+            }}
+          >
+            <input
+              className={`h-9 w-[240px] rounded-[10px] bg-white/8 px-3 type-body-reduced text-primary outline-none placeholder:text-tertiary focus:bg-white/12 ${bad ? 'ring-1 ring-[#ff6b61]' : ''}`}
+              placeholder="http://host:port"
+              value={url}
+              onChange={(e) => {
+                setUrl(e.target.value);
+                setBad(false);
+              }}
+            />
+            <button type="submit" className={button} disabled={!url.trim()}>
+              Use
+            </button>
+          </form>
+        </Row>
+      )}
+    </Section>
+  );
+}
+
+/** When something's wrong: a report to send, the caches, and settings back to the start. */
+function Troubleshooting() {
+  const [report, setReport] = useState<{ text: string; issuesUrl: string } | null>(null);
+  const [confirmReset, setConfirmReset] = useState(false);
+  return (
+    <Section title="Troubleshooting">
+      <Row title="Report a problem" detail="Shows what to send: your Sonara version, system and the end of its log (nothing is sent until you choose to).">
+        <button className={button} onClick={() => void api.problemReport().then(setReport)}>
+          Report…
+        </button>
+      </Row>
+      <Row title="Clear cache" detail="Frees space and fixes stale artwork or playback trouble. Your music, downloads and settings stay.">
+        <button className={button} onClick={() => void api.clearCaches().then(() => toast('Cache cleared'))}>
+          <Trash2 size={15} /> Clear
+        </button>
+      </Row>
+      <Row title="Reset settings" detail="Every setting back to how it was at install (after a backup). Your music, playlists, listening, taste and folders stay.">
+        <button className={`${button} text-[#ff6b61]`} onClick={() => setConfirmReset(true)}>
+          <RotateCcw size={15} /> Reset…
+        </button>
+      </Row>
+      {report && (
+        <Modal title="Report a problem" onClose={() => setReport(null)} width={560}>
+          <div className="px-7">
+            <p className="type-callout text-secondary">Copy this, then open an issue on GitHub, say what happened, and paste it in.</p>
+            <pre className="no-scrollbar mt-3 max-h-[300px] overflow-auto rounded-[12px] bg-black/40 p-3 type-[500_11px/15px] whitespace-pre-wrap text-secondary select-text">{report.text}</pre>
+          </div>
+          <div className="flex justify-end gap-2 px-7 pt-4 pb-6">
+            <button
+              className={button}
+              onClick={() => {
+                void navigator.clipboard.writeText(report.text);
+                toast('Copied');
+              }}
+            >
+              Copy
+            </button>
+            <button
+              className="inline-flex h-9 items-center rounded-pill bg-pill-bg px-5 type-body-emphasized text-pill hover:bg-white"
+              onClick={() => {
+                void navigator.clipboard.writeText(report.text);
+                void api.openExternal(report.issuesUrl);
+                toast('Copied: paste it into the issue');
+              }}
+            >
+              Copy and open GitHub
+            </button>
+          </div>
+        </Modal>
+      )}
+      {confirmReset && (
+        <Modal title="Reset settings?" onClose={() => setConfirmReset(false)} width={440}>
+          <p className="px-7 type-body-reduced text-secondary">
+            Every setting goes back to how it was when you installed Sonara, and Sonara restarts. Your liked songs, playlists, downloads, listening, music taste and folders stay, and a backup is made first.
+          </p>
+          <div className="flex justify-end gap-2 px-7 pt-5 pb-6">
+            <button className={button} onClick={() => setConfirmReset(false)}>
+              Cancel
+            </button>
+            <button className="inline-flex h-9 items-center rounded-pill bg-[#ff453a] px-5 type-body-emphasized text-white hover:brightness-110" onClick={() => void api.resetSettings()}>
+              Reset and restart
+            </button>
+          </div>
+        </Modal>
+      )}
+    </Section>
+  );
+}
+
 function AboutTab() {
   const [dataPath, setDataPath] = useState('');
   useEffect(() => {
@@ -967,7 +1148,15 @@ function AboutTab() {
           <FolderOpen size={16} className="text-tertiary" />
         </Row>
       </Section>
+      <YourData />
+      <NetworkSettings />
+      <Troubleshooting />
       <Section title="Getting started">
+        <Row title="Getting started checklist" detail="The card on Home with five things to try.">
+          <button className={button} onClick={() => useLibrary.getState().updateSettings({ checklistHidden: false })}>
+            Show on Home
+          </button>
+        </Row>
         <Row title="Welcome guide" detail="The short tour shown the first time you open Sonara.">
           <button className={button} onClick={() => useLibrary.getState().updateSettings({ guideSeen: false })}>
             <Sparkles size={15} /> Show again

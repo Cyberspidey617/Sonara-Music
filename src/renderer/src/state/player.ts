@@ -5,6 +5,7 @@
  * so a track change is near-gapless, and with crossfade on, the two decks
  * overlap for the crossfade's length. Only the active deck's events count.
  */
+import { markStep } from '@/lib/checklist';
 import { attachEqualizer } from '@/lib/equalizer';
 import { markOffline } from './online';
 import { create } from 'zustand';
@@ -399,6 +400,7 @@ function maybeFillRadio() {
 // ---- Loading a track ------------------------------------------------------------------
 
 function load(index: number, autoplay = true) {
+  if (autoplay) markStep('play');
   stopFade();
   const state = usePlayer.getState();
   const entry = state.queue[index];
@@ -626,11 +628,11 @@ function persistSoon() {
   if (persistTimer) return;
   persistTimer = setTimeout(() => {
     persistTimer = null;
-    const { queue, index, shuffle, repeat, original } = usePlayer.getState();
+    const { queue, index, shuffle, smart, repeat, original } = usePlayer.getState();
     try {
       localStorage.setItem(
         QUEUE_KEY,
-        JSON.stringify({ queue: queue.slice(Math.max(0, index - 50), index + 200), index: Math.min(index, 50), position: getPlayhead(), shuffle, repeat, hasOriginal: !!original }),
+        JSON.stringify({ queue: queue.slice(Math.max(0, index - 50), index + 200), index: Math.min(index, 50), position: activeDeck().currentTime || 0, shuffle, smart, repeat, hasOriginal: !!original }),
       );
     } catch {
       /* storage may be unavailable */
@@ -642,9 +644,10 @@ export function restoreQueue() {
   try {
     const raw = localStorage.getItem(QUEUE_KEY);
     if (!raw) return;
-    const saved = JSON.parse(raw) as { queue: QueueItem[]; index: number; position: number; shuffle: boolean; repeat: RepeatMode };
+    const saved = JSON.parse(raw) as { queue: QueueItem[]; index: number; position: number; shuffle: boolean; smart?: boolean; repeat: RepeatMode };
     if (!Array.isArray(saved.queue) || !saved.queue[saved.index]) return;
-    usePlayer.setState({ queue: saved.queue, index: saved.index, shuffle: !!saved.shuffle, repeat: saved.repeat ?? 'off' });
+    // Smart Shuffle comes back on too (its picks are still in the saved queue).
+    usePlayer.setState({ queue: saved.queue, index: saved.index, shuffle: !!saved.shuffle, smart: !!saved.shuffle && !!saved.smart, repeat: saved.repeat ?? 'off' });
     nowPlaying = saved.queue[saved.index]!;
     const track = saved.queue[saved.index]!.track;
     const deck = activeDeck();
@@ -718,6 +721,7 @@ export const usePlayer = create<PlayerState>((set, get) => ({
   },
 
   playNext: (tracks) => {
+    markStep('queue');
     const { queue, index, original } = get();
     if (index < 0) return get().playTracks(tracks);
     const items = tracks.map((t) => item(t, 'queued'));
@@ -726,6 +730,7 @@ export const usePlayer = create<PlayerState>((set, get) => ({
   },
 
   addToQueue: (tracks) => {
+    markStep('queue');
     const { queue, index, original } = get();
     if (index < 0) return get().playTracks(tracks);
     const items = tracks.map((t) => item(t, 'queued'));

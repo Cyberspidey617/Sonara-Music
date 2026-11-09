@@ -2,6 +2,7 @@
 import '@uimaxbai/am-lyrics/am-lyrics.js';
 import { ChevronDown, Languages, Loader2, MicVocal, Speech, Timer } from 'lucide-react';
 import { LyricsResync, retime, useLyricsTiming, type TimedLine } from './LyricsResync';
+import { SyncedByYou, SyncYourself, useUserLyrics } from './LyricsSyncYourself';
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { create } from 'zustand';
 import { pronunciationKind, romanizeLines, translateLines, TRANSLATE_LANGUAGES } from '@/lib/lyricsTools';
@@ -71,15 +72,18 @@ function LyricsTools({ kind, onResync, resynced }: { kind: 'indic' | 'online' | 
   const pronunciationHint = latinOnly ? 'These lyrics are already in Latin letters, so there’s no pronunciation to add.' : on && noPronunciation ? 'Pronunciation isn’t available for these lyrics.' : null;
   const translationHint = tr && noTranslation ? `No ${name} translation for these lyrics: they may already be in ${name}, or translation can’t be reached right now.` : null;
   return (
-    <div className="glass pointer-events-auto absolute top-2 right-3 z-10 flex animate-rise items-center gap-0.5 rounded-pill p-[3px]">
+    // In a narrow lyrics panel the names go and the icons stay (each keeps its tooltip), so the
+    // toolbar fits instead of running off the panel's edge.
+    <div className="glass pointer-events-auto absolute top-2 right-3 z-10 flex max-w-[calc(100%-24px)] animate-rise items-center gap-0.5 rounded-pill p-[3px]">
       <button
         className={`${btn} ${latinOnly ? 'cursor-default text-secondary opacity-40' : state(on)}`}
         aria-pressed={on}
         aria-disabled={latinOnly || undefined}
+        aria-label="Pronunciation"
         title={pronunciationHint ? undefined : on ? 'Pronunciation is on: click to turn it off' : 'Pronunciation: how to sing it, in Latin letters'}
         onClick={() => !latinOnly && set({ lyricsPronunciation: !on })}
       >
-        <Speech size={15} /> Pronunciation
+        <Speech size={15} className="flex-none" /> <span className="@max-[520px]/lyrics:hidden">Pronunciation</span>
         {pronunciationHint && <Hint text={pronunciationHint} />}
       </button>
       {/* Translate opens the list of languages; "Off" turns translation off. */}
@@ -87,6 +91,7 @@ function LyricsTools({ kind, onResync, resynced }: { kind: 'indic' | 'online' | 
         className={`${btn} ${state(tr)}`}
         aria-pressed={tr}
         aria-haspopup="menu"
+        aria-label={tr ? `Translate: ${name}` : 'Translate'}
         title={translationHint ? undefined : tr ? `Translating to ${name}: pick another language, or Off` : 'Translate the lyrics'}
         onClick={(e) =>
           openMenuAt(
@@ -101,17 +106,18 @@ function LyricsTools({ kind, onResync, resynced }: { kind: 'indic' | 'online' | 
           )
         }
       >
-        {busy ? <Loader2 size={15} className="animate-spin" /> : <Languages size={15} />} {tr ? name : 'Translate'}
+        {busy ? <Loader2 size={15} className="animate-spin" /> : <Languages size={15} />} <span className="max-w-[110px] truncate @max-[520px]/lyrics:hidden">{tr ? name : 'Translate'}</span>
         <ChevronDown size={14} className="-mr-1 opacity-70" />
         {translationHint && <Hint text={translationHint} />}
       </button>
       {onResync && (
         <button
           className={`${btn} ${state(!!resynced)}`}
+          aria-label="Resync"
           title={resynced ? 'You adjusted the timing: click to change it' : 'Lyrics early or late? Adjust when each line shows'}
           onClick={onResync}
         >
-          <Timer size={15} /> Resync
+          <Timer size={15} className="flex-none" /> <span className="@max-[520px]/lyrics:hidden">Resync</span>
         </button>
       )}
     </div>
@@ -287,7 +293,7 @@ function SyncedLyrics({ track, full, onMissing }: { track: Track; full: boolean;
   }, [loaded, alt, timing]);
 
   return (
-    <div className="relative size-full min-h-0">
+    <div className="@container/lyrics relative size-full min-h-0">
       {controls && loaded && !resyncing && <LyricsTools kind={kind} onResync={() => setResyncing(true)} resynced={!!timing} />}
       {/* Hidden, not removed, while you resync: it keeps its place and timing. */}
       <div ref={host} className={`size-full min-h-0 ${resyncing ? 'invisible' : ''}`} />
@@ -316,6 +322,8 @@ function PlainLyrics({ track, full }: { track: Track; full: boolean }) {
   const scale = useLibrary((s) => s.settings.lyricsScale) || 1;
   const font = useLibrary((s) => s.settings.lyricsFont);
   const align = useLibrary((s) => s.settings.lyricsAlign);
+  const mine = useUserLyrics(track.videoId);
+  const [syncing, setSyncing] = useState(false);
   if (isLoading) return <div className="grid size-full place-items-center type-body-reduced text-tertiary">Looking for lyrics…</div>;
   if (!data)
     return (
@@ -324,8 +332,16 @@ function PlainLyrics({ track, full }: { track: Track; full: boolean }) {
         <span className="type-title-3">No lyrics for this song</span>
       </div>
     );
+  const lyricStyle = { fontFamily: LYRIC_FONTS[font]?.family, fontSize: (full ? 28 : 20) * scale, lineHeight: 1.42 };
+  if (syncing) return <div className="relative size-full"><SyncYourself videoId={track.videoId} text={lines} onDone={() => setSyncing(false)} /></div>;
+  if (mine?.length)
+    return (
+      <div className={`no-scrollbar size-full overflow-y-auto ${full ? 'pr-4' : 'px-5'} pt-14 pb-24 [mask-image:linear-gradient(180deg,transparent,#000_56px,#000_calc(100%-80px),transparent)]`}>
+        <SyncedByYou videoId={track.videoId} lines={mine} style={lyricStyle} center={align === 'center'} onResync={() => setSyncing(true)} />
+      </div>
+    );
   return (
-    <div className="relative size-full">
+    <div className="@container/lyrics relative size-full">
       {controls && <LyricsTools kind={kind} />}
     <div className={`no-scrollbar size-full overflow-y-auto ${full ? 'pr-4' : 'px-5'} pt-14 pb-24 [mask-image:linear-gradient(180deg,transparent,#000_56px,#000_calc(100%-80px),transparent)]`}>
       <div
@@ -344,7 +360,12 @@ function PlainLyrics({ track, full }: { track: Track; full: boolean }) {
           ),
         )}
       </div>
-      <p className="mt-6 type-callout text-tertiary">{data.source} · not synced</p>
+      <p className="mt-6 flex flex-wrap items-center gap-3 type-callout text-tertiary">
+        {data.source} · not synced
+        <button className="flex items-center gap-1 text-key hover:underline" onClick={() => setSyncing(true)}>
+          <Timer size={14} /> Sync it yourself
+        </button>
+      </p>
     </div>
     </div>
   );

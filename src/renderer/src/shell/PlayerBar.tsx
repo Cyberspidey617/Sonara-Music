@@ -1,4 +1,5 @@
 import { Ellipsis, ListMusic, Maximize2, MicVocal, PictureInPicture2, Repeat, Repeat1, SlidersVertical } from 'lucide-react';
+import { markStep } from '@/lib/checklist';
 import { ShuffleGlyph } from '@/components/ShuffleGlyph';
 import { SeekTrack, useSeekLook } from '@/components/SeekTrack';
 import { api, isElectron } from '@/lib/api';
@@ -254,7 +255,7 @@ export function PlayerBar() {
             <SlidersVertical size={17} strokeWidth={2} />
           </button>
           {isElectron && (
-            <button className={`${action} @max-[760px]:hidden`} aria-label="Mini player" title="Mini player: floats over other apps (Ctrl+Alt+M)" onClick={() => api.toggleMiniPlayer()}>
+            <button className={`${action} @max-[760px]:hidden`} aria-label="Mini player" title="Mini player: floats over other apps (Ctrl+Alt+M)" onClick={() => (markStep('mini'), api.toggleMiniPlayer())}>
               <PictureInPicture2 size={17} strokeWidth={2} />
             </button>
           )}

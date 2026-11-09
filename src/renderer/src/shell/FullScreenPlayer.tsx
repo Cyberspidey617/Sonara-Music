@@ -1,4 +1,5 @@
 import { hasViewTransitions, transition } from '@/lib/motion';
+import { markStep } from '@/lib/checklist';
 import { ShuffleGlyph } from '@/components/ShuffleGlyph';
 import { ChevronDown, Clapperboard, Ellipsis, Proportions, ListMusic, Maximize, MicVocal, Minimize, Plus, Repeat, Repeat1, SlidersVertical, X } from 'lucide-react';
 import { useEffect, useState, type CSSProperties } from 'react';
@@ -332,7 +333,7 @@ export function FullScreenPlayer() {
             aria-label={showVideo ? 'Hide the music video' : 'Show the music video'}
             aria-pressed={showVideo}
             title={showVideo ? 'Hide the music video (Esc)' : !videoAttached && found && !found.synced ? 'Official music video (may not be in sync with the song)' : 'Music video'}
-            onClick={() => setShowVideo((v) => !v)}
+            onClick={() => (markStep('video'), setShowVideo((v) => !v))}
           >
             <Clapperboard size={16} />
           </button>

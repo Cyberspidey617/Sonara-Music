@@ -3,7 +3,7 @@ import { create } from 'zustand';
 
 export type Route =
   | { name: 'home' }
-  | { name: 'search'; q: string }
+  | { name: 'search'; q: string; tab?: SearchTab }
   | { name: 'album'; id: string }
   | { name: 'artist'; id: string }
   | { name: 'playlist'; id: string }
@@ -14,8 +14,11 @@ export type Route =
   | { name: 'musicAlbum'; source: 'local' | 'server'; id: string }
   | { name: 'downloads' }
   | { name: 'wrapped'; month?: string }
+  | { name: 'moods' }
+  | { name: 'mood'; params: string; title: string; color?: string }
   | { name: 'settings'; tab?: SettingsTab };
 
+export type SearchTab = 'all' | 'songs' | 'videos' | 'albums' | 'artists' | 'playlists';
 export type SettingsTab = 'playback' | 'equalizer' | 'music' | 'appearance' | 'lyrics' | 'player' | 'layout' | 'about';
 
 /** Where an album id leads: YouTube Music, your folders (lal_) or your server (sal_). */

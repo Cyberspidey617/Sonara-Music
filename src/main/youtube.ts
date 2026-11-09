@@ -23,6 +23,7 @@ import type {
   SearchResults,
   Shelf,
   Track,
+  Moods,
 } from '../shared/types';
 import { isYouTubeId } from '../shared/types';
 import { log } from './log';
@@ -78,6 +79,8 @@ export function getInnertube(): Promise<Innertube> {
   instance ??= (async () => {
     const started = Date.now();
     const yt = await Innertube.create({
+      // Through the main process's fetch, which follows the proxy setting.
+      fetch: (input, init) => globalThis.fetch(input, init),
       cache: new UniversalCache(true, cacheDir),
       retrieve_player: true,
       lang: language,
@@ -799,4 +802,47 @@ export async function findMusicVideo(track: { videoId: string; title: string; ar
   musicVideos.set(track.videoId, found);
   log.info(`[${track.videoId}] music video: ${found ? `${found.videoId} (${found.synced ? 'in time' : 'may not be in time'}, ${found.channel})` : 'none'}`);
   return found;
+}
+
+/** YouTube Music's Moods & genres: its sections (Moods & moments, Genres), each a list of buttons. */
+export async function getMoods(): Promise<Moods> {
+  const yt = await getInnertube();
+  const raw = (await yt.actions.execute('/browse', { browseId: 'FEmusic_moods_and_genres', client: 'YTMUSIC' } as AnyNode)) as { data?: unknown };
+  const grids: AnyNode[] = [];
+  const walk = (o: unknown) => {
+    if (!o || typeof o !== 'object') return;
+    for (const [k, v] of Object.entries(o as Record<string, unknown>)) {
+      if (k === 'gridRenderer') grids.push(v as AnyNode);
+      else walk(v);
+    }
+  };
+  walk(raw.data);
+  const argb = (n: unknown) => {
+    const v = Number(n);
+    return Number.isFinite(v) && v > 0 ? `#${(v & 0xffffff).toString(16).padStart(6, '0')}` : undefined;
+  };
+  return {
+    sections: grids
+      .map((g) => ({
+        title: String(g.header?.gridHeaderRenderer?.title?.runs?.[0]?.text ?? ''),
+        items: ((g.items ?? []) as AnyNode[])
+          .map((i) => i.musicNavigationButtonRenderer)
+          .filter((b) => b?.clickCommand?.browseEndpoint?.params)
+          .map((b) => ({ title: String(b.buttonText?.runs?.[0]?.text ?? ''), params: String(b.clickCommand.browseEndpoint.params), ...(argb(b.solid?.leftStripeColor) && { color: argb(b.solid?.leftStripeColor) }) })),
+      }))
+      .filter((s) => s.title && s.items.length),
+  };
+}
+
+/** One mood or genre: its shelves of playlists (and sometimes songs and albums). */
+export async function getMood(params: string): Promise<Shelf[]> {
+  if (!/^[\w-]+=*$/.test(params)) return [];
+  const yt = await getInnertube();
+  const response = (await yt.actions.execute('/browse', { browseId: 'FEmusic_moods_and_genres_category', params, client: 'YTMUSIC', parse: true } as AnyNode)) as AnyNode;
+  const shelves: Shelf[] = [];
+  for (const section of (response.contents_memo?.getType(YTNodes.MusicCarouselShelf) ?? []) as AnyNode[]) {
+    const shelf = shelfFromCarousel(section);
+    if (shelf) shelves.push(shelf);
+  }
+  return shelves;
 }

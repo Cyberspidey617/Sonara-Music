@@ -1,4 +1,5 @@
 import { Clock, Heart } from "lucide-react";
+import { GettingStarted } from '@/components/GettingStarted';
 import type { CSSProperties } from "react";
 import { useLibrary } from "@/state/library";
 import { go } from "@/state/nav";
@@ -128,6 +129,7 @@ function OnlineHome() {
       <h1 className="mb-6 px-(--body-gutter) type-header-emphasized">
         {greeting()}
       </h1>
+      <GettingStarted />
       <QuickTiles />
       <MadeForYou />
       {history.length > 8 && (

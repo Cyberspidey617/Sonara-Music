@@ -88,6 +88,11 @@ export interface Suggestions {
   items: Lockup[];
 }
 
+/** YouTube Music's Moods & genres. */
+export interface Moods {
+  sections: { title: string; items: { title: string; params: string; color?: string }[] }[];
+}
+
 export interface SearchResults {
   query: string;
   correctedQuery?: string;
@@ -183,6 +188,23 @@ export interface OnlineMusicVideo {
 /** The music video's picture: the most pixels high to stream. */
 export type VideoQuality = 1080 | 720 | 480 | 360;
 export type VideoFit = 'fit' | 'fill' | '75' | '50';
+
+/** Off: as before. System: everything through the system's proxy. Custom: through the one you give. */
+export type ProxyMode = 'off' | 'system' | 'custom';
+
+/** The automatic backups. */
+export interface BackupInfo {
+  folder: string;
+  /** When the newest was written (ms), or null. */
+  latest: number | null;
+  count: number;
+}
+
+/** A line of lyrics you timed yourself (ms from the start). */
+export interface TimedLyric {
+  t: number;
+  text: string;
+}
 
 /** How the seek bars look: Rounded (thick), Line (thin) or Wave (the played part a moving wave). */
 export type SeekStyle = 'rounded' | 'line' | 'wave';
@@ -374,6 +396,14 @@ export interface Settings {
   tasteNotes: string[];
   /** The shuffle button also offers Smart Shuffle (recommendations mixed into the queue). */
   smartShuffle: boolean;
+  proxy: ProxyMode;
+  /** For a custom proxy: e.g. http://10.0.0.1:3128 or socks5://127.0.0.1:1080. */
+  proxyUrl: string;
+  /** Getting started: the steps you've done (by name), and whether the card was put away. */
+  checklist: Record<string, boolean>;
+  checklistHidden: boolean;
+  /** Lyrics you timed yourself, by song (videoId). */
+  userLyrics: Record<string, TimedLyric[]>;
   /** The taste picker was finished or skipped. */
   tasteSeen: boolean;
   /** The version whose What's New you've seen (shown once after each update). */
@@ -527,6 +557,11 @@ export const DEFAULT_SETTINGS: Settings = {
   tasteExcluded: [],
   tasteNotes: [],
   smartShuffle: true,
+  proxy: 'off',
+  proxyUrl: '',
+  checklist: {},
+  checklistHidden: false,
+  userLyrics: {},
   tasteSeen: false,
   lastSeenVersion: '',
   startPage: 'home',
@@ -611,7 +646,9 @@ export const MINI_SIZES: Record<MiniLayout, { width: number; height: number }> =
 };
 
 /** What the taskbar, tray, mini player and system-wide shortcuts can ask the player to do. */
-export type AppCommand = 'play-pause' | 'next' | 'previous' | 'volume-up' | 'volume-down' | 'like';
+/** What system-wide shortcuts and the command line (Sonara.exe --next) can do. */
+export const APP_COMMANDS = ['play-pause', 'next', 'previous', 'volume-up', 'volume-down', 'like'] as const;
+export type AppCommand = (typeof APP_COMMANDS)[number];
 
 // ---- Downloads ----------------------------------------------------------------
 
@@ -672,8 +709,24 @@ export interface ObsidianApi {
   recordPlay(record: PlayRecord): void;
   /** A month of your listening (the latest one with listening when none is given). */
   wrapped(month?: string): Promise<Wrapped>;
+  /** YouTube Music's Moods & genres, and one of them (by its params). */
+  moods(): Promise<Moods>;
+  mood(params: string): Promise<Shelf[]>;
   /** What you've listened to in the last `days` days, for recommendations. */
   listeningProfile(days?: number): Promise<ListeningProfile>;
+  /** Backups: the automatic ones, one now, one where you choose, or restoring one (then a restart). */
+  backups(): Promise<BackupInfo>;
+  backupNow(): Promise<string | null>;
+  exportBackup(): Promise<string | null>;
+  importBackup(): Promise<{ restored: boolean; error?: string }>;
+  openBackups(): Promise<void>;
+  /** What to paste into a problem report (versions, system, the end of the log). */
+  problemReport(): Promise<{ text: string; issuesUrl: string }>;
+  clearCaches(): Promise<void>;
+  /** Settings back to how they were at install (your music taste and folders kept), then a restart. */
+  resetSettings(): Promise<void>;
+  /** Whether a custom proxy address is one Sonara can use. */
+  validProxy(url: string): Promise<boolean>;
   /** Asks for a video file and attaches it to the song; null if cancelled. */
   attachMusicVideo(key: string, title: string): Promise<string | null>;
   removeMusicVideo(key: string): Promise<void>;
@@ -689,6 +742,9 @@ export interface ObsidianApi {
   /** Restarts into the downloaded update. */
   installUpdate(): void;
   onUpdateState(handler: (state: UpdateState) => void): () => void;
+  /** The mini player was opened with its shortcut (for Getting started). */
+  onMiniOpened(handler: () => void): () => void;
+  /** Finds a song's stream ahead of playing it (when you point at it), so it starts at once. */
   prefetch(videoId: string): Promise<void>;
   streamInfo(videoId: string): Promise<StreamInfo | null>;
   loadLibrary(): Promise<LibraryData>;

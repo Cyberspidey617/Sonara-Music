@@ -3,13 +3,16 @@ import { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu, nativeImage,
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { isYouTubeId, type AppCommand, type MiniGrow, type MiniLayout, type LibraryData, type LibraryScanState, type PlaybackState, type ServerLogin, type Track, type DownloadQuality, type PlayRecord } from '../shared/types';
+import { APP_COMMANDS, isYouTubeId, type AppCommand, type MiniGrow, type MiniLayout, type LibraryData, type LibraryScanState, type PlaybackState, type ServerLogin, type Track, type DownloadQuality, type PlayRecord } from '../shared/types';
 import { initMiniPlayer } from './mini';
 import { importSpotify, isSpotifyLink } from './spotify';
 import { checkForUpdate, downloadUpdate, installUpdate, updateState, watchForUpdates } from './update';
 import { keepCovers, openCovers, serveCover } from './covers';
 import { attachMusicVideo, musicVideoUrl, removeMusicVideo, serveMusicVideo } from './videos';
 import { flushPlays, listeningProfile, recordPlay, wrapped } from './plays';
+import { backupNow, exportBackup, importBackup, listBackups, scheduleBackups } from './backup';
+import { applyProxy, installFetch, validProxy } from './network';
+import { clearCaches, ISSUES_URL, problemReport, resetSettings } from './support';
 import { getScanState, localAlbum, localAlbums, localTracks, openLibrary, scan, searchLocal } from './library';
 import { clearMatches } from './lossless';
 import { handleMediaRequest, serveFile } from './media';
@@ -30,9 +33,12 @@ import {
   getUpNext,
   findOnYouTube,
   findMusicVideo,
+  getMood,
+  getMoods,
   importPlaylist,
   search,
   suggest,
+  resetInnertube,
 } from './youtube';
 
 const APP_ORIGIN = 'app://obsidian';
@@ -414,8 +420,16 @@ function registerIpc() {
       ? importSpotify(String(input), (done, total) => !sender.isDestroyed() && sender.send('import:progress', done, total))
       : importPlaylist(String(input)),
   );
+  // Pointing at a song: its stream is found now (once, a few at a time), so play starts at once.
+  const preparing = new Set<string>();
   handle('stream:prefetch', async (videoId: string) => {
-    await resolveStream(String(videoId), getLibrary().settings.quality).catch(() => undefined);
+    const id = String(videoId ?? '');
+    if (!isYouTubeId(id) || preparing.has(id) || preparing.size >= 3) return;
+    preparing.add(id);
+    const q = getLibrary().settings.quality;
+    await resolveStream(id, q === 'lossless' ? 'high' : q)
+      .catch(() => undefined)
+      .finally(() => preparing.delete(id));
   });
   handle('stream:info', (videoId: string) => {
     const id = String(videoId);
@@ -450,6 +464,7 @@ function registerIpc() {
   });
   handle('library:save', (patch: Partial<LibraryData>) => {
     patchLibrary(patch);
+    if (patch.settings && ('proxy' in patch.settings || 'proxyUrl' in patch.settings)) void applyProxy(getLibrary().settings.proxy, getLibrary().settings.proxyUrl);
     if (patch.settings && 'closeToTray' in patch.settings) ensureTray();
     if (patch.settings && 'globalShortcuts' in patch.settings) registerShortcuts();
   });
@@ -542,7 +557,25 @@ function registerIpc() {
   handle('video:get', (key: string) => musicVideoUrl(String(key)));
   ipcMain.on('plays:record', (_event, record: PlayRecord) => recordPlay(record));
   handle('wrapped:get', (month?: string) => wrapped(typeof month === 'string' ? month : undefined));
+  handle('yt:moods', () => getMoods());
+  handle('yt:mood', (params: string) => getMood(String(params ?? '')));
   handle('plays:profile', (days?: number) => listeningProfile(Number(days) || 60));
+  handle('backup:list', () => listBackups());
+  handle('backup:now', () => backupNow('by hand'));
+  handle('backup:export', () => exportBackup(win));
+  handle('backup:import', () => importBackup(win));
+  handle('backup:open', async () => {
+    fs.mkdirSync(listBackups().folder, { recursive: true });
+    await shell.openPath(listBackups().folder);
+  });
+  handle('support:report', () => ({ text: problemReport(), issuesUrl: ISSUES_URL }));
+  handle('support:clear-caches', async () => {
+    await clearCaches();
+    resetInnertube();
+  });
+  handle('support:reset', () => resetSettings());
+  handle('net:valid-proxy', (url: string) => validProxy(String(url ?? '')));
+
   handle('video:online', async (track: Track) => {
     return findMusicVideo({
       videoId: String(track.videoId),
@@ -581,7 +614,7 @@ function registerShortcuts() {
     ['CommandOrControl+Alt+Up', () => send('volume-up')],
     ['CommandOrControl+Alt+Down', () => send('volume-down')],
     ['CommandOrControl+Alt+L', () => send('like')],
-    ['CommandOrControl+Alt+M', () => (miniPlayer?.toggle(), updateTray())],
+    ['CommandOrControl+Alt+M', () => (miniPlayer?.toggle(), updateTray(), win?.webContents.send('mini:opened'))],
   ];
   for (const [accelerator, run] of keys) {
     try {
@@ -609,13 +642,22 @@ function ensureTray() {
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
-  app.on('second-instance', showWindow);
+  // Opening Sonara again shows it; with a command (Sonara.exe --next), it does that instead:
+  // --play-pause, --next, --previous, --volume-up, --volume-down, --like.
+  app.on('second-instance', (_event, argv) => {
+    const commands = argv.filter((a) => a.startsWith('--')).map((a) => a.slice(2)).filter((a): a is AppCommand => (APP_COMMANDS as readonly string[]).includes(a));
+    if (!commands.length) return showWindow();
+    for (const command of commands) send(command);
+  });
 
   app.whenReady().then(() => {
     const dataDir = app.getPath('userData');
     configureLog(path.join(dataDir, 'logs'));
     log.info(`Sonara ${app.getVersion()} on ${process.platform}-${process.arch}, Electron ${process.versions.electron}`);
     openStore(dataDir);
+    installFetch();
+    void applyProxy(getLibrary().settings.proxy, getLibrary().settings.proxyUrl);
+    scheduleBackups();
     openLibrary(dataDir, (state: LibraryScanState) => win?.webContents.send('music:scan-progress', state));
     openServer(dataDir);
     openCovers(dataDir);
@@ -633,8 +675,18 @@ if (!app.requestSingleInstanceLock()) {
     installCorsSafetyNet();
     registerIpc();
     createWindow();
-    // Covers for songs downloaded before covers were kept (once there's a connection).
-    setTimeout(() => void keepCovers(listDownloads().filter((d) => d.state === 'done').map((d) => d.track.thumbnail)), 8_000);
+    // Covers kept for offline: your downloads, liked songs, playlists and recent history (each
+    // fetched once, four at a time, a little after start).
+    setTimeout(() => {
+      const lib = getLibrary();
+      const tracks = [
+        ...listDownloads().filter((d) => d.state === 'done').map((d) => d.track),
+        ...lib.liked,
+        ...lib.playlists.flatMap((p) => p.tracks),
+        ...lib.history.slice(0, 100),
+      ];
+      void keepCovers([...new Set(tracks.map((t) => t.thumbnail))].slice(0, 800));
+    }, 8_000);
     watchForUpdates({
       enabled: () => getLibrary().settings.updateNotices !== false,
       tell: (state) => win?.webContents.send('app:update-state', state),

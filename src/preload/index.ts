@@ -25,8 +25,24 @@ const api: ObsidianApi = {
   recordPlay: (record) => ipcRenderer.send('plays:record', record),
   wrapped: (month) => ipcRenderer.invoke('wrapped:get', month),
   listeningProfile: (days) => ipcRenderer.invoke('plays:profile', days),
+  moods: () => ipcRenderer.invoke('yt:moods'),
+  mood: (params) => ipcRenderer.invoke('yt:mood', params),
+  backups: () => ipcRenderer.invoke('backup:list'),
+  backupNow: () => ipcRenderer.invoke('backup:now'),
+  exportBackup: () => ipcRenderer.invoke('backup:export'),
+  importBackup: () => ipcRenderer.invoke('backup:import'),
+  openBackups: () => ipcRenderer.invoke('backup:open'),
+  problemReport: () => ipcRenderer.invoke('support:report'),
+  clearCaches: () => ipcRenderer.invoke('support:clear-caches'),
+  resetSettings: () => ipcRenderer.invoke('support:reset'),
+  validProxy: (url) => ipcRenderer.invoke('net:valid-proxy', url),
   attachMusicVideo: (key, title) => ipcRenderer.invoke('video:attach', key, title),
   removeMusicVideo: (key) => ipcRenderer.invoke('video:remove', key),
+  onMiniOpened: (handler) => {
+    const listener = () => handler();
+    ipcRenderer.on('mini:opened', listener);
+    return () => ipcRenderer.removeListener('mini:opened', listener);
+  },
   onUpdateState: (handler) => {
     const listener = (_: unknown, state: UpdateState) => handler(state);
     ipcRenderer.on('app:update-state', listener);

@@ -50,6 +50,8 @@ const YourMusicPage = onDemand(() => import('@/pages/YourMusicPage'), 'YourMusic
 const YourAlbumPage = onDemand(() => import('@/pages/YourMusicPage'), 'YourAlbumPage');
 const FullScreenPlayer = onDemand(() => import('./FullScreenPlayer'), 'FullScreenPlayer');
 const LyricsView = onDemand(() => import('./LyricsView'), 'LyricsView');
+const MoodsPage = onDemand(() => import('@/pages/MoodsPage'), 'MoodsPage');
+const MoodPage = onDemand(() => import('@/pages/MoodsPage'), 'MoodPage');
 
 /** The rest of the app, fetched once Sonara has started and is idle. */
 function preloadPages() {
@@ -62,7 +64,7 @@ function RoutePage({ route }: { route: Route }) {
     case 'home':
       return <HomePage />;
     case 'search':
-      return <SearchPage q={route.q} />;
+      return <SearchPage q={route.q} tab={route.tab} />;
     case 'album':
       return <AlbumPage id={route.id} />;
     case 'artist':
@@ -83,6 +85,10 @@ function RoutePage({ route }: { route: Route }) {
       return <SettingsPage tab={route.tab} />;
     case 'downloads':
       return <DownloadsPage />;
+    case 'moods':
+      return <MoodsPage />;
+    case 'mood':
+      return <MoodPage key={route.params} params={route.params} title={route.title} color={route.color} />;
     case 'wrapped':
       return <WrappedPage key={route.month ?? 'latest'} month={route.month} />;
   }

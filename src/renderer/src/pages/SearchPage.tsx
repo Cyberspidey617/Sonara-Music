@@ -1,7 +1,8 @@
 import { Search } from 'lucide-react';
-import type { Lockup as LockupData } from '@shared/types';
+import type { Lockup as LockupData, SearchResults } from '@shared/types';
+import { Segmented } from '@/components/Segmented';
 import { useSearch, useYourMusicSearch } from '@/lib/queries';
-import { go } from '@/state/nav';
+import { go, type SearchTab } from '@/state/nav';
 import { usePlayer } from '@/state/player';
 import { Artwork } from '@/components/Artwork';
 import { PillButton } from '@/components/Buttons';
@@ -35,7 +36,44 @@ function TopResult({ lockup }: { lockup: LockupData }) {
   );
 }
 
-export function SearchPage({ q }: { q: string }) {
+const TABS: { value: SearchTab; label: string }[] = [
+  { value: 'all', label: 'All' },
+  { value: 'songs', label: 'Songs' },
+  { value: 'videos', label: 'Videos' },
+  { value: 'albums', label: 'Albums' },
+  { value: 'artists', label: 'Artists' },
+  { value: 'playlists', label: 'Playlists' },
+];
+
+/** One kind of result in full: songs and videos as lists, the rest as a grid of tiles. */
+function SearchCategory({ data, tab, q }: { data: SearchResults; tab: Exclude<SearchTab, 'all'>; q: string }) {
+  const source = { label: `Search: ${q}` };
+  if (tab === 'songs' || tab === 'videos') {
+    const tracks = tab === 'songs' ? data.songs : data.videos;
+    if (!tracks.length) return <p className="px-(--body-gutter) pt-6 type-body-reduced text-tertiary">No {tab} for “{q}”.</p>;
+    return (
+      <section className="px-(--body-gutter)">
+        <div className="mb-3 flex justify-end">
+          <PillButton variant="tinted" className="h-7 min-w-0 px-3 type-body-emphasized" onClick={() => usePlayer.getState().playTracks(tracks, 0, { source })}>
+            <PlayGlyph size={13} /> Play All
+          </PillButton>
+        </div>
+        <TrackList tracks={tracks} source={source} />
+      </section>
+    );
+  }
+  const items = data[tab];
+  if (!items.length) return <p className="px-(--body-gutter) pt-6 type-body-reduced text-tertiary">No {tab} for “{q}”.</p>;
+  return (
+    <div className="grid grid-cols-[repeat(auto-fill,minmax(170px,1fr))] gap-x-4 gap-y-6 px-(--body-gutter)">
+      {items.map((l) => (
+        <Lockup key={l.id} lockup={l} size={170} />
+      ))}
+    </div>
+  );
+}
+
+export function SearchPage({ q, tab = 'all' }: { q: string; tab?: SearchTab }) {
   const { data, error, isLoading, refetch } = useSearch(q);
   const mine = useYourMusicSearch(q);
   if (!q.trim()) {
@@ -59,6 +97,9 @@ export function SearchPage({ q }: { q: string }) {
   return (
     <div className="pt-4 pb-10">
       <h1 className="mb-1 px-(--body-gutter) type-large-title-emphasized">Results for “{q}”</h1>
+      <div className="mt-3 mb-5 px-(--body-gutter)">
+        <Segmented<SearchTab> label="Kind of result" tabs value={tab} options={TABS} onChange={(next) => go({ name: 'search', q, tab: next }, { tab: true })} />
+      </div>
       {data.correctedQuery && data.correctedQuery.toLowerCase() !== q.toLowerCase() && (
         <p className="mb-2 px-(--body-gutter) type-body-reduced text-secondary">
           Did you mean{' '}
@@ -68,6 +109,10 @@ export function SearchPage({ q }: { q: string }) {
           ?
         </p>
       )}
+      {tab !== 'all' ? (
+        <SearchCategory data={data} tab={tab} q={q} />
+      ) : (
+      <>
       <div className="mt-5 mb-10 grid grid-cols-1 gap-8 px-(--body-gutter) @min-[880px]/page:grid-cols-[minmax(280px,2fr)_minmax(0,3fr)]">
         <div className="flex flex-col">
           <h2 className="mb-3 flex h-8 items-center type-[700_20px/26px] tracking-apple">Top Result</h2>
@@ -132,6 +177,8 @@ export function SearchPage({ q }: { q: string }) {
             </div>
           ))}
         </ShelfRow>
+      )}
+      </>
       )}
     </div>
   );

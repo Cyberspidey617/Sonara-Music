@@ -18,9 +18,29 @@ const NOTES: { version: string; notes: Note[] }[] = [
         body: 'When the official video is a different length from the song, the video is now the song: the seek bar shows its time, and the next song starts when the video ends, not before.',
       },
       {
+        icon: Download,
+        title: 'Backups of everything that’s yours',
+        body: 'Settings › About › Your data: back up your liked songs, playlists, history, settings and listening to one file, and restore it here or on another PC. Sonara also backs itself up once a week.',
+      },
+      {
+        icon: Sparkles,
+        title: 'Genres & Moods, and search tabs',
+        body: 'Browse YouTube Music’s moods and genres from the sidebar. Search results now have tabs for Songs, Videos, Albums, Artists and Playlists.',
+      },
+      {
+        icon: MicVocal,
+        title: 'Sync lyrics yourself',
+        body: 'Lyrics that aren’t timed? Press “Sync it yourself”, play the song and tap as each line starts. They’ll play along from then on.',
+      },
+      {
+        icon: WifiOff,
+        title: 'Proxy, and help when something’s wrong',
+        body: 'Settings › About: use a proxy on networks that block YouTube, report a problem with Sonara’s log ready to paste, clear the cache, or reset settings.',
+      },
+      {
         icon: Sparkles,
         title: 'Steadier and safer',
-        body: 'If Sonara’s window ever crashes or freezes, it comes back by itself with your song where it was. Sonara’s files are now locked against tampering, and its pages load as you open them.',
+        body: 'If Sonara’s window ever crashes or freezes, it comes back by itself with your song where it was. Sonara’s files are now locked against tampering, songs you point at start faster, and covers of your library are kept for offline.',
       },
     ],
   },

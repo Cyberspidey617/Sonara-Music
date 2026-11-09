@@ -1,4 +1,5 @@
 import { DownloadStatus } from './Downloads';
+import { prefetchOnHover } from '@/lib/prefetch';
 import type { CSSProperties } from 'react';
 import { Ellipsis } from 'lucide-react';
 import { memo } from 'react';
@@ -92,6 +93,7 @@ const TrackRow = memo(function TrackRow({ track, index, numbered, showAlbum, cur
       className={`group stagger grid h-(--row-h) items-center gap-3 rounded-row px-2 hover:bg-tracklist-hover ${current ? 'bg-white/[0.06]' : ''} ${showAlbum ? 'grid-cols-[40px_minmax(0,4fr)_minmax(0,3fr)_88px_64px]' : 'grid-cols-[40px_minmax(0,1fr)_88px_64px]'}`}
       onDoubleClick={() => onPlay(index)}
       onContextMenu={(e) => openContextMenu(e, menu())}
+      {...prefetchOnHover(track.videoId)}
     >
       <div className="relative grid size-(--row-art) place-items-center justify-self-center">
         {numbered ? (

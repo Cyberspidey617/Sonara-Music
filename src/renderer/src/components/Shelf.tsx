@@ -1,4 +1,5 @@
 import type { CSSProperties } from 'react';
+import { prefetchOnHover } from '@/lib/prefetch';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { Lockup as LockupData, Shelf as ShelfData, Track } from '@shared/types';
@@ -86,6 +87,7 @@ export function SongGrid({ tracks, title }: { tracks: Track[]; title: string }) 
                 className="group flex h-(--row-h) items-center gap-3 rounded-row px-1.5 hover:bg-tracklist-hover"
                 onDoubleClick={() => play(track)}
                 onContextMenu={(e) => openContextMenu(e, trackMenu(track))}
+                {...prefetchOnHover(track.videoId)}
               >
                 <button className="relative size-(--row-art) flex-none" onClick={() => play(track)} aria-label={`Play ${track.title}`}>
                   <Artwork url={track.thumbnail} size={44} radius="sm" className="size-full" />

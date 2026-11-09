@@ -1,4 +1,5 @@
 import { transition } from '@/lib/motion';
+import { markStep } from '@/lib/checklist';
 import { create } from 'zustand';
 import type { Track } from '@shared/types';
 
@@ -48,7 +49,10 @@ export const useUi = create<UiState>((set, get) => ({
   },
   toggleSidePanel: (panel) => set((s) => ({ sidePanel: s.sidePanel === panel ? null : panel })),
   setSidePanel: (sidePanel) => set({ sidePanel }),
-  openDialog: (dialog) => set({ dialog }),
+  openDialog: (dialog) => {
+    if (dialog.kind === 'shortcuts') markStep('shortcuts');
+    set({ dialog });
+  },
   closeDialog: () => set({ dialog: null }),
   toast: (message, action) => {
     const id = ++toastId;

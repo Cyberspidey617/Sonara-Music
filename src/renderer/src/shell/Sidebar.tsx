@@ -1,5 +1,5 @@
 import { useDownloads } from '@/state/downloads';
-import { Clock, Download, HardDrive, HardDriveDownload, Heart, House, ListMusic, Plus, Search, Settings, Sparkles } from 'lucide-react';
+import { Clock, Compass, Download, HardDrive, HardDriveDownload, Heart, House, ListMusic, Plus, Search, Settings, Sparkles } from 'lucide-react';
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { useLiquidLens } from '@/lib/glass';
 import { useLibrary } from '@/state/library';
@@ -110,6 +110,7 @@ export function Sidebar() {
       <div className="no-scrollbar min-h-0 flex-1 overflow-y-auto px-2 pt-2">
         <NavItem route={{ name: 'home' }} label="Home" icon={<House size={18} strokeWidth={2} />} active={is('home')} />
         {showSearch && <NavItem route={{ name: 'search', q: '' }} label="Search" icon={<Search size={18} strokeWidth={2} />} active={is('search')} />}
+        <NavItem route={{ name: 'moods' }} label="Genres & Moods" icon={<Compass size={18} strokeWidth={2} />} active={is('moods') || is('mood')} />
 
         {header('Library')}
         <NavItem route={{ name: 'liked' }} label={`Liked Songs${likedCount ? ` · ${likedCount}` : ''}`} icon={<Heart size={17} strokeWidth={2} />} active={is('liked')} />
