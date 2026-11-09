@@ -43,7 +43,7 @@ function sdf(px: number, py: number, w: number, h: number, r: number): number {
  * a vector pointing back into the shape, so the rim gathers light from inside
  * like the curved edge of a lens.
  */
-function lensMap(w: number, h: number, radius: number, band: number): string {
+function lensMap(w: number, h: number, radius: number, band: number): HTMLCanvasElement {
   const canvas = document.createElement('canvas');
   canvas.width = w;
   canvas.height = h;
@@ -72,19 +72,47 @@ function lensMap(w: number, h: number, radius: number, band: number): string {
     }
   }
   ctx.putImageData(img, 0, 0);
-  return canvas.toDataURL();
+  return canvas;
 }
 
-/** Maps already drawn, by size: the pebble and the full bar swap between two, drawn once each. */
+/**
+ * A rounded rectangle's lens for any width, drawn fast: its two ends never change, and every column of
+ * its straight middle is the same, so the exact map for a width is the ends with one middle column
+ * stretched between them (a copy, not the per-pixel shape). A control can then grow and shrink with
+ * its lens following its rim every frame. The shape is drawn once per height, each width's map once.
+ */
+const shapes = new Map<string, { cap: number; full: HTMLCanvasElement }>();
 const maps = new Map<string, string>();
-function cachedLensMap(w: number, h: number, radius: number, band: number): string {
+function lensFor(w: number, h: number, radius: number, band: number): string {
   const key = `${w}x${h}x${radius}x${band}`;
-  let url = maps.get(key);
-  if (!url) {
-    url = lensMap(w, h, radius, band);
-    if (maps.size > 24) maps.clear();
-    maps.set(key, url);
+  const hit = maps.get(key);
+  if (hit) return hit;
+  const kind = `${h}x${radius}x${band}`;
+  let shape = shapes.get(kind);
+  if (!shape) {
+    const cap = Math.ceil(Math.max(radius, band)) + 1;
+    shape = { cap, full: lensMap(cap * 2 + 1, h, radius, band) };
+    if (shapes.size > 8) shapes.clear();
+    shapes.set(kind, shape);
   }
+  const { cap, full } = shape;
+  let url: string;
+  if (w < cap * 2 + 1) {
+    url = lensMap(w, h, radius, band).toDataURL();
+  } else {
+    const c = document.createElement('canvas');
+    c.width = w;
+    c.height = h;
+    const g = c.getContext('2d')!;
+    g.imageSmoothingEnabled = false;
+    g.drawImage(full, 0, 0, cap, h, 0, 0, cap, h);
+    g.drawImage(full, cap, 0, 1, h, cap, 0, w - cap * 2, h);
+    g.drawImage(full, cap + 1, 0, cap, h, w - cap, 0, cap, h);
+    url = c.toDataURL();
+  }
+  // Enough for a pebble's growth to the full bar and back, several sizes over.
+  if (maps.size > 400) maps.delete(maps.keys().next().value!);
+  maps.set(key, url);
   return url;
 }
 
@@ -101,7 +129,6 @@ export function useLiquidLens(ref: RefObject<HTMLElement | null>, options: { rad
   const blurScale = useLibrary((s) => s.settings.glassBlur ?? 1);
   const [id] = useState(() => `lens-${++lensCount}`);
   const [ready, setReady] = useState(false);
-  const [resizing, setResizing] = useState(false);
   const [reduce, setReduce] = useState(reducedTransparency?.matches ?? false);
   const filterRef = useRef<SVGFilterElement | null>(null);
 
@@ -126,6 +153,8 @@ export function useLiquidLens(ref: RefObject<HTMLElement | null>, options: { rad
     const image = document.createElementNS(ns, 'feImage');
     image.setAttribute('result', 'map');
     image.setAttribute('preserveAspectRatio', 'none');
+    image.setAttribute('x', '0');
+    image.setAttribute('y', '0');
     // One displacement for all colours: the rim bends light without splitting it into a prism fringe.
     const displace = document.createElementNS(ns, 'feDisplacementMap');
     displace.setAttribute('in', 'SourceGraphic');
@@ -137,46 +166,34 @@ export function useLiquidLens(ref: RefObject<HTMLElement | null>, options: { rad
     svgDefs().appendChild(filter);
     filterRef.current = filter;
 
-    let timer: ReturnType<typeof setTimeout> | null = null;
-    let last = '';
-    const build = () => {
+    let drawn = '';
+    // Follows the element's size every frame it changes (growing from the pebble, say), so the lens
+    // is always the exact one for that size.
+    const place = () => {
       const w = Math.round(el.offsetWidth);
       const h = Math.round(el.offsetHeight);
       if (!w || !h) return;
-      const key = `${w}x${h}`;
-      if (key === last) {
-        // Back to the size its map was made for (opened and closed again quickly): the lens returns.
-        setResizing(false);
-        return;
-      }
-      last = key;
-      const r = radius ?? parseFloat(getComputedStyle(el).borderTopLeftRadius) ?? h / 2;
+      const r = Math.min(radius ?? parseFloat(getComputedStyle(el).borderTopLeftRadius) ?? h / 2, h / 2);
+      const key = `${w}x${h}x${r}`;
+      if (key === drawn) return;
+      drawn = key;
+      image.setAttribute('href', lensFor(w, h, r, band));
       image.setAttribute('width', String(w));
       image.setAttribute('height', String(h));
-      image.setAttribute('href', cachedLensMap(w, h, Math.min(r, h / 2), band));
-      setResizing(false);
       setReady(true);
     };
-    build();
-    const observer = new ResizeObserver(() => {
-      // Growing or shrinking: the lens (made for the old size) is set aside until the new one is in,
-      // so a map of the wrong size never bends the rim in the wrong place.
-      if (`${Math.round(el.offsetWidth)}x${Math.round(el.offsetHeight)}` !== last) setResizing(true);
-      if (timer) clearTimeout(timer);
-      timer = setTimeout(build, 120);
-    });
+    place();
+    const observer = new ResizeObserver(place);
     observer.observe(el);
     return () => {
       observer.disconnect();
-      if (timer) clearTimeout(timer);
       filter.remove();
       setReady(false);
     };
   }, [ref, id, radius, band, strength, reduce, key]);
 
   if (!ready || reduce || !supportsLens) return undefined;
-  const frosting = `blur(${blur * blurScale}px) saturate(1.9) brightness(1.06)`;
-  const value = resizing ? frosting : `url(#${id}) ${frosting}`;
+  const value = `url(#${id}) blur(${blur * blurScale}px) saturate(1.9) brightness(1.06)`;
   return { backdropFilter: value, WebkitBackdropFilter: value } as CSSProperties;
 }
 
