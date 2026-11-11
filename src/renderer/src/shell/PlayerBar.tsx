@@ -19,6 +19,7 @@ import { usePlayer } from '@/state/player';
 import { useUi } from '@/state/ui';
 import { useLibrary } from '@/state/library';
 import { SleepTimerButton } from './SleepTimer';
+import { PlaybackSpeedButton } from './PlaybackSpeed';
 import { useScrubber } from './useScrubber';
 import { VolumeIcon, VolumeSlider } from './VolumeControl';
 import { useWaveStops, Waveform } from '@/components/Waveform';
@@ -244,6 +245,7 @@ export function PlayerBar() {
 
         <div className={`flex items-center justify-end gap-0.5 pl-2 ${reveal(pebble, 'delay-[160ms]', 'delay-0')}`}>
           <LikeButton track={track} size={17} className={`${action} @max-[560px]:hidden`} />
+          <PlaybackSpeedButton className={`${action} @max-[760px]:hidden`} />
           <SleepTimerButton className={`${action} @max-[700px]:hidden`} />
           <button className={`${action} @max-[640px]:hidden`} aria-label="Lyrics" aria-pressed={sidePanel === 'lyrics'} title="Lyrics (L)" onClick={() => toggleSidePanel('lyrics')}>
             <MicVocal size={17} strokeWidth={2} />

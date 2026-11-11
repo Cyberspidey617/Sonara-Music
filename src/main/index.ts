@@ -15,6 +15,9 @@ import { applyProxy, installFetch, validProxy } from './network';
 import { clearCaches, ISSUES_URL, problemReport, resetSettings } from './support';
 import { getScanState, localAlbum, localAlbums, localTracks, openLibrary, scan, searchLocal } from './library';
 import { clearMatches } from './lossless';
+import { openAddons, testSource } from './addons';
+import { aboutSong } from './about';
+import { beginLastFm, connectListenBrainz, disconnect as disconnectScrobbling, finishLastFm, maybeScrobble, nowPlaying, openScrobbler, scrobbleStatus } from './scrobble';
 import { handleMediaRequest, serveFile } from './media';
 import { checkServer, connect, disconnect, openServer, searchServer, serverAlbum, serverAlbums } from './subsonic';
 import { configureLog, log } from './log';
@@ -325,7 +328,7 @@ function registerProtocols() {
   protocol.handle('ytstream', (request) => {
     const id = decodeURIComponent(new URL(request.url).pathname.replace(/^\/+/, '')).split('/')[0] ?? '';
     const saved = downloadedFile(id);
-    return saved ? serveFile(saved.path!, request.headers.get('range')) : handleStreamRequest(request, () => getLibrary().settings.quality);
+    return saved ? serveFile(saved.path!, request.headers.get('range')) : handleStreamRequest(request, () => getLibrary().settings.quality, () => getLibrary().settings.losslessSources ?? []);
   });
   protocol.handle('media', (request) => {
     const url = new URL(request.url);
@@ -431,6 +434,7 @@ function registerIpc() {
       .catch(() => undefined)
       .finally(() => preparing.delete(id));
   });
+  handle('sources:test', (url: string) => testSource(String(url)));
   handle('stream:info', (videoId: string) => {
     const id = String(videoId);
     if (!isYouTubeId(id)) return null;
@@ -467,6 +471,7 @@ function registerIpc() {
     if (patch.settings && ('proxy' in patch.settings || 'proxyUrl' in patch.settings)) void applyProxy(getLibrary().settings.proxy, getLibrary().settings.proxyUrl);
     if (patch.settings && 'closeToTray' in patch.settings) ensureTray();
     if (patch.settings && 'globalShortcuts' in patch.settings) registerShortcuts();
+    if (patch.settings && 'losslessSources' in patch.settings) clearMatches();
   });
   handle('app:open-external', async (url: string) => {
     if (/^https:\/\//.test(url)) await shell.openExternal(url);
@@ -555,7 +560,17 @@ function registerIpc() {
   handle('app:update-download', () => downloadUpdate());
   ipcMain.on('app:update-install', () => installUpdate());
   handle('video:get', (key: string) => musicVideoUrl(String(key)));
-  ipcMain.on('plays:record', (_event, record: PlayRecord) => recordPlay(record));
+  ipcMain.on('plays:record', (_event, record: PlayRecord) => {
+    recordPlay(record);
+    maybeScrobble(record);
+  });
+  ipcMain.on('scrobble:now-playing', (_event, track: Track) => track?.title && nowPlaying(track));
+  handle('scrobble:status', () => scrobbleStatus());
+  handle('about:song', (title: string, artist: string) => aboutSong(String(title).slice(0, 200), String(artist).slice(0, 200)));
+  handle('scrobble:listenbrainz', (token: string) => connectListenBrainz(String(token)));
+  handle('scrobble:lastfm-begin', (key: string, secret: string) => beginLastFm(String(key), String(secret)));
+  handle('scrobble:lastfm-finish', () => finishLastFm());
+  handle('scrobble:disconnect', (service: 'listenbrainz' | 'lastfm') => disconnectScrobbling(service === 'lastfm' ? 'lastfm' : 'listenbrainz'));
   handle('wrapped:get', (month?: string) => wrapped(typeof month === 'string' ? month : undefined));
   handle('yt:moods', () => getMoods());
   handle('yt:mood', (params: string) => getMood(String(params ?? '')));
@@ -661,6 +676,8 @@ if (!app.requestSingleInstanceLock()) {
     openLibrary(dataDir, (state: LibraryScanState) => win?.webContents.send('music:scan-progress', state));
     openServer(dataDir);
     openCovers(dataDir);
+    openAddons(dataDir);
+    openScrobbler(dataDir);
     openDownloads(dataDir, () => getLibrary().settings.downloadFolder ?? '', (items) => win?.webContents.send('downloads:changed', items));
     const country = (() => {
       try {

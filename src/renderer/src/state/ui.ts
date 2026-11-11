@@ -10,6 +10,7 @@ export type Dialog =
   | { kind: 'import' }
   | { kind: 'shortcuts' }
   | { kind: 'equalizer' }
+  | { kind: 'about-song'; track: Track }
   | { kind: 'download'; tracks: Track[] };
 
 export interface Toast {

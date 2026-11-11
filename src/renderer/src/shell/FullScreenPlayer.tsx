@@ -23,6 +23,7 @@ import { LyricsView } from './LyricsView';
 import { MusicVideo } from './MusicVideo';
 import { ArtworkBackdrop, MeshBackdrop, SolidBackdrop } from './MeshBackdrop';
 import { SleepCountdown, SleepTimerButton } from './SleepTimer';
+import { PlaybackSpeedButton } from './PlaybackSpeed';
 import { UpNext } from './UpNext';
 import { useScrubber } from './useScrubber';
 import { SeekTrack, useSeekLook } from '@/components/SeekTrack';
@@ -533,6 +534,7 @@ export function FullScreenPlayer() {
                 <button className={actionButton} aria-label="Add to playlist" title="Add to playlist" onClick={() => useUi.getState().openDialog({ kind: 'add-to-playlist', tracks: [track] })}>
                   <Plus size={21} />
                 </button>
+                <PlaybackSpeedButton className={actionButton} size={19} />
                 <SleepTimerButton className={actionButton} size={19} />
                 <button className={actionButton} aria-label="Equalizer" aria-pressed={eqOn} title="Equalizer" onClick={() => useUi.getState().openDialog({ kind: 'equalizer' })}>
                   <SlidersVertical size={19} />

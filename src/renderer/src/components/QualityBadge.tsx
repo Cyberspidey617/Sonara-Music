@@ -10,29 +10,30 @@ export function describeFormat(f: AudioFormat | undefined): string {
   return parts.join(' · ');
 }
 
-const SOURCE: Record<TrackSource, string> = { youtube: 'YouTube Music', local: 'On this PC', server: 'Your server', download: 'Downloaded' };
+const SOURCE: Record<TrackSource, string> = { youtube: 'YouTube Music', local: 'On this PC', server: 'Your server', download: 'Downloaded', addon: 'Lossless source' };
 
 /** What the current song is playing as: "LOSSLESS" with the format, or YouTube's stream. */
 export function NowPlayingQuality({ detailed = false, className = '' }: { detailed?: boolean; className?: string }) {
   const playingAs = usePlayer((s) => s.playingAs);
   if (!playingAs?.format) return null;
-  const { format, source } = playingAs;
+  const { format, source, sourceName } = playingAs;
+  const from = sourceName ?? SOURCE[source];
   const hiRes = format.lossless && ((format.bitDepth ?? 16) > 16 || (format.sampleRate ?? 44100) > 48000);
   if (!detailed) {
     if (!format.lossless) return null;
     return (
-      <span className={`inline-flex h-[15px] flex-none items-center rounded-[3px] border border-current px-1 text-[9px] leading-none font-bold tracking-wide text-key ${className}`} title={`${hiRes ? 'Hi-Res ' : ''}Lossless · ${describeFormat(format)} · ${SOURCE[source]}`}>
+      <span className={`inline-flex h-[15px] flex-none items-center rounded-[3px] border border-current px-1 text-[9px] leading-none font-bold tracking-wide text-key ${className}`} title={`${hiRes ? 'Hi-Res ' : ''}Lossless · ${describeFormat(format)} · ${from}`}>
         {hiRes ? 'HI-RES' : 'LOSSLESS'}
       </span>
     );
   }
   return (
-    <span className={`inline-flex items-center gap-2 ${className}`} title={SOURCE[source]}>
+    <span className={`inline-flex items-center gap-2 ${className}`} title={from}>
       {format.lossless && (
         <span className="inline-flex h-[17px] items-center rounded-[4px] bg-white/90 px-1.5 text-[10px] leading-none font-bold tracking-wide text-black">{hiRes ? 'HI-RES LOSSLESS' : 'LOSSLESS'}</span>
       )}
       <span className="type-callout-medium text-tertiary">
-        {describeFormat(format)} · {SOURCE[source]}
+        {describeFormat(format)} · {from}
       </span>
     </span>
   );

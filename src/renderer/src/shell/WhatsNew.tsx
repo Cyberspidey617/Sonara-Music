@@ -10,6 +10,26 @@ type Note = { icon: LucideIcon; title: string; body: string; open?: () => void; 
 /** What each version brought, newest first. Shown once, after Sonara updates to it. */
 const NOTES: { version: string; notes: Note[] }[] = [
   {
+    version: '2.3.0',
+    notes: [
+      {
+        icon: Sparkles,
+        title: 'Lossless sources, up to 24-bit',
+        body: 'Settings › Your Music › Lossless sources: add a source by its address (the same open addon protocol Echo Music and BitChord use). With quality set to Lossless, songs you don’t have play from it in FLAC, with the badge showing the bit depth and sample rate.',
+      },
+      {
+        icon: Sparkles,
+        title: 'Recommendations that learn more',
+        body: 'Made for you now notices songs you skip early and stops suggesting ones you keep skipping. It counts your likes and this week’s plays, mixes up New for you on each refresh, and adds Discover (artists new to you) and New from your artists.',
+      },
+      {
+        icon: Sparkles,
+        title: 'Scrobbling, speed, and more',
+        body: 'Scrobble to ListenBrainz or Last.fm (Settings › Playback). Change the playback speed from 0.5× to 2× with the pitch kept. Song menus have About This Song (from Wikipedia) and Copy song.link, and you can hide music videos from Home and search.',
+      },
+    ],
+  },
+  {
     version: '2.2.9',
     notes: [
       {

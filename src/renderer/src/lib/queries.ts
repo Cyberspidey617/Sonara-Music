@@ -1,5 +1,6 @@
 import { QueryCache, QueryClient, useQuery } from '@tanstack/react-query';
 import { markOffline } from '@/state/online';
+import { useLibrary } from '@/state/library';
 import type { Taste } from '@shared/types';
 import { daypart, madeForYou, type TasteSignals } from './taste';
 import { api, errorMessage } from './api';
@@ -18,7 +19,10 @@ export const useMadeForYou = (taste: Taste, feedback: Pick<TasteSignals, 'notInt
   useQuery({
     // A new part of the day brings a new daylist.
     queryKey: ['made-for-you', taste.languages, taste.genres, taste.artists.map((a) => a.id), feedback, daypart().name],
-    queryFn: async () => madeForYou(taste, { ...feedback, profile: await api.listeningProfile(60).catch(() => null) }),
+    queryFn: async () => {
+      const { liked, settings } = useLibrary.getState();
+      return madeForYou(taste, { ...feedback, liked: liked.map((t) => t.videoId), skips: settings.skipCounts, profile: await api.listeningProfile(60).catch(() => null) });
+    },
     staleTime: 3 * 60 * 60_000,
     // Saying "Not interested" refreshes it: the old shelves stay up meanwhile.
     placeholderData: (previous) => previous,

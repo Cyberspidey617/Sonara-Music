@@ -10,6 +10,7 @@ import { useLibrary } from '@/state/library';
 import { go } from '@/state/nav';
 import { toast, useUi } from '@/state/ui';
 import { Mosaic } from './Mosaic';
+import type { SongAbout, Track } from '@shared/types';
 
 export function Modal({ title, children, onClose, width = 420 }: { title: string; children: ReactNode; onClose: () => void; width?: number }) {
   const sheet = useRef<HTMLDivElement>(null);
@@ -201,6 +202,46 @@ export const SHORTCUTS: [string, string][] = [
   ['Ctrl + Alt + M', 'Show or hide the mini player'],
 ];
 
+/** A song's story from Wikipedia (or its artist's), as Echo Music's Music DNA shows. */
+function AboutSong({ track, onClose }: { track: Track; onClose: () => void }) {
+  const [about, setAbout] = useState<SongAbout | null | undefined>(undefined);
+  const artist = track.artists?.[0]?.name ?? '';
+  useEffect(() => {
+    void api.aboutSong(track.title, artist).then(setAbout, () => setAbout(null));
+  }, [track.title, artist]);
+  return (
+    <Modal title="About This Song" onClose={onClose} width={520}>
+      <div className="relative max-h-[min(64vh,560px)] overflow-y-auto px-7 pb-7">
+        <p className="type-callout text-tertiary">
+          {track.title} · {artist}
+        </p>
+        {about === undefined ? (
+          <div className="grid h-32 place-items-center text-tertiary">
+            <Loader2 size={20} className="animate-spin" />
+          </div>
+        ) : about === null ? (
+          <p className="mt-4 type-body-reduced text-secondary">Wikipedia has nothing about this song or its artist yet.</p>
+        ) : (
+          <>
+            {about.kind === 'artist' && <p className="mt-3 type-callout text-tertiary">This song has no article of its own, so here’s its artist.</p>}
+            <div className="mt-4 flex gap-4">
+              {about.image && <img src={about.image} alt="" className="size-24 flex-none rounded-[12px] object-cover" />}
+              <div className="min-w-0">
+                <h3 className="type-title3 text-primary">{about.title}</h3>
+                {about.description && <p className="type-callout text-secondary">{about.description}</p>}
+              </div>
+            </div>
+            <p className="mt-4 type-body-reduced leading-relaxed whitespace-pre-line text-secondary">{about.text}</p>
+            <button className="mt-4 type-callout-emphasized text-key hover:underline" onClick={() => void api.openExternal(about.url)}>
+              Read more on Wikipedia
+            </button>
+          </>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
 export function DialogLayer() {
   const dialog = useUi((s) => s.dialog);
   const close = useUi((s) => s.closeDialog);
@@ -246,6 +287,8 @@ export function DialogLayer() {
           <DownloadChooser tracks={dialog.tracks} onDone={close} />
         </Modal>
       );
+    case 'about-song':
+      return <AboutSong track={dialog.track} onClose={close} />;
     case 'equalizer':
       return (
         <Modal title="Equalizer" onClose={close} width={680}>

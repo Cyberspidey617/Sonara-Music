@@ -120,6 +120,50 @@ export interface TasteSignals {
   notInterestedArtists: ArtistRef[];
   tasteExcluded: string[];
   notes: string[];
+  /** Songs you liked (videoIds): your favourites count them most. */
+  liked?: string[];
+  /** Early skips by videoId (Settings keeps them). */
+  skips?: Record<string, number>;
+}
+
+/** Skipped early twice or more, and more often than played through: you don't want it. */
+export const keptSkipping = (videoId: string, skips: Record<string, number> | undefined, plays = 0) => (skips?.[videoId] ?? 0) >= 2 && (skips?.[videoId] ?? 0) > plays;
+
+/**
+ * How much a song you've listened to says about your taste (as Echo Music scores it): how much you
+ * play it (with diminishing returns), more if you liked it or played it this week, less for each
+ * time you skipped it early.
+ */
+function affinity(s: { track: Track; plays: number; lastAt: number }, liked: Set<string>, skips: Record<string, number> | undefined): number {
+  let score = Math.log1p(s.plays) * 2;
+  if (liked.has(s.track.videoId)) score += 1.5;
+  if (Date.now() - s.lastAt < 7 * 86_400_000) score += 1;
+  score -= (skips?.[s.track.videoId] ?? 0) * 0.8;
+  return score;
+}
+
+/** [count] of [ranked] at random, the higher the likelier (as BitChord's Top Picks): fresh on each refresh, still yours. */
+function weightedSample<T>(ranked: T[], count: number): T[] {
+  const pool = ranked.map((item, i) => ({ item, weight: 1 / (i + 1) }));
+  const out: T[] = [];
+  while (out.length < count && pool.length) {
+    let r = Math.random() * pool.reduce((n, p) => n + p.weight, 0);
+    const i = pool.findIndex((p) => (r -= p.weight) <= 0);
+    out.push(pool.splice(i < 0 ? pool.length - 1 : i, 1)[0]!.item);
+  }
+  return out;
+}
+
+/** The same list with no artist twice in a row where it can be helped (as Echo Music's feed spaces them). */
+function spaced(tracks: Track[]): Track[] {
+  const left = [...tracks];
+  const out: Track[] = [];
+  while (left.length) {
+    const last = out.at(-1)?.artists[0]?.name;
+    const i = left.findIndex((t) => t.artists[0]?.name !== last);
+    out.push(left.splice(i < 0 ? 0 : i, 1)[0]!);
+  }
+  return out;
 }
 
 /** Whether a song may be recommended: not one you said no to, nor by an artist you said no to. */
@@ -150,9 +194,11 @@ async function radioFor(videoId: string): Promise<Track[]> {
  * around it, and a daylist suits the time of day. Nothing you said you're not interested in shows up.
  */
 export async function madeForYou(taste: Taste, signals: TasteSignals): Promise<Shelf[]> {
-  const ok = (t: Track) => recommendable(t, signals);
+  const skips = signals.skips;
+  const ok = (t: Track) => recommendable(t, signals) && !keptSkipping(t.videoId, skips);
   const excluded = new Set(signals.tasteExcluded);
-  const listened = (signals.profile?.songs ?? []).filter((s) => !excluded.has(s.track.videoId) && ok(s.track));
+  const liked = new Set(signals.liked ?? []);
+  const listened = (signals.profile?.songs ?? []).filter((s) => !excluded.has(s.track.videoId) && recommendable(s.track, signals) && !keptSkipping(s.track.videoId, skips, s.plays));
   const learned = listened.reduce((n, s) => n + s.plays, 0) >= 10;
   const played = new Set(listened.map((s) => s.track.videoId));
   const shelves: Shelf[] = [];
@@ -165,7 +211,12 @@ export async function madeForYou(taste: Taste, signals: TasteSignals): Promise<S
   // From your listening.
   const recent = Date.now() - 30 * 86_400_000;
   const onRepeat = listened.filter((s) => s.plays >= 2 && s.lastAt >= recent).map((s) => s.track);
-  const favourites = listened.filter((s) => isYouTubeId(s.track.videoId)).slice(0, 3);
+  // Favourites to find new songs from: three of your ten best-loved, drawn afresh each time.
+  const ranked = listened.filter((s) => isYouTubeId(s.track.videoId)).sort((a, b) => affinity(b, liked, skips) - affinity(a, liked, skips));
+  const favourites = weightedSample(ranked.slice(0, 10), 3);
+  // Discover: seeded from songs further down your listening, keeping only artists you've never played.
+  const discoverSeeds = weightedSample(ranked.slice(3, 30), 2);
+  const knownArtists = new Set(listened.flatMap((s) => s.track.artists.map((a) => a.name.toLowerCase())));
   // The artists you play most (those with a page), unless their listens were all excluded.
   const counted = new Map<string, number>();
   for (const s of listened) for (const a of s.track.artists) if (a.id) counted.set(a.id, (counted.get(a.id) ?? 0) + s.plays);
@@ -175,8 +226,9 @@ export async function madeForYou(taste: Taste, signals: TasteSignals): Promise<S
   const part = daypart();
   const dayQuery = `${taste.languages[0] ? `${taste.languages[0]} ` : ""}${part.mood} songs`;
 
-  const [radios, listenedArtists, pickedArtists, mixPages, notePages, daylist] = await Promise.all([
+  const [radios, discoverRadios, listenedArtists, pickedArtists, mixPages, notePages, daylist] = await Promise.all([
     learned ? Promise.all(favourites.map((s) => radioFor(s.track.videoId))) : Promise.resolve([] as Track[][]),
+    learned ? Promise.all(discoverSeeds.map((s) => radioFor(s.track.videoId))) : Promise.resolve([] as Track[][]),
     Promise.all(topArtists.map((id) => api.artist(id).catch(() => null))),
     Promise.all(picked.map((a) => api.artist(a.id).catch(() => null))),
     Promise.all(mixPicks.map((m) => api.search(m.query).catch(() => null))),
@@ -188,8 +240,16 @@ export async function madeForYou(taste: Taste, signals: TasteSignals): Promise<S
     // New for you: the radios of your favourites, taken in turn, without songs you already play.
     const fresh: Track[] = [];
     for (let i = 0; i < 40; i++) for (const radio of radios) if (radio[i + 1] && !played.has(radio[i + 1]!.videoId)) fresh.push(radio[i + 1]!);
-    add("New for you", fresh, 5);
+    add("New for you", spaced(fresh), 5);
     add("On repeat", onRepeat, 4);
+    // Discover: artists new to you, from the radios of songs you like.
+    const discover: Track[] = [];
+    for (let i = 1; i < 50; i++)
+      for (const radio of discoverRadios) {
+        const t = radio[i];
+        if (t && !played.has(t.videoId) && !t.artists.some((a) => knownArtists.has(a.name.toLowerCase()))) discover.push(t);
+      }
+    add("Discover: artists new to you", spaced(discover), 5);
   }
   const weekday = new Date().toLocaleDateString(undefined, { weekday: "long" });
   if (daylist) add(`Your ${weekday} ${part.name}`, daylist.songs.filter((t) => !played.has(t.videoId) || Math.random() < 0.3), 5);
@@ -197,6 +257,14 @@ export async function madeForYou(taste: Taste, signals: TasteSignals): Promise<S
   notePages.forEach((page, i) => page && add(`More of: ${signals.notes[i]}`, page.songs, 4));
   mixPicks.forEach((m, i) => add(m.title, mixPages[i]?.songs ?? [], 4));
   pickedArtists.forEach((page, i) => page && add(`Because you like ${page.name ?? picked[i]!.name}`, page.topSongs, 3));
+
+  // The newest single or album from the artists you play most.
+  const releases: Lockup[] = [];
+  for (const page of listenedArtists) {
+    const latest = page?.shelves.find((s) => /singles/i.test(s.title))?.items[0] ?? page?.shelves.find((s) => /albums/i.test(s.title))?.items[0];
+    if (latest) releases.push({ ...latest, subtitle: `Latest from ${page!.name}` });
+  }
+  if (releases.length >= 2) shelves.push({ title: "New from your artists", layout: "tiles", items: releases });
 
   // Playlists for your picks and notes, as tiles.
   const playlists: Lockup[] = [];

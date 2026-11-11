@@ -6,8 +6,8 @@ import { Check, Clock, Download, FolderOpen, FolderPlus, Heart, House, Loader2, 
 import { Modal, SHORTCUTS } from '@/components/Dialogs';
 import { createContext, useContext, useEffect, useState, type CSSProperties, type ReactNode } from 'react';
 import { create } from 'zustand';
-import { DEFAULT_SETTINGS, seekLookOf, type BackupInfo, type ListeningProfile, type ProxyMode, type AudioQuality, type DownloadQuality, type MiniPlayerWhen, type Settings, type SpatialAudio, type UpdateState } from '@shared/types';
-import { api } from '@/lib/api';
+import { DEFAULT_SETTINGS, seekLookOf, type BackupInfo, type ListeningProfile, type ProxyMode, type ScrobbleStatus, type AudioQuality, type DownloadQuality, type MiniPlayerWhen, type Settings, type SpatialAudio, type UpdateState } from '@shared/types';
+import { api, errorMessage } from '@/lib/api';
 import { ACCENTS, LYRIC_FONTS, THEMES, themeVars, useThemeColors } from '@/lib/appearance';
 import { artworkAtPixels, largeArtwork } from '@/lib/artwork';
 import { rgb, tintFor } from '@/lib/palette';
@@ -127,12 +127,12 @@ function PlaybackTab() {
   const { s, set } = useSettings();
   return (
     <>
-      <Section title="Audio" footer="Lossless needs your own files or server (Your Music tab). Songs you don't have a lossless copy of play at High.">
+      <Section title="Audio" footer="Lossless needs your own files, your server or a lossless source (Your Music tab). Songs with no lossless copy play at High.">
         <Row
           title="Audio quality"
           detail={
             s.quality === 'lossless'
-              ? 'Lossless when available: your FLAC/WAV copy of a song plays instead of YouTube’s stream.'
+              ? 'Lossless when available: your FLAC/WAV copy of a song, or one from your lossless sources, plays instead of YouTube’s stream.'
               : s.quality === 'high'
                 ? 'YouTube’s best: Opus at about 160 kbps.'
                 : s.quality === 'normal'
@@ -153,6 +153,9 @@ function PlaybackTab() {
               toast('Applies from the next song');
             }}
           />
+        </Row>
+        <Row title="Hide music videos" detail="Songs only on Home and in search: music videos are left out. You can still watch a song’s video in the full-screen player.">
+          <Toggle label="Hide music videos" on={s.hideVideos} onChange={(hideVideos) => set({ hideVideos })} />
         </Row>
         <Row title="Normalize volume" detail="Even out loudness between YouTube songs. Your own files play as mastered.">
           <Toggle label="Normalize volume" on={s.normalize} onChange={(normalize) => set({ normalize })} />
@@ -234,7 +237,87 @@ function PlaybackTab() {
         </Row>
       </Section>
       <DownloadSettings />
+      <Scrobbling />
     </>
+  );
+}
+
+/** ListenBrainz and Last.fm: what you listen to, sent as you listen. */
+function Scrobbling() {
+  const [status, setStatus] = useState<ScrobbleStatus | null>(null);
+  const [lb, setLb] = useState('');
+  const [lfm, setLfm] = useState({ key: '', secret: '' });
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => void api.scrobbleStatus().then(setStatus), []);
+  const run = async (what: string, job: () => Promise<ScrobbleStatus>) => {
+    setBusy(what);
+    setError(null);
+    try {
+      setStatus(await job());
+    } catch (e) {
+      setError(errorMessage(e));
+    }
+    setBusy(null);
+  };
+  if (!status) return null;
+  return (
+    <Section
+      title="Scrobbling"
+      footer={
+        <>
+          A song is scrobbled once you’ve heard half of it (or 4 minutes). Your ListenBrainz token is at listenbrainz.org/settings. For Last.fm, make a free API account at last.fm/api/account/create, then paste its key and secret.
+          {status.pending > 0 && ` ${status.pending} waiting to be sent.`}
+        </>
+      }
+    >
+      <Row title="ListenBrainz" detail={status.listenBrainz ? <span className="inline-flex items-center gap-1.5"><Check size={12} className="text-[#34c759]" /> Scrobbling as {status.listenBrainz.user}</span> : 'Open-source scrobbling, by the MetaBrainz Foundation.'}>
+        {status.listenBrainz ? (
+          <button className={`${button} text-[#ff6b61]`} onClick={() => void run('lb', () => api.disconnectScrobbling('listenbrainz'))}>
+            Disconnect
+          </button>
+        ) : (
+          <form className="flex gap-2" onSubmit={(e) => (e.preventDefault(), void run('lb', () => api.connectListenBrainz(lb)).then(() => setLb('')))}>
+            <input className={`${field} w-56`} placeholder="User token" type="password" value={lb} onChange={(e) => setLb(e.target.value)} autoComplete="off" />
+            <button type="submit" className={button} disabled={!lb.trim() || busy === 'lb'}>
+              {busy === 'lb' ? <Loader2 size={14} className="animate-spin" /> : null} Connect
+            </button>
+          </form>
+        )}
+      </Row>
+      {status.lastFm ? (
+        <Row title="Last.fm" detail={<span className="inline-flex items-center gap-1.5"><Check size={12} className="text-[#34c759]" /> Scrobbling as {status.lastFm.user}</span>}>
+          <button className={`${button} text-[#ff6b61]`} onClick={() => void run('lfm', () => api.disconnectScrobbling('lastfm'))}>
+            Disconnect
+          </button>
+        </Row>
+      ) : status.lastFmWaiting ? (
+        <Row title="Last.fm" detail="On the page that opened in your browser, press “Yes, allow access”, then come back and finish.">
+          <div className="flex gap-2">
+            <button className={`${button} text-[#ff6b61]`} onClick={() => void run('lfm', () => api.disconnectScrobbling('lastfm'))}>
+              Cancel
+            </button>
+            <button className={`${button} bg-pill-bg text-pill hover:bg-white`} disabled={busy === 'lfm'} onClick={() => void run('lfm', () => api.finishLastFm())}>
+              {busy === 'lfm' ? <Loader2 size={14} className="animate-spin" /> : null} Finish
+            </button>
+          </div>
+        </Row>
+      ) : (
+        <form className="flex flex-col gap-3 px-5 py-4" onSubmit={(e) => (e.preventDefault(), void run('lfm', () => api.beginLastFm(lfm.key, lfm.secret)))}>
+          <span className="type-body text-primary">Last.fm</span>
+          <div className="flex gap-3">
+            <input className={field} placeholder="API key" value={lfm.key} onChange={(e) => setLfm({ ...lfm, key: e.target.value })} spellCheck={false} autoComplete="off" />
+            <input className={field} placeholder="Shared secret" type="password" value={lfm.secret} onChange={(e) => setLfm({ ...lfm, secret: e.target.value })} autoComplete="off" />
+          </div>
+          <div className="flex justify-end">
+            <button type="submit" className={button} disabled={!lfm.key.trim() || !lfm.secret.trim() || busy === 'lfm'}>
+              {busy === 'lfm' ? <Loader2 size={14} className="animate-spin" /> : null} Connect in browser
+            </button>
+          </div>
+        </form>
+      )}
+      {error && <p className="px-5 pb-4 type-callout text-[#ff6b61]">{error}</p>}
+    </Section>
   );
 }
 
@@ -349,7 +432,74 @@ function MusicTab() {
           </form>
         )}
       </Section>
+      <LosslessSources onAdded={sourceAdded} />
     </>
+  );
+}
+
+/** Lossless sources: servers speaking the addon protocol Echo Music and BitChord use. */
+function LosslessSources({ onAdded }: { onAdded: () => void }) {
+  const { s, set } = useSettings();
+  const sources = s.losslessSources ?? [];
+  const [url, setUrl] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const move = (i: number, by: number) => {
+    const list = [...sources];
+    const [item] = list.splice(i, 1);
+    list.splice(i + by, 0, item!);
+    set({ losslessSources: list });
+  };
+  return (
+    <Section
+      title="Lossless sources"
+      footer="A lossless source is a server you add by its address. It speaks the same open addon protocol as Echo Music and BitChord, so their lossless extensions work here too. With Audio quality set to Lossless, a song you don’t have your own copy of is looked up on your sources, in this order, and plays from the first one with the same recording, in FLAC up to 24-bit. Sonara doesn't come with any sources. Only add ones you trust and are allowed to use."
+    >
+      {sources.map((src, i) => (
+        <Row key={src.id} title={src.name} detail={src.url}>
+          <div className="flex items-center gap-2">
+            {sources.length > 1 && (
+              <>
+                <button className={button} disabled={i === 0} aria-label={`Move ${src.name} up`} onClick={() => move(i, -1)}>
+                  ↑
+                </button>
+                <button className={button} disabled={i === sources.length - 1} aria-label={`Move ${src.name} down`} onClick={() => move(i, 1)}>
+                  ↓
+                </button>
+              </>
+            )}
+            <Toggle label={`Use ${src.name}`} on={src.enabled} onChange={(enabled) => set({ losslessSources: sources.map((x) => (x.id === src.id ? { ...x, enabled } : x)) })} />
+            <button className={`${button} text-[#ff6b61]`} onClick={() => set({ losslessSources: sources.filter((x) => x.id !== src.id) })}>
+              <Trash2 size={14} /> Remove
+            </button>
+          </div>
+        </Row>
+      ))}
+      <form
+        className="flex flex-col gap-3 px-5 py-4"
+        onSubmit={async (e) => {
+          e.preventDefault();
+          setBusy(true);
+          setError(null);
+          const result = await api.testLosslessSource(url);
+          setBusy(false);
+          if (!result.ok) return setError(result.error);
+          if (sources.some((x) => x.url === result.url)) return setError('That source is already added.');
+          set({ losslessSources: [...sources, { id: crypto.randomUUID(), name: result.name, url: result.url, enabled: true }] });
+          setUrl('');
+          toast(`Added ${result.name}`);
+          onAdded();
+        }}
+      >
+        <input className={field} placeholder="Source address, e.g. https://my-lossless-source.example.com" value={url} onChange={(e) => setUrl(e.target.value)} spellCheck={false} />
+        {error && <p className="type-callout text-[#ff6b61]">{error}</p>}
+        <div className="flex justify-end">
+          <button type="submit" className={`${button} bg-pill-bg text-pill hover:bg-white`} disabled={busy || !url.trim()}>
+            {busy ? <Loader2 size={14} className="animate-spin" /> : <Server size={14} />} Add Source
+          </button>
+        </div>
+      </form>
+    </Section>
   );
 }
 

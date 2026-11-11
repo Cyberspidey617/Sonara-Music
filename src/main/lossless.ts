@@ -1,12 +1,14 @@
 /*
  * "Lossless when available": for a YouTube song, find the same recording in
- * your own lossless files (folders on this PC first, then your server) and
+ * your own lossless files (folders on this PC first, then your server), or
+ * else on a lossless source you added (the addon protocol, see addons.ts), and
  * play that instead. A match needs the same title once the usual YouTube
  * decorations are stripped, a shared artist, and, when both are known, a
  * duration within a few seconds (so live, acoustic and extended versions
  * don't stand in for the studio track).
  */
-import type { AudioFormat, StreamInfo } from '../shared/types';
+import type { AudioFormat, LosslessSource, StreamInfo } from '../shared/types';
+import { formatFrom, searchSource } from './addons';
 import { allEntries, type LocalEntry } from './library';
 import { log } from './log';
 import { isServerConfigured, searchServer, songInfo } from './subsonic';
@@ -20,7 +22,8 @@ export interface MatchQuery {
 
 export type LosslessMatch =
   | { source: 'local'; entry: LocalEntry; format: AudioFormat }
-  | { source: 'server'; id: string; suffix?: string; format: AudioFormat };
+  | { source: 'server'; id: string; suffix?: string; format: AudioFormat }
+  | { source: 'addon'; addon: LosslessSource; trackId: string; streamURL?: string; format: AudioFormat };
 
 const strip = (s: string) => s.toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '');
 
@@ -76,7 +79,7 @@ export function clearMatches() {
   cache.clear();
 }
 
-export async function findLosslessMatch(q: MatchQuery): Promise<LosslessMatch | null> {
+export async function findLosslessMatch(q: MatchQuery, sources: LosslessSource[] = []): Promise<LosslessMatch | null> {
   const known = cache.get(q.videoId);
   if (known && (known.match || Date.now() - known.at < MISS_TTL)) return known.match;
 
@@ -102,6 +105,22 @@ export async function findLosslessMatch(q: MatchQuery): Promise<LosslessMatch | 
       log.warn(`server lookup for "${q.title}" failed: ${String(error)}`);
     }
   }
+  // Lossless sources, in your order: the first that has the song wins.
+  for (const addon of best ? [] : sources.filter((x) => x.enabled)) {
+    try {
+      const query = `${normalizeTitle(q.title)} ${artistTokens(q.artist)[0] ?? ''}`.trim();
+      for (const t of await searchSource(addon, query)) {
+        const format = formatFrom(`${t.audioQuality ?? ''} ${t.format ?? ''}`);
+        // A row that doesn't say its quality is taken as lossless: what the stream says decides the badge.
+        if (!t.audioQuality && !t.format) format.lossless = true;
+        const s = score(q, t.title, [t.artist], t.duration && t.duration > 0 ? Math.round(t.duration) : undefined, format);
+        if (s > 0 && (!best || s > best.score)) best = { score: s, match: { source: 'addon', addon, trackId: t.id, ...(t.streamURL && { streamURL: t.streamURL }), format } };
+      }
+      if (best) break;
+    } catch (error) {
+      log.warn(`lossless source ${addon.name} lookup for "${q.title}" failed: ${String(error)}`);
+    }
+  }
   const match = best?.match ?? null;
   if (cache.size > 500) cache.clear();
   cache.set(q.videoId, { match, at: Date.now() });
@@ -113,5 +132,16 @@ export async function findLosslessMatch(q: MatchQuery): Promise<LosslessMatch | 
 export function losslessInfo(videoId: string): StreamInfo | null {
   const match = cache.get(videoId)?.match;
   if (!match) return null;
-  return { videoId, source: match.source, mimeType: `audio/${match.format.codec.toLowerCase()}`, format: match.format };
+  return { videoId, source: match.source, ...(match.source === 'addon' && { sourceName: match.addon.name }), mimeType: `audio/${match.format.codec.toLowerCase()}`, format: match.format };
+}
+
+/** A source's stream said more about the audio than its search row did (24-bit, 96 kHz…). */
+export function refineFormat(videoId: string, format: AudioFormat) {
+  const match = cache.get(videoId)?.match;
+  if (match?.source === 'addon') match.format = { ...match.format, ...format, lossless: format.lossless || match.format.lossless };
+}
+
+/** Forget a match that failed to play, so the next try looks again. */
+export function forgetMatch(videoId: string) {
+  cache.delete(videoId);
 }

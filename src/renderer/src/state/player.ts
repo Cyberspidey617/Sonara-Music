@@ -59,7 +59,7 @@ interface PlayerState {
   sleep: Sleep;
   radioLoading: boolean;
   /** What the current track is actually playing as (YouTube Opus, or your FLAC). */
-  playingAs: { source: TrackSource; format?: AudioFormat } | null;
+  playingAs: { source: TrackSource; format?: AudioFormat; sourceName?: string } | null;
 
   playTracks: (tracks: Track[], start?: number, options?: { shuffle?: boolean; source?: PlaySource }) => void;
   startRadio: (track: Track) => void;
@@ -105,9 +105,16 @@ let fading: { timer: ReturnType<typeof setInterval> } | null = null;
 let consecutiveErrors = 0;
 let lastPositionState = 0;
 
+/** Playback speed, from Settings (pitch kept). */
+export const playbackSpeed = () => Math.min(2, Math.max(0.5, useLibrary.getState().settings.playbackSpeed || 1));
 for (const deck of decks) {
   deck.preload = 'auto';
   deck.crossOrigin = 'anonymous';
+  deck.preservesPitch = true;
+  // A new source resets the speed to the default one.
+  deck.addEventListener('loadstart', () => {
+    deck.defaultPlaybackRate = deck.playbackRate = playbackSpeed();
+  });
 }
 attachEqualizer(decks);
 /** Both decks, for listeners that only read the sound (the waveform); playback stays here. */
@@ -225,7 +232,7 @@ async function readLoudness(deckIndex: number, track: Track) {
   try {
     const info = await api.streamInfo(videoId);
     if (deckIndex === active && usePlayer.getState().queue[usePlayer.getState().index]?.track.videoId === videoId) {
-      usePlayer.setState({ playingAs: info ? { source: info.source, format: info.format } : null });
+      usePlayer.setState({ playingAs: info ? { source: info.source, format: info.format, ...(info.sourceName && { sourceName: info.sourceName }) } : null });
     }
     // A lossless copy has no YouTube loudness data: leave it as mastered.
     const loudness = info?.source === 'youtube' ? info?.loudnessDb : undefined;
@@ -275,7 +282,7 @@ function updatePositionState() {
   const deck = activeDeck();
   if (!Number.isFinite(deck.duration) || deck.duration <= 0) return;
   try {
-    navigator.mediaSession.setPositionState({ duration: deck.duration, position: Math.min(deck.currentTime, deck.duration), playbackRate: 1 });
+    navigator.mediaSession.setPositionState({ duration: deck.duration, position: Math.min(deck.currentTime, deck.duration), playbackRate: playbackSpeed() });
   } catch {
     /* ignore */
   }
@@ -301,6 +308,7 @@ function reportPlayback() {
 
 // The mini player draws its seek bar in the chosen look: tell it when the look changes.
 useLibrary.subscribe((s, before) => {
+  if (s.settings.playbackSpeed !== before.settings.playbackSpeed) for (const deck of decks) deck.defaultPlaybackRate = deck.playbackRate = playbackSpeed();
   if (JSON.stringify(seekLookOf(s.settings)) !== JSON.stringify(seekLookOf(before.settings))) reportPlayback();
 });
 

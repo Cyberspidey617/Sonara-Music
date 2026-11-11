@@ -1,3 +1,4 @@
+import { useLibrary } from '@/state/library';
 import { Search } from 'lucide-react';
 import type { Lockup as LockupData, SearchResults } from '@shared/types';
 import { Segmented } from '@/components/Segmented';
@@ -74,7 +75,10 @@ function SearchCategory({ data, tab, q }: { data: SearchResults; tab: Exclude<Se
 }
 
 export function SearchPage({ q, tab = 'all' }: { q: string; tab?: SearchTab }) {
-  const { data, error, isLoading, refetch } = useSearch(q);
+  const { data: found, error, isLoading, refetch } = useSearch(q);
+  const hideVideos = useLibrary((s) => s.settings.hideVideos);
+  // Songs only, when you keep music videos out (Settings › Playback).
+  const data = found && hideVideos ? { ...found, videos: [], songs: found.songs.filter((t) => !t.isVideo), top: found.top?.kind === 'video' ? undefined : found.top } : found;
   const mine = useYourMusicSearch(q);
   if (!q.trim()) {
     return <EmptyState icon={<Search size={38} strokeWidth={1.5} />} title="Search YouTube Music" body="Find songs, albums, artists and playlists. Press Ctrl+K anywhere to search." />;
@@ -98,7 +102,7 @@ export function SearchPage({ q, tab = 'all' }: { q: string; tab?: SearchTab }) {
     <div className="pt-4 pb-10">
       <h1 className="mb-1 px-(--body-gutter) type-large-title-emphasized">Results for “{q}”</h1>
       <div className="mt-3 mb-5 px-(--body-gutter)">
-        <Segmented<SearchTab> label="Kind of result" tabs value={tab} options={TABS} onChange={(next) => go({ name: 'search', q, tab: next }, { tab: true })} />
+        <Segmented<SearchTab> label="Kind of result" tabs value={tab} options={hideVideos ? TABS.filter((t) => t.value !== 'videos') : TABS} onChange={(next) => go({ name: 'search', q, tab: next }, { tab: true })} />
       </div>
       {data.correctedQuery && data.correctedQuery.toLowerCase() !== q.toLowerCase() && (
         <p className="mb-2 px-(--body-gutter) type-body-reduced text-secondary">

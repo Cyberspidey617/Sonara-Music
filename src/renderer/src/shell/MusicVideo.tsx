@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { VideoFit } from '@shared/types';
 import { api } from '@/lib/api';
 import { useLibrary } from '@/state/library';
-import { getPlayhead, listeningVolume, setSongSilenced, setVideoClock, usePlayer, videoEnded } from '@/state/player';
+import { getPlayhead, listeningVolume, playbackSpeed, setSongSilenced, setVideoClock, usePlayer, videoEnded } from '@/state/player';
 
 /** The picture against its clock: drift the eye can't see. */
 const SETTLED = 0.03;
@@ -87,7 +87,7 @@ export function MusicVideo({
 
     const moveTo = (to: number) => {
       v.currentTime = Math.max(0, Math.min(to, (v.duration || Infinity) - 0.1));
-      v.playbackRate = 1;
+      v.playbackRate = playbackSpeed();
       jumpedAt = performance.now();
     };
     /** Keeps the picture with a clock: by speed when close, holding still when ahead, jumping when far. */
@@ -103,11 +103,11 @@ export function MusicVideo({
         }
       } else if (off > limit && off <= HOLD_MAX && !loading()) {
         holding = true;
-        v.playbackRate = 1;
+        v.playbackRate = playbackSpeed();
         v.pause();
       } else if (Math.abs(off) > limit) moveTo(clock + lead);
-      else if (Math.abs(off) > SETTLED) v.playbackRate = Math.min(1.15, Math.max(0.85, 1 - off * 0.6));
-      else if (v.playbackRate !== 1) v.playbackRate = 1;
+      else if (Math.abs(off) > SETTLED) v.playbackRate = playbackSpeed() * Math.min(1.15, Math.max(0.85, 1 - off * 0.6));
+      else if (v.playbackRate !== playbackSpeed()) v.playbackRate = playbackSpeed();
     };
 
     // Where you seeked to, for a video with its own sound to go to.
@@ -152,6 +152,7 @@ export function MusicVideo({
           a.currentTime = v.currentTime; // start together, from the picture's moment
           void a.play().catch(() => undefined);
         }
+        if (a.playbackRate !== playbackSpeed()) a.playbackRate = playbackSpeed();
         // The picture follows its own sound.
         if (!a.paused && !a.seeking && a.readyState >= 2 && !settling) follow(a.currentTime, PICTURE_JUMP, want);
       } else if (!settling && Number.isFinite(song) && v.readyState >= 1) {

@@ -1,4 +1,4 @@
-import { Disc3, FolderOpen, HardDriveDownload, Heart, HeartOff, Link2, ListEnd, ListPlus, ListStart, Radio, SlidersHorizontal, ThumbsDown, Trash2, User, UserX } from 'lucide-react';
+import { BookOpen, Disc3, FolderOpen, Share2, HardDriveDownload, Heart, HeartOff, Link2, ListEnd, ListPlus, ListStart, Radio, SlidersHorizontal, ThumbsDown, Trash2, User, UserX } from 'lucide-react';
 import { api } from '@/lib/api';
 import { downloadTracks, useDownloads } from '@/state/downloads';
 import type { Track } from '@shared/types';
@@ -114,6 +114,16 @@ export function trackMenu(track: Track, extra: { removeFromPlaylist?: () => void
       toast('Link copied');
     },
   });
+  // song.link (Odesli): one page with the song on every service, for friends on Spotify or Apple Music.
+  if (isYouTubeId(track.videoId)) entries.push({
+    label: 'Copy song.link',
+    icon: <Share2 {...ICON} />,
+    onSelect: () => {
+      void navigator.clipboard.writeText(`https://song.link/y/${track.videoId}`);
+      toast('song.link copied: opens on any music service');
+    },
+  });
+  if (track.artists?.length) entries.push({ label: 'About This Song', icon: <BookOpen {...ICON} />, onSelect: () => useUi.getState().openDialog({ kind: 'about-song', track }) });
   if (extra.removeFromPlaylist) entries.push({ label: 'Remove from Playlist', icon: <Trash2 {...ICON} />, destructive: true, onSelect: extra.removeFromPlaylist });
   if (extra.removeFromQueue) entries.push({ label: 'Remove from Queue', icon: <Trash2 {...ICON} />, destructive: true, onSelect: extra.removeFromQueue });
   if (extra.fromHistory)

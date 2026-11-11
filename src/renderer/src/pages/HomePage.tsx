@@ -152,7 +152,9 @@ function OnlineHome() {
   // Recently played carries on after the songs the quick picks already show.
   const shownAbove = new Set(history.slice(0, QUICK_SONGS + 3).map((t) => t.videoId));
   const recent = history.filter((t) => !shownAbove.has(t.videoId)).slice(0, 20);
-  const groups = groupShelves(data?.shelves ?? []);
+  const hideVideos = useLibrary((s) => s.settings.hideVideos);
+  const shelves = (data?.shelves ?? []).map((s) => (hideVideos ? { ...s, items: s.items.filter((l) => l.kind !== 'video' && !l.track?.isVideo) } : s)).filter((s) => s.items.length);
+  const groups = groupShelves(shelves);
   return (
     <div className="pt-4 pb-10">
       <h1 className="mb-6 px-(--body-gutter) type-header-emphasized">

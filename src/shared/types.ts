@@ -29,7 +29,15 @@ export interface Track {
   format?: AudioFormat;
 }
 
-export type TrackSource = 'youtube' | 'local' | 'server' | 'download';
+export type TrackSource = 'youtube' | 'local' | 'server' | 'download' | 'addon';
+
+/** A lossless source: a server speaking the open addon protocol (Echo Music, BitChord), added by its address. */
+export interface LosslessSource {
+  id: string;
+  name: string;
+  url: string;
+  enabled: boolean;
+}
 
 export interface AudioFormat {
   codec: string;
@@ -223,6 +231,26 @@ export interface SeekLook {
 }
 
 /** A listen of 30 seconds or more, sent again as it goes on (same id). */
+/** A song's story from Wikipedia, or its artist's when the song has no article. */
+export interface SongAbout {
+  kind: 'song' | 'artist';
+  title: string;
+  description?: string;
+  text: string;
+  image?: string;
+  url: string;
+}
+
+/** Who you scrobble to. */
+export interface ScrobbleStatus {
+  listenBrainz: { user: string } | null;
+  lastFm: { user: string } | null;
+  /** Last.fm's approval page was opened; waiting for you to allow Sonara there. */
+  lastFmWaiting: boolean;
+  /** Scrobbles waiting to be sent (offline). */
+  pending: number;
+}
+
 export interface PlayRecord {
   id: string;
   track: Track;
@@ -301,6 +329,8 @@ export interface Settings {
 
   // Your music (lossless sources)
   musicFolders: string[];
+  /** Lossless sources, asked in order after your own files and server. */
+  losslessSources: LosslessSource[];
 
   // Appearance
   accent: string;
@@ -335,6 +365,10 @@ export interface Settings {
   lyricsTranslateTo: string;
   /** Lyric timing you adjusted, per song (by videoId). */
   lyricsTiming: Record<string, LyricsTiming>;
+  /** Playback speed, 0.5–2 (1 is normal); the pitch stays the same. */
+  playbackSpeed: number;
+  /** Keep music videos out of Home and search (songs only). */
+  hideVideos: boolean;
   /** Music videos: the highest quality to stream. */
   videoQuality: VideoQuality;
   /** Music videos: fit the screen, fill it (cropping the edges), or a smaller size. */
@@ -392,6 +426,8 @@ export interface Settings {
   notInterestedArtists: ArtistRef[];
   /** Songs whose listens don't shape your recommendations (videoIds). */
   tasteExcluded: string[];
+  /** Songs you skipped early, and how often (by videoId): ones you keep skipping aren't recommended. */
+  skipCounts: Record<string, number>;
   /** "I want more of…": notes that become Home shelves. */
   tasteNotes: string[];
   /** The shuffle button also offers Smart Shuffle (recommendations mixed into the queue). */
@@ -504,6 +540,7 @@ export const DEFAULT_SETTINGS: Settings = {
   updateNotices: true,
   globalShortcuts: true,
   musicFolders: [],
+  losslessSources: [],
   accent: '#fa586a',
   dynamicAccent: true,
   pageTone: 'black',
@@ -524,6 +561,8 @@ export const DEFAULT_SETTINGS: Settings = {
   lyricsTranslation: true,
   lyricsTranslateTo: 'en',
   lyricsTiming: {},
+  playbackSpeed: 1,
+  hideVideos: false,
   videoQuality: 1080,
   videoFit: 'fit',
   seekStyle: 'rounded',
@@ -555,6 +594,7 @@ export const DEFAULT_SETTINGS: Settings = {
   notInterested: [],
   notInterestedArtists: [],
   tasteExcluded: [],
+  skipCounts: {},
   tasteNotes: [],
   smartShuffle: true,
   proxy: 'off',
@@ -677,6 +717,8 @@ export interface StreamInfo {
   videoId: string;
   /** Where the audio actually came from: YouTube, or your lossless copy. */
   source: TrackSource;
+  /** For a lossless source: its name. */
+  sourceName?: string;
   client?: string;
   mimeType: string;
   bitrate?: number;
@@ -707,6 +749,14 @@ export interface ObsidianApi {
   onlineMusicVideo(track: Track): Promise<OnlineMusicVideo | null>;
   /** A listen of 30 seconds or more, for Wrapped. */
   recordPlay(record: PlayRecord): void;
+  /** A song started: tell your scrobbling services it's playing. */
+  nowPlaying(track: Track): void;
+  scrobbleStatus(): Promise<ScrobbleStatus>;
+  aboutSong(title: string, artist: string): Promise<SongAbout | null>;
+  connectListenBrainz(token: string): Promise<ScrobbleStatus>;
+  beginLastFm(key: string, secret: string): Promise<ScrobbleStatus>;
+  finishLastFm(): Promise<ScrobbleStatus>;
+  disconnectScrobbling(service: 'listenbrainz' | 'lastfm'): Promise<ScrobbleStatus>;
   /** A month of your listening (the latest one with listening when none is given). */
   wrapped(month?: string): Promise<Wrapped>;
   /** YouTube Music's Moods & genres, and one of them (by its params). */
@@ -747,6 +797,8 @@ export interface ObsidianApi {
   /** Finds a song's stream ahead of playing it (when you point at it), so it starts at once. */
   prefetch(videoId: string): Promise<void>;
   streamInfo(videoId: string): Promise<StreamInfo | null>;
+  /** Checks a lossless source's address: its name, or why it can't be used. */
+  testLosslessSource(url: string): Promise<{ ok: true; name: string; url: string } | { ok: false; error: string }>;
   loadLibrary(): Promise<LibraryData>;
   saveLibrary(patch: Partial<LibraryData>): Promise<void>;
   openExternal(url: string): Promise<void>;

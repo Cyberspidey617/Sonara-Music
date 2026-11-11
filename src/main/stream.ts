@@ -14,7 +14,9 @@
 import type { Innertube } from 'youtubei.js';
 import type { AudioQuality, StreamInfo } from '../shared/types';
 import { getInnertube, resetInnertube } from './youtube';
-import { findLosslessMatch, type LosslessMatch } from './lossless';
+import { serveSourceSong } from './addons';
+import { findLosslessMatch, forgetMatch, refineFormat, type LosslessMatch } from './lossless';
+import type { LosslessSource } from '../shared/types';
 import { serveFile, serveServerSong } from './media';
 import { log } from './log';
 
@@ -360,7 +362,7 @@ function chunkedBody(videoId: string, quality: StreamKind, first: ResolvedStream
   });
 }
 
-export async function handleStreamRequest(request: Request, defaultQuality: () => AudioQuality): Promise<Response> {
+export async function handleStreamRequest(request: Request, defaultQuality: () => AudioQuality, sources: () => LosslessSource[] = () => []): Promise<Response> {
   const url = new URL(request.url);
   const videoId = decodeURIComponent(url.pathname.replace(/^\/+/, '')).split('/')[0] ?? '';
   const q = url.searchParams.get('q');
@@ -376,11 +378,22 @@ export async function handleStreamRequest(request: Request, defaultQuality: () =
     const artist = url.searchParams.get('a') ?? '';
     const duration = Number(url.searchParams.get('d')) || undefined;
     let match: LosslessMatch | null = null;
-    if (title) match = await findLosslessMatch({ videoId, title, artist, duration }).catch(() => null);
+    if (title) match = await findLosslessMatch({ videoId, title, artist, duration }, sources()).catch(() => null);
     if (match) {
-      const response = match.source === 'local' ? await serveFile(match.entry.path, request.headers.get('range')) : await serveServerSong(match.id, request.headers.get('range'));
+      const range = request.headers.get('range');
+      let response: Response;
+      try {
+        if (match.source === 'addon') {
+          const served = await serveSourceSong(match.addon, match.trackId, match.streamURL, range);
+          refineFormat(videoId, served.format);
+          response = served.response;
+        } else response = match.source === 'local' ? await serveFile(match.entry.path, range) : await serveServerSong(match.id, range);
+      } catch (error) {
+        response = new Response(String(error), { status: 502 });
+      }
       if (response.ok) return response;
-      log.warn(`[${videoId}] lossless copy failed (${response.status}); falling back to YouTube`);
+      log.warn(`[${videoId}] lossless copy failed (${response.status}: ${await response.clone().text().catch(() => '')}); falling back to YouTube`);
+      if (match.source === 'addon') forgetMatch(videoId);
     }
     quality = 'high';
   }
