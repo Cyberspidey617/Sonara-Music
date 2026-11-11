@@ -24,6 +24,16 @@ const NOTES: { version: string; notes: Note[] }[] = [
       },
       {
         icon: Sparkles,
+        title: 'Incognito',
+        body: 'Turn on Incognito in the sidebar to play without leaving a trace: no Recently played, no Wrapped listens, no scrobbles, and nothing changes your recommendations.',
+      },
+      {
+        icon: Sparkles,
+        title: 'Radio keeps your song playing',
+        body: 'Starting a radio no longer stops what’s playing: the radio comes after it. Two new seek bars too (Settings › Player): Expressive, a Material 3 wave, and Capsule, a thick bar with no knob. Wrapped now shows your top artists’ own photos.',
+      },
+      {
+        icon: Sparkles,
         title: 'Scrobbling, speed, and more',
         body: 'Scrobble to ListenBrainz or Last.fm (Settings › Playback). Change the playback speed from 0.5× to 2× with the pitch kept. Song menus have About This Song (from Wikipedia) and Copy song.link, and you can hide music videos from Home and search.',
       },

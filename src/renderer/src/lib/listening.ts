@@ -50,6 +50,11 @@ export function startListeningLog() {
   setInterval(() => {
     const state = usePlayer.getState();
     const entry = state.queue[state.index];
+    // Incognito: no listens counted, scrobbled or learned from (a listen under way is dropped).
+    if (useLibrary.getState().settings.incognito) {
+      session = null;
+      return;
+    }
     if (state.status !== 'playing' || !entry) return;
     const at = getPlayhead();
     // Another song, or this one again from the top.

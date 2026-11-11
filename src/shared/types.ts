@@ -215,7 +215,7 @@ export interface TimedLyric {
 }
 
 /** How the seek bars look: Rounded (thick), Line (thin) or Wave (the played part a moving wave). */
-export type SeekStyle = 'rounded' | 'line' | 'wave';
+export type SeekStyle = 'rounded' | 'line' | 'wave' | 'capsule' | 'expressive';
 export type SeekColor = 'white' | 'accent' | 'custom';
 /** When the knob shows: on hover, always, or only while dragging. */
 export type SeekKnob = 'hover' | 'always' | 'drag';
@@ -369,6 +369,8 @@ export interface Settings {
   playbackSpeed: number;
   /** Keep music videos out of Home and search (songs only). */
   hideVideos: boolean;
+  /** Incognito: nothing you play is kept (history, Wrapped, scrobbles, skips) or shapes your recommendations. */
+  incognito: boolean;
   /** Music videos: the highest quality to stream. */
   videoQuality: VideoQuality;
   /** Music videos: fit the screen, fill it (cropping the edges), or a smaller size. */
@@ -563,6 +565,7 @@ export const DEFAULT_SETTINGS: Settings = {
   lyricsTiming: {},
   playbackSpeed: 1,
   hideVideos: false,
+  incognito: false,
   videoQuality: 1080,
   videoFit: 'fit',
   seekStyle: 'rounded',

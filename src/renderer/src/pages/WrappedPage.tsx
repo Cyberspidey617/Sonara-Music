@@ -1,6 +1,7 @@
 import { ChevronLeft, ChevronRight, Loader2, Sparkles } from 'lucide-react';
 import { useEffect, useState, type CSSProperties, type ReactNode } from 'react';
-import type { Track, Wrapped } from '@shared/types';
+import type { Track, Wrapped, WrappedArtist } from '@shared/types';
+import { useQuery } from '@tanstack/react-query';
 import { Artwork } from '@/components/Artwork';
 import { PillButton } from '@/components/Buttons';
 import { PlayGlyph } from '@/components/icons';
@@ -16,6 +17,29 @@ const monthName = (month: string, withYear = false) => {
 };
 const thisYear = (month: string) => month.startsWith(String(new Date().getFullYear()));
 const n = (v: number) => v.toLocaleString();
+
+/**
+ * An artist's own photo: from their page when Wrapped knows it, or the artist YouTube Music finds by
+ * that name. Until it comes (or offline), the cover of their most played song stands in.
+ */
+function useArtistPhoto(artist: WrappedArtist): string | undefined {
+  const { data } = useQuery({
+    queryKey: ['artist-photo', artist.id ?? artist.name],
+    queryFn: async () => {
+      if (artist.id) return (await api.artist(artist.id)).thumbnail ?? null;
+      const found = (await api.search(artist.name)).artists.find((a) => a.title.toLowerCase() === artist.name.toLowerCase());
+      return found?.thumbnail ?? null;
+    },
+    staleTime: Infinity,
+    gcTime: 24 * 60 * 60_000,
+    retry: false,
+  });
+  return data ?? artist.thumbnail;
+}
+
+function ArtistPhoto({ artist }: { artist: WrappedArtist }) {
+  return <Artwork url={useArtistPhoto(artist)} size={48} round kind="artist" className="size-12 flex-none" />;
+}
 
 /** What your listening hours say about you. */
 function listener(hours: number[]): { title: string; body: string } {
@@ -178,7 +202,7 @@ export function WrappedPage({ month }: { month?: string }) {
                       onClick={() => artist.id && go({ name: 'artist', id: artist.id })}
                     >
                       <span className="w-6 text-center type-title-2-emphasized text-tertiary tabular-nums">{i + 1}</span>
-                      <Artwork url={artist.thumbnail} size={48} round kind="artist" className="size-12 flex-none" />
+                      <ArtistPhoto artist={artist} />
                       <span className="min-w-0 flex-1">
                         <span className="block truncate type-body-emphasized text-primary">{artist.name}</span>
                         <span className="block truncate type-callout text-secondary">{n(artist.minutes)} minutes</span>

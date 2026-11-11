@@ -1,7 +1,7 @@
 import { EqualizerPanel } from '@/components/Equalizer';
 import { SeekTrack } from '@/components/SeekTrack';
 import { useQueryClient } from '@tanstack/react-query';
-import appIcon from '@/assets/app-icon.png';
+import appIcon from '@/assets/app-icon.svg';
 import { Check, Clock, Download, FolderOpen, FolderPlus, Heart, House, Loader2, RefreshCw, RotateCcw, Server, Sparkles, Trash2, X } from 'lucide-react';
 import { Modal, SHORTCUTS } from '@/components/Dialogs';
 import { createContext, useContext, useEffect, useState, type CSSProperties, type ReactNode } from 'react';
@@ -153,6 +153,9 @@ function PlaybackTab() {
               toast('Applies from the next song');
             }}
           />
+        </Row>
+        <Row title="Incognito" detail="While it’s on, what you play isn’t kept: no Recently played, no Wrapped listens, no scrobbles, and nothing changes your recommendations. Also in the sidebar.">
+          <Toggle label="Incognito" on={!!s.incognito} onChange={(incognito) => set({ incognito })} />
         </Row>
         <Row title="Hide music videos" detail="Songs only on Home and in search: music videos are left out. You can still watch a song’s video in the full-screen player.">
           <Toggle label="Hide music videos" on={s.hideVideos} onChange={(hideVideos) => set({ hideVideos })} />
@@ -710,7 +713,7 @@ function PlayerTab() {
       </Row>
     </Section>
     <Section title="Seek bar" footer={<ResetButton keys={['seekStyle', 'seekColor', 'seekCustomColor', 'seekThickness', 'seekKnob', 'seekTimes']} />}>
-      <Row title="Style" detail="For every seek bar: the full-screen player, music videos, the player bar and the mini player. Wave moves while music plays.">
+      <Row title="Style" detail="For every seek bar: the full-screen player, music videos, the player bar and the mini player. Wave moves while music plays (like Echo’s squiggly bar). Expressive is Echo’s Material 3 wave, with an upright handle and flattening when paused. Capsule is BitChord’s Apple Music bar: no knob, thicker under the pointer.">
         <Segmented
           label="Seek bar style"
           value={s.seekStyle ?? 'rounded'}
@@ -718,6 +721,8 @@ function PlayerTab() {
             { value: 'rounded', label: 'Rounded' },
             { value: 'line', label: 'Line' },
             { value: 'wave', label: 'Wave' },
+            { value: 'expressive', label: 'Expressive' },
+            { value: 'capsule', label: 'Capsule' },
           ]}
           onChange={(seekStyle) => set({ seekStyle })}
         />

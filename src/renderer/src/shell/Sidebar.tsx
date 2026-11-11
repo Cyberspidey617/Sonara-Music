@@ -1,5 +1,5 @@
 import { useDownloads } from '@/state/downloads';
-import { Clock, Compass, Download, HardDrive, HardDriveDownload, Heart, House, ListMusic, Plus, Search, Settings, Sparkles } from 'lucide-react';
+import { Clock, Compass, Download, HardDrive, HardDriveDownload, Heart, House, ListMusic, Plus, Search, Settings, Sparkles, VenetianMask } from 'lucide-react';
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { useLiquidLens } from '@/lib/glass';
 import { useLibrary } from '@/state/library';
@@ -28,6 +28,29 @@ function NavItem({ route, label, icon, active }: { route: Route; label: string; 
     <button className={item} aria-current={active ? 'page' : undefined} title={label} onClick={() => go(route)}>
       {active && <Selection />}
       <span className={iconBox}>{icon}</span>
+      <span className={label_}>{label}</span>
+    </button>
+  );
+}
+
+/** Incognito on or off: while on, nothing you play is kept or learned from. */
+function IncognitoItem() {
+  const on = useLibrary((s) => !!s.settings.incognito);
+  const label = on ? 'Incognito is on' : 'Incognito';
+  return (
+    <button
+      className={`${item} ${on ? 'text-key' : ''}`}
+      aria-pressed={on}
+      title={on ? 'Incognito is on: nothing you play is kept or shapes your recommendations. Click to turn it off.' : 'Incognito: play without keeping history, Wrapped plays, scrobbles or recommendations'}
+      onClick={() => {
+        useLibrary.getState().updateSettings({ incognito: !on });
+        toast(on ? 'Incognito off: your listening is kept again' : 'Incognito on: nothing you play is kept');
+      }}
+    >
+      {on && <span className="absolute inset-0 -z-10 rounded-[inherit] bg-key/15" />}
+      <span className={iconBox}>
+        <VenetianMask size={17} strokeWidth={2} />
+      </span>
       <span className={label_}>{label}</span>
     </button>
   );
@@ -171,6 +194,7 @@ export function Sidebar() {
         ))}
       </div>
       <div className="flex-none px-2 pt-2 pb-2">
+        <IncognitoItem />
         <NavItem route={{ name: 'settings' }} label="Settings" icon={<Settings size={17} strokeWidth={2} />} active={is('settings')} />
       </div>
     </nav>

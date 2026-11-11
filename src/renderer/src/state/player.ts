@@ -723,6 +723,17 @@ export const usePlayer = create<PlayerState>((set, get) => ({
   startRadio: (track) => {
     radioFor = null;
     smartFor += 1;
+    const { queue, index, status } = get();
+    const current = queue[index];
+    // A song already on keeps playing: the radio is the queue after it (its own song first, when it's another).
+    if (current && status !== 'idle') {
+      const same = current.track.videoId === track.videoId;
+      set({ queue: same ? [current] : [current, item(track)], index: 0, original: null, shuffle: false, smart: false, source: { label: `${track.title} Radio` } });
+      preloaded && resetDeck(preloaded.deck);
+      if (!same) toast(`${track.title} Radio plays after this song`, { label: 'Play Now', run: () => get().next() });
+      void fillRadio(track, true);
+      return;
+    }
     set({ queue: [item(track)], original: null, shuffle: false, smart: false, source: { label: `${track.title} Radio` } });
     load(0);
     void fillRadio(track, true);

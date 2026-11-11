@@ -9,7 +9,7 @@ export function useSeekLook(): SeekLook {
 }
 
 /** Line thickness (px) at thickness 1, by size and style. */
-const BASE = { large: { rounded: 6, line: 3, wave: 2.5 }, small: { rounded: 4, line: 2, wave: 2 } } as const;
+const BASE = { large: { rounded: 6, line: 3, wave: 2.5, capsule: 7, expressive: 4 }, small: { rounded: 4, line: 2, wave: 2, capsule: 4, expressive: 2.5 } } as const;
 /** The bar's own height (px): room for the wave and the knob. */
 const BOX = { large: 20, small: 12 } as const;
 /** One wavelength of the wave (px), and how many go by each second while music plays. */
@@ -21,7 +21,27 @@ const WAVES_PER_SECOND = 1.1;
  * frame. It flattens out over its last few pixels, so it meets the flat line of what's still to play
  * at the playing point, and it moves along while music plays.
  */
-function WavePath({ box, amplitude, stroke, color, playing, className }: { box: number; amplitude: number; stroke: number; color: string; playing: boolean; className: string }) {
+function WavePath({
+  box,
+  amplitude,
+  stroke,
+  color,
+  playing,
+  className,
+  gap = 0,
+  expressive = false,
+}: {
+  box: number;
+  amplitude: number;
+  stroke: number;
+  color: string;
+  playing: boolean;
+  className: string;
+  /** Room left before the playing point (for a handle). */
+  gap?: number;
+  /** Material 3 Expressive: the full wave right up to the gap, settling flat while paused. */
+  expressive?: boolean;
+}) {
   const svg = useRef<SVGSVGElement>(null);
   const path = useRef<SVGPathElement>(null);
   const moving = useRef(playing);
@@ -35,21 +55,25 @@ function WavePath({ box, amplitude, stroke, color, playing, className }: { box: 
     const still = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     const mid = box / 2;
     let phase = 0;
+    // Expressive: how much of the wave shows, easing to flat while paused and back while playing.
+    let level = moving.current ? 1 : 0;
     let last = performance.now();
     let drawn = '';
     let frame = 0;
     const draw = (now: number) => {
       if (moving.current && !still) phase = (phase + (Math.min(100, now - last) / 1000) * WAVES_PER_SECOND * 2 * Math.PI) % (2 * Math.PI);
+      const step = Math.min(100, now - last) / 1000;
       last = now;
+      if (expressive) level = moving.current && !still ? Math.min(1, level + step * 3) : Math.max(0, level - step * 3);
       const progress = Math.min(1, Math.max(0, parseFloat(getComputedStyle(el).getPropertyValue('--progress')) || 0));
-      const end = progress * width;
-      const key = `${end.toFixed(1)}:${phase.toFixed(3)}:${width}`;
+      const end = Math.max(0, progress * width - gap);
+      const key = `${end.toFixed(1)}:${phase.toFixed(3)}:${width}:${level.toFixed(2)}`;
       if (key !== drawn && path.current) {
         drawn = key;
         let d = `M0 ${mid}`;
         for (let x = 2; x < end; x += 2) {
           // Rises in over the first pixels and settles over the last, meeting the flat line.
-          const a = amplitude * Math.min(1, x / 6, (end - x) / 12);
+          const a = expressive ? amplitude * level * Math.min(1, x / 6, (end - x) / 3) : amplitude * Math.min(1, x / 6, (end - x) / 12);
           d += ` L${x} ${(mid + a * Math.sin((x / WAVE) * 2 * Math.PI - phase)).toFixed(2)}`;
         }
         d += ` L${end.toFixed(1)} ${mid}`;
@@ -62,7 +86,7 @@ function WavePath({ box, amplitude, stroke, color, playing, className }: { box: 
       cancelAnimationFrame(frame);
       resize.disconnect();
     };
-  }, [box, amplitude]);
+  }, [box, amplitude, gap, expressive]);
   return (
     <svg ref={svg} className={`absolute inset-0 size-full overflow-visible ${className}`} aria-hidden="true">
       <path ref={path} fill="none" strokeLinecap="round" strokeLinejoin="round" style={{ stroke: color, strokeWidth: stroke }} />
@@ -103,6 +127,42 @@ export function SeekTrack({
   const knobShown =
     look.knob === 'always' ? 'scale-100' : look.knob === 'drag' ? 'scale-0 group-data-dragging/scrub:scale-100' : 'scale-0 group-hover/scrub:scale-100 group-data-dragging/scrub:scale-100';
   const amplitude = Math.min(box / 2 - line, (size === 'large' ? 3.5 : 2.5) * Math.sqrt(k));
+  // Expressive's handle is an upright bar, with a little room either side of it.
+  const gap = size === 'large' ? 6 : 4;
+
+  if (look.style === 'expressive')
+    return (
+      <div className="relative flex w-full items-center" style={{ height: box }} data-progress-host>
+        {/* Still to play: flat, starting just past the handle. */}
+        <div
+          ref={barRef}
+          className="absolute inset-x-0 top-1/2 -translate-y-1/2 rounded-full bg-quaternary"
+          style={{ height: line, clipPath: `inset(-4px 0 -4px calc(var(--progress) * 100% + ${gap}px))` }}
+        />
+        {/* Played: a wave right up to the handle, flattening out while paused. */}
+        <WavePath box={box} amplitude={Math.min(box / 2 - line, amplitude * 1.15)} stroke={line} color={fill} playing={playing && !loading} gap={gap} expressive className={`${tone} ${loading ? 'animate-pulse' : ''}`} />
+        <span
+          aria-hidden="true"
+          className={`pointer-events-none absolute top-1/2 left-[calc(var(--progress)*100%)] -translate-x-1/2 -translate-y-1/2 rounded-full transition-[height,width] duration-200 ease-(--ease-spring) group-data-dragging/scrub:w-[6px] ${tone}`}
+          style={{ background: fill, width: size === 'large' ? 4 : 3, height: box }}
+        />
+      </div>
+    );
+
+  if (look.style === 'capsule') {
+    // Apple Music's scrubber (as BitChord draws it): a capsule with no knob, thicker under the pointer.
+    const grown = Math.round(line * 1.7);
+    return (
+      <div className="relative flex w-full items-center" style={{ height: Math.max(box, grown) }} data-progress-host>
+        <div
+          className="relative h-(--h) w-full overflow-hidden rounded-full bg-white/[0.22] transition-[height] duration-300 ease-(--ease-spring) group-hover/scrub:h-(--hh) group-data-dragging/scrub:h-(--hh)"
+          style={{ '--h': `${line}px`, '--hh': `${grown}px` } as CSSProperties}
+        >
+          <div ref={barRef} className={`size-full origin-left scale-x-(--progress) ${loading ? 'animate-pulse' : ''}`} style={{ background: fill, opacity: look.color === 'white' ? 0.92 : 1 }} />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="relative flex w-full items-center" style={{ height: box }} data-progress-host>

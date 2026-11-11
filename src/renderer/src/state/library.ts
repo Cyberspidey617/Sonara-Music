@@ -70,6 +70,8 @@ export const useLibrary = create<LibraryState>((set, get) => {
     },
 
     addToHistory: (track) => {
+      // Incognito: what you play leaves no trace.
+      if (get().settings.incognito) return;
       const next = [slim(track), ...get().history.filter((t) => t.videoId !== track.videoId)].slice(0, HISTORY_LIMIT);
       set({ history: next });
       save({ history: next });
