@@ -62,7 +62,8 @@ interface PlayerState {
   playingAs: { source: TrackSource; format?: AudioFormat; sourceName?: string } | null;
 
   playTracks: (tracks: Track[], start?: number, options?: { shuffle?: boolean; source?: PlaySource }) => void;
-  startRadio: (track: Track) => void;
+  /** A song's radio. Clicking a song plays it now; `afterCurrent` (the song menu's Start Radio) lets what's playing finish first. */
+  startRadio: (track: Track, options?: { afterCurrent?: boolean }) => void;
   playNext: (tracks: Track[]) => void;
   addToQueue: (tracks: Track[]) => void;
   jumpTo: (index: number) => void;
@@ -720,13 +721,13 @@ export const usePlayer = create<PlayerState>((set, get) => ({
     load(Math.min(start, items.length - 1));
   },
 
-  startRadio: (track) => {
+  startRadio: (track, options = {}) => {
     radioFor = null;
     smartFor += 1;
     const { queue, index, status } = get();
     const current = queue[index];
     // A song already on keeps playing: the radio is the queue after it (its own song first, when it's another).
-    if (current && status !== 'idle') {
+    if (options.afterCurrent && current && status !== 'idle') {
       const same = current.track.videoId === track.videoId;
       set({ queue: same ? [current] : [current, item(track)], index: 0, original: null, shuffle: false, smart: false, source: { label: `${track.title} Radio` } });
       preloaded && resetDeck(preloaded.deck);

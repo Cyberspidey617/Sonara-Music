@@ -4,6 +4,7 @@ import { useArtworkColors, useThemeColors } from '@/lib/appearance';
 import { hexToRgb, type Rgb } from '@/lib/palette';
 import { getAnalyser, spectrumLevels } from '@/lib/waveform';
 import { prefersReducedMotion } from '@/lib/motion';
+import { onScreen, powerSaving, usePowerSaving } from '@/lib/power';
 
 /** The waveform's settings (Settings › Player › Waveform). */
 export type WaveOptions = Pick<Settings, 'waveBars' | 'waveThickness' | 'waveHeight' | 'waveSmoothing' | 'waveSensitivity' | 'waveAutoLevel' | 'waveShape' | 'waveStyle' | 'waveIdle'>;
@@ -32,7 +33,8 @@ export function useWaveStops(s: Settings): string[] {
  */
 export function Waveform({ active, playing, options: o, stops, className = '' }: { active: boolean; playing: boolean; options: WaveOptions; stops: string[]; className?: string }) {
   const canvas = useRef<HTMLCanvasElement>(null);
-  const key = JSON.stringify([o.waveBars, o.waveThickness, o.waveHeight, o.waveSmoothing, o.waveSensitivity, o.waveAutoLevel, o.waveShape, o.waveStyle, o.waveIdle, stops]);
+  const saving = usePowerSaving();
+  const key = JSON.stringify([saving, o.waveBars, o.waveThickness, o.waveHeight, o.waveSmoothing, o.waveSensitivity, o.waveAutoLevel, o.waveShape, o.waveStyle, o.waveIdle, stops]);
 
   useEffect(() => {
     const el = canvas.current;
@@ -99,7 +101,7 @@ export function Waveform({ active, playing, options: o, stops, className = '' }:
 
     const still = prefersReducedMotion();
     // Inactive, motion reduced, or paused without breathing: one quiet, static frame.
-    if (!active || still || (!playing && !o.waveIdle)) {
+    if (!active || still || (!playing && (!o.waveIdle || powerSaving()))) {
       rest(playing && !still ? 0.5 : 0.2);
       draw();
       return () => observer.disconnect();
@@ -112,11 +114,25 @@ export function Waveform({ active, playing, options: o, stops, className = '' }:
     const down = 0.2 - 0.15 * smooth;
     let frame = 0;
     let last = performance.now();
-    let skip = false;
+    const pausedAt = last;
     const tick = (now: number) => {
       frame = requestAnimationFrame(tick);
-      // Paused, the breathing only needs half the frames.
-      if (!playing && (skip = !skip)) return;
+      if (!onScreen(el, now)) return;
+      // Paused, the slow breathing needs only a few frames a second, and settles still after a while
+      // (an app left paused shouldn't keep the PC busy).
+      if (!playing) {
+        if (now - pausedAt > 20_000) {
+          cancelAnimationFrame(frame);
+          rest(0.2);
+          draw();
+          return;
+        }
+        if (now - last < 1000 / 12) return;
+      } else if (now - last < 1000 / (powerSaving() ? 21 : 31)) {
+        // Playing: 30 frames a second (20 saving power) look just as smooth for eased bars, and each
+        // frame redraws the glass around them, so fewer is much lighter on the PC.
+        return;
+      }
       const dt = Math.min(64, now - last) / 16.67;
       last = now;
       let sound = false;

@@ -191,6 +191,13 @@ export function AppShell() {
   const entry = useNav((s) => s.stack[s.index]!);
   const saveScroll = useNav((s) => s.saveScroll);
   const fullScreen = useUi((s) => s.fullScreen);
+  // Covered: the full-screen player has finished opening over the app (it shows again the moment it closes).
+  const [covered, setCovered] = useState(false);
+  useEffect(() => {
+    if (!fullScreen) return setCovered(false);
+    const t = setTimeout(() => setCovered(true), 900);
+    return () => clearTimeout(t);
+  }, [fullScreen]);
   const sidePanel = useUi((s) => s.sidePanel);
   const scroller = useRef<HTMLDivElement>(null);
   const [scrolled, setScrolled] = useState(false);
@@ -214,6 +221,8 @@ export function AppShell() {
 
   return (
     <div className="relative h-full overflow-hidden bg-page">
+      {/* Under the full-screen player once it's open, the app isn't drawn (or animated) at all. */}
+      <div className="contents" style={covered && fullScreen ? { visibility: "hidden" } : undefined}>
       <PageBackground kind={background} accent={accent} />
       {/* Ambient glow: the playing song's colour, softly behind everything. */}
       <div
@@ -239,6 +248,7 @@ export function AppShell() {
       <div className={`scroll-edge-bottom pointer-events-none absolute bottom-0 left-0 z-10 h-[72px] ${sidePanel ? 'right-(--side-panel-width)' : 'right-0'}`} aria-hidden="true" />
       <SidePanel />
       <PlayerBar />
+      </div>
       {fullScreen && (
         <Suspense fallback={null}>
           <FullScreenPlayer />

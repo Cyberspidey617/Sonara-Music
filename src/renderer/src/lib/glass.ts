@@ -13,6 +13,7 @@
  */
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type RefObject } from 'react';
 import { useLibrary } from '@/state/library';
+import { usePowerSaving } from './power';
 
 const supportsLens = typeof CSS !== 'undefined' && CSS.supports('backdrop-filter', 'url(#x)');
 const reducedTransparency = typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-transparency: reduce)') : null;
@@ -129,7 +130,10 @@ export function useLiquidLens(ref: RefObject<HTMLElement | null>, options: { rad
   const blurScale = useLibrary((s) => s.settings.glassBlur ?? 1);
   const [id] = useState(() => `lens-${++lensCount}`);
   const [ready, setReady] = useState(false);
-  const [reduce, setReduce] = useState(reducedTransparency?.matches ?? false);
+  const [reduceSetting, setReduce] = useState(reducedTransparency?.matches ?? false);
+  // Saving power: plain frosting (the CSS glass), not the refracting lens.
+  const saving = usePowerSaving();
+  const reduce = reduceSetting || saving;
   const filterRef = useRef<SVGFilterElement | null>(null);
 
   useEffect(() => {

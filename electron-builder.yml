@@ -1,6 +1,6 @@
 appId: com.obsidian.music.pc
 productName: Sonara
-copyright: Sonara (based on Obsidian Music for PC) — GPL-3.0-or-later
+copyright: Sonara — GPL-3.0-or-later
 directories:
   output: dist
   buildResources: build

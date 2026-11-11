@@ -91,7 +91,7 @@ export function trackMenu(track: Track, extra: { removeFromPlaylist?: () => void
         toast('Added to queue');
       },
     },
-    { label: 'Start Radio', icon: <Radio {...ICON} />, onSelect: () => usePlayer.getState().startRadio(track) },
+    { label: 'Start Radio', icon: <Radio {...ICON} />, onSelect: () => usePlayer.getState().startRadio(track, { afterCurrent: true }) },
     { separator: true },
     ...downloadEntries(track),
     {

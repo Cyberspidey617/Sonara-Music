@@ -154,6 +154,18 @@ function PlaybackTab() {
             }}
           />
         </Row>
+        <Row title="Power saver" detail="Simpler glass, fewer animation frames and a still full-screen background, to go easy on your PC. Auto turns it on while on battery.">
+          <Segmented
+            label="Power saver"
+            value={s.powerSaver ?? 'auto'}
+            options={[
+              { value: 'auto', label: 'Auto' },
+              { value: 'on', label: 'On' },
+              { value: 'off', label: 'Off' },
+            ]}
+            onChange={(powerSaver) => set({ powerSaver })}
+          />
+        </Row>
         <Row title="Incognito" detail="While it’s on, what you play isn’t kept: no Recently played, no Wrapped listens, no scrobbles, and nothing changes your recommendations. Also in the sidebar.">
           <Toggle label="Incognito" on={!!s.incognito} onChange={(incognito) => set({ incognito })} />
         </Row>
@@ -456,7 +468,7 @@ function LosslessSources({ onAdded }: { onAdded: () => void }) {
   return (
     <Section
       title="Lossless sources"
-      footer="A lossless source is a server you add by its address. It speaks the same open addon protocol as Echo Music and BitChord, so their lossless extensions work here too. With Audio quality set to Lossless, a song you don’t have your own copy of is looked up on your sources, in this order, and plays from the first one with the same recording, in FLAC up to 24-bit. Sonara doesn't come with any sources. Only add ones you trust and are allowed to use."
+      footer="A lossless source is a server you add by its address. It speaks the open addon protocol, so lossless extensions made for it work here. With Audio quality set to Lossless, a song you don’t have your own copy of is looked up on your sources, in this order, and plays from the first one with the same recording, in FLAC up to 24-bit. Sonara doesn't come with any sources. Only add ones you trust and are allowed to use."
     >
       {sources.map((src, i) => (
         <Row key={src.id} title={src.name} detail={src.url}>
@@ -713,7 +725,7 @@ function PlayerTab() {
       </Row>
     </Section>
     <Section title="Seek bar" footer={<ResetButton keys={['seekStyle', 'seekColor', 'seekCustomColor', 'seekThickness', 'seekKnob', 'seekTimes']} />}>
-      <Row title="Style" detail="For every seek bar: the full-screen player, music videos, the player bar and the mini player. Wave moves while music plays (like Echo’s squiggly bar). Expressive is Echo’s Material 3 wave, with an upright handle and flattening when paused. Capsule is BitChord’s Apple Music bar: no knob, thicker under the pointer.">
+      <Row title="Style" detail="For every seek bar: the full-screen player, music videos, the player bar and the mini player. Wave moves while music plays. Expressive is a wave with an upright handle that flattens when paused. Capsule is a thick bar with no knob that grows under the pointer.">
         <Segmented
           label="Seek bar style"
           value={s.seekStyle ?? 'rounded'}
@@ -1333,10 +1345,10 @@ function AboutTab() {
           <img src={appIcon} alt="" className="size-16 flex-none drop-shadow-[0_6px_16px_rgb(0_0_0/0.4)]" />
           <div className="flex min-w-0 flex-col gap-0.5">
             <span className="type-title-3-emphasized">Sonara</span>
-            <span className="type-callout text-secondary">Version 2.3.0 · Based on Obsidian Music for PC · YouTube Music, plus your own lossless files, server and lossless sources · Lyrics via am-lyrics</span>
+            <span className="type-callout text-secondary">Version 2.3.0 · YouTube Music, plus your own lossless files, server and lossless sources · Lyrics via am-lyrics</span>
           </div>
         </div>
-        <p className="px-5 pb-5 type-footnote text-tertiary">Not affiliated with YouTube, Google, Obsidian Music or BitChord. Use in line with YouTube’s terms and your local laws.</p>
+        <p className="px-5 pb-5 type-footnote text-tertiary">Not affiliated with YouTube or Google. Use in line with YouTube’s terms and your local laws.</p>
       </Section>
     </>
   );

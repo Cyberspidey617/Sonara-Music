@@ -112,6 +112,7 @@ export function MeshBackdrop({ artworkUrl, playing, speed = 1 }: { artworkUrl?: 
     let last = 0;
     let clock = 0;
     let prev = performance.now();
+    let drawnStill = false;
     const draw = (now: number) => {
       raf = requestAnimationFrame(draw);
       if (now - last < 1000 / 30) return;
@@ -126,9 +127,19 @@ export function MeshBackdrop({ artworkUrl, playing, speed = 1 }: { artworkUrl?: 
         el.width = w;
         el.height = h;
         gl.viewport(0, 0, w, h);
+        // A resized canvas is blank until drawn again.
+        drawnStill = false;
       }
       // Ease toward the new artwork's colours.
-      shown = shown.map((c, i) => c.map((v, j) => v + (target.current[i]![j]! - v) * 0.06) as Rgb);
+      let moved = 0;
+      shown = shown.map((c, i) => c.map((v, j) => {
+        const next = v + (target.current[i]![j]! - v) * 0.06;
+        moved = Math.max(moved, Math.abs(next - v));
+        return next;
+      }) as Rgb);
+      // Still (no motion) and the colours settled: the last frame stands, nothing to redraw.
+      if (speedRef.current === 0 && moved < 0.05 && drawnStill) return;
+      drawnStill = speedRef.current === 0 && moved < 0.05;
       gl.uniform2f(uRes, w, h);
       gl.uniform3fv(uCol, new Float32Array(shown.flatMap((c) => c.map((v) => v / 255))));
       gl.uniform3fv(uBlob, blobsAt(clock + 40));

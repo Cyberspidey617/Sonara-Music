@@ -371,6 +371,8 @@ export interface Settings {
   hideVideos: boolean;
   /** Incognito: nothing you play is kept (history, Wrapped, scrobbles, skips) or shapes your recommendations. */
   incognito: boolean;
+  /** Power saver: fewer frames and simpler glass. Auto: while on battery. */
+  powerSaver: 'auto' | 'on' | 'off';
   /** Music videos: the highest quality to stream. */
   videoQuality: VideoQuality;
   /** Music videos: fit the screen, fill it (cropping the edges), or a smaller size. */
@@ -566,6 +568,7 @@ export const DEFAULT_SETTINGS: Settings = {
   playbackSpeed: 1,
   hideVideos: false,
   incognito: false,
+  powerSaver: 'auto',
   videoQuality: 1080,
   videoFit: 'fit',
   seekStyle: 'rounded',

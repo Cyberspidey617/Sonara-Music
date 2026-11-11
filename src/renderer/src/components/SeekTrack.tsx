@@ -1,6 +1,7 @@
 import { useEffect, useRef, type CSSProperties, type Ref } from 'react';
 import { seekLookOf, type SeekLook } from '@shared/types';
 import { useLibrary } from '@/state/library';
+import { onScreen } from '@/lib/power';
 
 /** The seek bars' look, as Settings › Player › Seek bar has it. */
 export function useSeekLook(): SeekLook {
@@ -60,12 +61,23 @@ function WavePath({
     let last = performance.now();
     let drawn = '';
     let frame = 0;
+    // The bar's progress, as the scrubber writes it on the host (read without a style recalculation).
+    const host = (el.closest('[data-progress-host]') as HTMLElement | null) ?? el;
+    let lastLook = 0;
     const draw = (now: number) => {
+      // Paused, the bar only moves if you seek: a look four times a second is enough.
+      // Moving, 30 frames a second are plenty for the wave; unseen (hidden, under the full-screen player), none.
+      const minGap = moving.current && !el.closest('[data-dragging]') ? 1000 / 31 : !moving.current && !expressive && !el.closest('[data-dragging]') ? 250 : 0;
+      if (now - lastLook < minGap || !onScreen(el, now)) {
+        frame = requestAnimationFrame(draw);
+        return;
+      }
+      lastLook = now;
       if (moving.current && !still) phase = (phase + (Math.min(100, now - last) / 1000) * WAVES_PER_SECOND * 2 * Math.PI) % (2 * Math.PI);
       const step = Math.min(100, now - last) / 1000;
       last = now;
       if (expressive) level = moving.current && !still ? Math.min(1, level + step * 3) : Math.max(0, level - step * 3);
-      const progress = Math.min(1, Math.max(0, parseFloat(getComputedStyle(el).getPropertyValue('--progress')) || 0));
+      const progress = Math.min(1, Math.max(0, parseFloat(host.style.getPropertyValue('--progress')) || 0));
       const end = Math.max(0, progress * width - gap);
       const key = `${end.toFixed(1)}:${phase.toFixed(3)}:${width}:${level.toFixed(2)}`;
       if (key !== drawn && path.current) {

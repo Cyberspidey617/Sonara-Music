@@ -1,3 +1,4 @@
+import { usePowerSaving } from '@/lib/power';
 import { hasViewTransitions, transition } from '@/lib/motion';
 import { markStep } from '@/lib/checklist';
 import { ShuffleGlyph } from '@/components/ShuffleGlyph';
@@ -162,7 +163,8 @@ export function FullScreenPlayer() {
   const backdrop = useLibrary((s) => s.settings.backdrop);
   // Windows' "Animation effects" off holds the backdrop still.
   const reduceMotion = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const motion = useLibrary((s) => (reduceMotion ? 0 : s.settings.backdropMotion));
+  const saving = usePowerSaving();
+  const motion = useLibrary((s) => (reduceMotion || saving ? 0 : s.settings.backdropMotion));
   const artScale = useLibrary((s) => s.settings.artworkScale) || 1;
   const [solid, setSolid] = useState<string | null>(null);
   // This song's music video: one you attached, or else its video on YouTube; and whether it's on screen.

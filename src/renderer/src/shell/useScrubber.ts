@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type PointerEvent } from 'react';
 import { formatTime } from '@/lib/format';
 import { getDuration, getPlayhead, usePlayer } from '@/state/player';
+import { onScreen } from '@/lib/power';
 
 /**
  * A seek bar driven by the media clock each frame (no React state per frame),
@@ -17,16 +18,34 @@ export function useScrubber() {
 
   useEffect(() => {
     let frame = 0;
-    const tick = () => {
+    let shown = '';
+    let times = '';
+    let lastCheck = 0;
+    const tick = (now: number) => {
+      frame = requestAnimationFrame(tick);
+      // Paused and not dragging, nothing moves: a look four times a second is enough (a seek still shows).
+      const still = drag.current === null && usePlayer.getState().status !== 'playing';
+      if (still && now - lastCheck < 250) return;
+      if (drag.current === null && !onScreen(bar.current, now)) return;
+      lastCheck = now;
       const duration = getDuration();
       const position = drag.current !== null ? drag.current * duration : getPlayhead();
       const k = duration > 0 ? Math.min(1, position / duration) : 0;
-      bar.current?.style.setProperty('--progress', String(k));
-      // Also for a thumb drawn outside the clipped track.
-      (bar.current?.closest('[data-progress-host]') as HTMLElement | null)?.style.setProperty('--progress', String(k));
-      if (elapsed.current) elapsed.current.textContent = hasTrack ? formatTime(position) : '';
-      if (remaining.current) remaining.current.textContent = hasTrack && duration > 0 ? `-${formatTime(Math.max(0, duration - position))}` : '';
-      frame = requestAnimationFrame(tick);
+      // Only what changed is written: an unchanged bar costs no style work or repaint.
+      const progress = k.toFixed(4);
+      if (progress !== shown) {
+        shown = progress;
+        bar.current?.style.setProperty('--progress', progress);
+        // Also for a thumb drawn outside the clipped track.
+        (bar.current?.closest('[data-progress-host]') as HTMLElement | null)?.style.setProperty('--progress', progress);
+      }
+      const e = hasTrack ? formatTime(position) : '';
+      const r = hasTrack && duration > 0 ? `-${formatTime(Math.max(0, duration - position))}` : '';
+      if (e + r !== times) {
+        times = e + r;
+        if (elapsed.current) elapsed.current.textContent = e;
+        if (remaining.current) remaining.current.textContent = r;
+      }
     };
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);

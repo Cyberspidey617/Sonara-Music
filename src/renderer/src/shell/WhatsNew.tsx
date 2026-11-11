@@ -10,12 +10,32 @@ type Note = { icon: LucideIcon; title: string; body: string; open?: () => void; 
 /** What each version brought, newest first. Shown once, after Sonara updates to it. */
 const NOTES: { version: string; notes: Note[] }[] = [
   {
+    version: '2.3.1',
+    notes: [
+      {
+        icon: Sparkles,
+        title: 'Lighter on your PC',
+        body: 'Sonara now uses far less of your PC: about half while a song plays and a third in video mode. Animations you can’t see stop, and the waveform rests after you pause. Power saver (Settings › Playback) uses simpler glass and fewer frames, by itself while on battery.',
+      },
+      {
+        icon: Clapperboard,
+        title: 'Smoother music videos',
+        body: 'Video mode no longer stutters: the app behind the video rests while you watch.',
+      },
+      {
+        icon: Sparkles,
+        title: 'Click a song, it plays',
+        body: 'Clicking a song plays it straight away, even during a radio. To let the current song finish first, use Start Radio from the song’s menu.',
+      },
+    ],
+  },
+  {
     version: '2.3.0',
     notes: [
       {
         icon: Sparkles,
         title: 'Lossless sources, up to 24-bit',
-        body: 'Settings › Your Music › Lossless sources: add a source by its address (the same open addon protocol Echo Music and BitChord use). With quality set to Lossless, songs you don’t have play from it in FLAC, with the badge showing the bit depth and sample rate.',
+        body: 'Settings › Your Music › Lossless sources: add a source by its address (any server speaking the open addon protocol). With quality set to Lossless, songs you don’t have play from it in FLAC, with the badge showing the bit depth and sample rate.',
       },
       {
         icon: Sparkles,
