@@ -17,7 +17,7 @@ import { getScanState, localAlbum, localAlbums, localTracks, openLibrary, scan, 
 import { clearMatches } from './lossless';
 import { openAddons, testSource } from './addons';
 import { aboutSong } from './about';
-import { accountStatus, openAccount, signIn, signOut } from './account';
+import { accountStatus, cancelCodeSignIn, openAccount, signIn, signInWithCode, signOut } from './account';
 import { beginLastFm, connectListenBrainz, disconnect as disconnectScrobbling, finishLastFm, maybeScrobble, nowPlaying, openScrobbler, scrobbleStatus } from './scrobble';
 import { handleMediaRequest, serveFile } from './media';
 import { checkServer, connect, disconnect, openServer, searchServer, serverAlbum, serverAlbums } from './subsonic';
@@ -449,6 +449,13 @@ function registerIpc() {
     clearMusicVideos();
     return status;
   });
+  handleFrom('account:sign-in-code', async (sender) => {
+    const status = await signInWithCode((code) => !sender.isDestroyed() && sender.send('account:code', code));
+    clearMusicVideos();
+    clearUnplayable();
+    return status;
+  });
+  handle('account:cancel-code', () => cancelCodeSignIn());
   handle('video:heights', (videoId: string) => videoHeights(String(videoId)));
   handle('stream:info', (videoId: string) => {
     const id = String(videoId);

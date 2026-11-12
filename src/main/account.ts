@@ -4,9 +4,13 @@
  * YouTube Music itself links to the song, with how the two line up (song time → video time), not a
  * search's guess. It also lets an age-restricted video play.
  *
- * You sign in on Google's own page in a Sonara window; Sonara never sees your password. What it
- * keeps is the session's cookies, encrypted by the system, in this folder only, and they go only to
- * YouTube. Signing out deletes them and the window's storage.
+ * Two ways in, and Sonara never sees your password in either:
+ *  - In a window: Google's own sign-in page (presented as Firefox, since Google turns away windows it
+ *    takes for an embedded browser). Sonara keeps the session's cookies.
+ *  - With a code: Sonara shows a code, you enter it at google.com/device in your own browser and
+ *    allow it (the way a TV signs in). Sonara keeps the sign-in's tokens.
+ * Either is kept encrypted by the system, in this folder only, and goes only to YouTube. Signing
+ * out deletes it (and revokes a code sign-in).
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -16,40 +20,65 @@ import type { AccountStatus } from '../shared/types';
 import { log } from './log';
 import type { FoundVideo } from './youtube';
 
+/** A code sign-in's tokens, as the library keeps them. */
+type Tokens = NonNullable<Parameters<Innertube['session']['signIn']>[0]>;
+
 const PARTITION = 'persist:ytmusic-account';
-const CHROME_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36';
+/** Google refuses its sign-in to windows it takes for an embedded browser; as Firefox it allows it. */
+const FIREFOX_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0';
 let file = '';
 let cookie: string | null = null;
+let tokens: Tokens | null = null;
 let name: string | undefined;
 let signed: Promise<Innertube> | null = null;
+
+const seal = (text: string) => (safeStorage.isEncryptionAvailable() ? `enc:${safeStorage.encryptString(text).toString('base64')}` : text);
+const unseal = (text: string) => (text.startsWith('enc:') ? safeStorage.decryptString(Buffer.from(text.slice(4), 'base64')) : text);
 
 export function openAccount(dataDir: string) {
   file = path.join(dataDir, 'youtube-account.json');
   try {
-    const saved = JSON.parse(fs.readFileSync(file, 'utf8')) as { cookie: string; encrypted: boolean; name?: string };
-    cookie = saved.encrypted ? safeStorage.decryptString(Buffer.from(saved.cookie, 'base64')) : saved.cookie;
+    const saved = JSON.parse(fs.readFileSync(file, 'utf8')) as { cookie?: string; tokens?: string; encrypted?: boolean; name?: string };
+    // (An earlier format kept the cookie with a separate "encrypted" flag.)
+    if (saved.cookie) cookie = saved.encrypted ? safeStorage.decryptString(Buffer.from(saved.cookie, 'base64')) : unseal(saved.cookie);
+    if (saved.tokens) tokens = JSON.parse(unseal(saved.tokens)) as Tokens;
     name = saved.name;
   } catch {
     cookie = null;
+    tokens = null;
   }
 }
 
-export const accountStatus = (): AccountStatus => ({ signedIn: !!cookie, ...(name && { name }) });
+export const accountStatus = (): AccountStatus => ({ signedIn: !!(cookie || tokens), ...(name && { name }) });
 
 function save() {
-  if (!cookie) {
+  if (!cookie && !tokens) {
     fs.rmSync(file, { force: true });
     return;
   }
-  const encrypted = safeStorage.isEncryptionAvailable();
-  fs.writeFileSync(file, JSON.stringify({ cookie: encrypted ? safeStorage.encryptString(cookie).toString('base64') : cookie, encrypted, ...(name && { name }) }));
+  fs.writeFileSync(file, JSON.stringify({ ...(cookie && { cookie: seal(cookie) }), ...(tokens && { tokens: seal(JSON.stringify(tokens)) }), ...(name && { name }) }));
 }
+
+const options = () => ({ fetch: (input: RequestInfo | URL, init?: RequestInit) => globalThis.fetch(input, init), retrieve_player: true });
 
 /** The signed-in session (only when you've signed in). */
 function signedInnertube(): Promise<Innertube> | null {
-  if (!cookie) return null;
-  signed ??= Innertube.create({ cookie, fetch: (input, init) => globalThis.fetch(input, init), retrieve_player: true }).catch((error: unknown) => {
+  if (!cookie && !tokens) return null;
+  signed ??= (async () => {
+    if (cookie) return Innertube.create({ ...options(), cookie });
+    const yt = await Innertube.create(options());
+    // Refreshed tokens are kept, so the sign-in lasts.
+    yt.session.on('update-credentials', ({ credentials }) => {
+      if (credentials) {
+        tokens = credentials;
+        save();
+      }
+    });
+    await yt.session.signIn(tokens!);
+    return yt;
+  })().catch((error: unknown) => {
     signed = null;
+    log.warn(`YouTube Music session failed: ${String(error)}`);
     throw error;
   });
   return signed;
@@ -60,7 +89,7 @@ export const signedInSession = signedInnertube;
 export function signIn(parent: BrowserWindow | null): Promise<AccountStatus> {
   return new Promise((resolve) => {
     const ses = session.fromPartition(PARTITION);
-    ses.setUserAgent(CHROME_UA);
+    ses.setUserAgent(FIREFOX_UA);
     const win = new BrowserWindow({
       width: 480,
       height: 680,
@@ -69,6 +98,7 @@ export function signIn(parent: BrowserWindow | null): Promise<AccountStatus> {
       ...(parent && { parent, modal: true }),
       webPreferences: { partition: PARTITION, sandbox: true, contextIsolation: true, nodeIntegration: false },
     });
+    win.webContents.setUserAgent(FIREFOX_UA);
     let done = false;
     const check = async () => {
       if (done) return;
@@ -78,6 +108,7 @@ export function signIn(parent: BrowserWindow | null): Promise<AccountStatus> {
       if (!cookies.some((c) => c.name === 'SAPISID' || c.name === '__Secure-3PAPISID')) return;
       done = true;
       cookie = cookies.map((c) => `${c.name}=${c.value}`).join('; ');
+      tokens = null;
       signed = null;
       // The account's name, from the page's own data (best effort).
       name = await win.webContents
@@ -85,22 +116,76 @@ export function signIn(parent: BrowserWindow | null): Promise<AccountStatus> {
         .then((n: unknown) => String(n || '').trim() || undefined)
         .catch(() => undefined);
       save();
-      log.info('signed in to YouTube Music');
+      log.info('signed in to YouTube Music (window)');
       win.close();
     };
     win.webContents.on('did-navigate', () => void check());
     win.webContents.on('did-navigate-in-page', () => void check());
     win.webContents.on('did-finish-load', () => void check());
     win.on('closed', () => resolve(accountStatus()));
-    void win.loadURL('https://accounts.google.com/ServiceLogin?service=youtube&continue=' + encodeURIComponent('https://music.youtube.com/'));
+    void win.loadURL('https://accounts.google.com/ServiceLogin?service=youtube&continue=' + encodeURIComponent('https://music.youtube.com/'), { userAgent: FIREFOX_UA });
   });
 }
 
+let codeSignIn: Innertube | null = null;
+/**
+ * Signs in with a code, as a TV does: [onCode] gets the code and the address to enter it at (in your
+ * own browser); resolves once you've allowed it there, or when the code runs out.
+ */
+export async function signInWithCode(onCode: (code: { code: string; url: string; expiresIn: number }) => void): Promise<AccountStatus> {
+  const yt = await Innertube.create(options());
+  codeSignIn = yt;
+  return new Promise((resolve) => {
+    const finish = () => {
+      if (codeSignIn === yt) codeSignIn = null;
+      resolve(accountStatus());
+    };
+    yt.session.on('auth-pending', (data) => onCode({ code: data.user_code, url: data.verification_url, expiresIn: data.expires_in }));
+    yt.session.on('auth', ({ credentials }) => {
+      // A code you cancelled doesn't sign you in, even if allowed later.
+      if (credentials && codeSignIn === yt) {
+        tokens = credentials;
+        cookie = null;
+        name = undefined;
+        signed = Promise.resolve(yt);
+        save();
+        log.info('signed in to YouTube Music (code)');
+      }
+      finish();
+    });
+    yt.session.on('auth-error', (error) => {
+      log.warn(`code sign-in failed: ${String(error)}`);
+      finish();
+    });
+    yt.session.on('update-credentials', ({ credentials }) => {
+      if (credentials) {
+        tokens = credentials;
+        save();
+      }
+    });
+    yt.session.signIn().catch((error: unknown) => {
+      log.warn(`code sign-in failed: ${String(error)}`);
+      finish();
+    });
+  });
+}
+
+/** Stops waiting for a code sign-in you didn't finish. */
+export function cancelCodeSignIn() {
+  codeSignIn?.session.emit('auth-error', new Error('cancelled') as never);
+  codeSignIn = null;
+}
+
 export async function signOut(): Promise<AccountStatus> {
+  const wasCode = !!tokens;
+  const yt = signed ? await signed.catch(() => null) : null;
   cookie = null;
+  tokens = null;
   name = undefined;
   signed = null;
   save();
+  // A code sign-in is withdrawn from your account too.
+  if (wasCode && yt) await yt.session.signOut().catch(() => undefined);
   await session.fromPartition(PARTITION).clearStorageData().catch(() => undefined);
   log.info('signed out of YouTube Music');
   return accountStatus();

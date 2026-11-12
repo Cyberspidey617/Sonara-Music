@@ -820,6 +820,11 @@ export interface ObsidianApi {
   accountStatus(): Promise<AccountStatus>;
   signIn(): Promise<AccountStatus>;
   signOut(): Promise<AccountStatus>;
+  /** Signs in with a code entered at google.com/device in your own browser; resolves when done or given up. */
+  signInWithCode(): Promise<AccountStatus>;
+  cancelCodeSignIn(): Promise<void>;
+  /** The code to enter, while a code sign-in waits for you. */
+  onAccountCode(handler: (code: { code: string; url: string; expiresIn: number }) => void): () => void;
   videoHeights(videoId: string): Promise<{ heights: number[]; active?: number } | null>;
   testLosslessSource(url: string): Promise<{ ok: true; name: string; url: string } | { ok: false; error: string }>;
   loadLibrary(): Promise<LibraryData>;

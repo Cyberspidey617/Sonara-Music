@@ -460,28 +460,58 @@ function MusicTab() {
 function YouTubeAccount() {
   const [status, setStatus] = useState<AccountStatus | null>(null);
   const [busy, setBusy] = useState(false);
+  // A code sign-in waiting for you to enter the code in your browser.
+  const [code, setCode] = useState<{ code: string; url: string } | null>(null);
   useEffect(() => void api.accountStatus().then(setStatus), []);
+  useEffect(() => api.onAccountCode((c) => setCode({ code: c.code, url: c.url })), []);
   if (!status) return null;
+  const run = async (job: () => Promise<AccountStatus>) => {
+    const was = status.signedIn;
+    setBusy(true);
+    const next = await job();
+    setStatus(next);
+    setBusy(false);
+    setCode(null);
+    if (!was && next.signedIn) toast('Signed in to YouTube Music');
+  };
   return (
     <Section
       title="YouTube Music account"
-      footer="Signed in, a song’s music video is the one YouTube Music itself pairs with it (its Song/Video switch), lined up with the song, and age-restricted songs play. You sign in on Google’s own page; Sonara keeps only the session, encrypted on this PC, and uses it only with YouTube. Your recommendations and library in Sonara stay as they are."
+      footer="Signed in, a song’s music video is the one YouTube Music itself pairs with it (its Song/Video switch), lined up with the song, and age-restricted songs play. If Google says the sign-in window isn’t safe, sign in with a code instead: you enter it at google.com/device in your own browser. Sonara never sees your password; it keeps only the sign-in, encrypted on this PC, and uses it only with YouTube. Your recommendations and library in Sonara stay as they are."
     >
       <Row title={status.signedIn ? (status.name ? `Signed in as ${status.name}` : 'Signed in') : 'Not signed in'} detail={status.signedIn ? 'Music videos come from YouTube Music’s own pairing first.' : 'Music videos are found by searching, and checked strictly.'}>
-        <button
-          className={status.signedIn ? `${button} text-[#ff6b61]` : `${button} bg-pill-bg text-pill hover:bg-white`}
-          disabled={busy}
-          onClick={async () => {
-            setBusy(true);
-            const next = status.signedIn ? await api.signOut() : await api.signIn();
-            setStatus(next);
-            setBusy(false);
-            if (!status.signedIn && next.signedIn) toast('Signed in to YouTube Music');
-          }}
-        >
-          {busy ? <Loader2 size={14} className="animate-spin" /> : null} {status.signedIn ? 'Sign Out' : 'Sign In with Google'}
-        </button>
+        {status.signedIn ? (
+          <button className={`${button} text-[#ff6b61]`} disabled={busy} onClick={() => void run(() => api.signOut())}>
+            {busy ? <Loader2 size={14} className="animate-spin" /> : null} Sign Out
+          </button>
+        ) : (
+          <div className="flex gap-2">
+            <button className={button} disabled={busy} onClick={() => void run(() => api.signInWithCode())}>
+              Sign In with a Code
+            </button>
+            <button className={`${button} bg-pill-bg text-pill hover:bg-white`} disabled={busy} onClick={() => void run(() => api.signIn())}>
+              {busy && !code ? <Loader2 size={14} className="animate-spin" /> : null} Sign In with Google
+            </button>
+          </div>
+        )}
       </Row>
+      {code && (
+        <div className="flex flex-col items-center gap-3 px-5 pt-2 pb-5 text-center">
+          <p className="type-body-reduced text-secondary">In your browser, go to the address below, enter this code and allow Sonara. This page updates by itself.</p>
+          <span className="rounded-[12px] bg-white/[0.08] px-5 py-2 font-mono text-[28px] font-bold tracking-[0.18em] text-primary select-all">{code.code}</span>
+          <div className="flex gap-2">
+            <button className={`${button} bg-pill-bg text-pill hover:bg-white`} onClick={() => void api.openExternal(code.url)}>
+              Open {code.url.replace(/^https?:\/\/(www\.)?/, '')}
+            </button>
+            <button className={button} onClick={() => void navigator.clipboard.writeText(code.code).then(() => toast('Code copied'))}>
+              Copy Code
+            </button>
+            <button className={`${button} text-[#ff6b61]`} onClick={() => void api.cancelCodeSignIn()}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
     </Section>
   );
 }

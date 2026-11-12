@@ -65,6 +65,13 @@ const api: ObsidianApi = {
   accountStatus: () => ipcRenderer.invoke('account:status'),
   signIn: () => ipcRenderer.invoke('account:sign-in'),
   signOut: () => ipcRenderer.invoke('account:sign-out'),
+  signInWithCode: () => ipcRenderer.invoke('account:sign-in-code'),
+  cancelCodeSignIn: () => ipcRenderer.invoke('account:cancel-code'),
+  onAccountCode: (handler) => {
+    const listener = (_: unknown, code: { code: string; url: string; expiresIn: number }) => handler(code);
+    ipcRenderer.on('account:code', listener);
+    return () => ipcRenderer.removeListener('account:code', listener);
+  },
   videoHeights: (videoId) => ipcRenderer.invoke('video:heights', videoId),
   testLosslessSource: (url) => ipcRenderer.invoke('sources:test', url),
   loadLibrary: () => ipcRenderer.invoke('library:load'),
