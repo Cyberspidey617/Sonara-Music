@@ -56,7 +56,9 @@ protocol.registerSchemesAsPrivileged([
   { scheme: 'media', privileges: { standard: true, secure: true, stream: true, supportFetchAPI: true, corsEnabled: true } },
 ]);
 
-app.setAppUserModelId('com.obsidian.music.pc');
+// A copy run from the source has its own id: sharing the installed app's would tie Sonara's taskbar
+// button and Start shortcut to electron.exe (and its icon).
+app.setAppUserModelId(app.isPackaged ? 'com.obsidian.music.pc' : 'com.obsidian.music.pc.dev');
 // Wayland lets no app grab keys itself: system-wide shortcuts go through the desktop's global
 // shortcuts portal (KDE, GNOME 48 and later), which Electron uses only when asked to.
 if (process.platform === 'linux') app.commandLine.appendSwitch('enable-features', 'GlobalShortcutsPortal');
