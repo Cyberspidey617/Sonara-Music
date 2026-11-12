@@ -11,7 +11,7 @@ function remaining(endsAt: number | null): string {
   return m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${m}:${String(s % 60).padStart(2, '0')}`;
 }
 
-/** The moon button: a sleep timer, as Obsidian's player has. */
+/** The moon button: a sleep timer. */
 export function SleepTimerButton({ className = '', size = 17, placement = 'above-end' as const }: { className?: string; size?: number; placement?: 'above-end' | 'below-start' | 'below-end' | 'above-start' }) {
   const sleep = usePlayer((s) => s.sleep);
   const [, tick] = useState(0);

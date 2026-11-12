@@ -1,5 +1,5 @@
 /*
- * Lossless sources: servers that speak the open "addon" protocol Echo Music and BitChord use.
+ * Lossless sources: servers that speak the open "addon" protocol.
  *
  * An addon is an ordinary HTTP server you add by its address; nothing it sends is run here. It
  * answers three GETs with JSON:

@@ -30,7 +30,7 @@ import { useScrubber } from './useScrubber';
 import { SeekTrack, useSeekLook } from '@/components/SeekTrack';
 import { VolumeIcon, VolumeSlider } from './VolumeControl';
 
-/** Obsidian's seek bar: a thick rounded track that thickens further under the pointer. */
+/** The seek bar: a thick rounded track that thickens further under the pointer. */
 /** The full-screen player's seek bar (and the music video's), in the look chosen in Settings. */
 function Scrubber() {
   const { bar, elapsed, remaining, dragging, handlers } = useScrubber();
@@ -142,17 +142,16 @@ function useStacked() {
   return stacked;
 }
 
-/**
- * The immersive player (Obsidian's full-screen player, laid out as BitChord's
- * desktop one): artwork, names, seek bar and transport on the left; lyrics or
- * the queue on the right; all over a moving mesh of the artwork's colours.
- */
 /** How a video height is named: 4K, 2K, Full HD, HD, else its height. */
 function qualityName(h: number): string {
   const name = h >= 4320 ? '8K' : h >= 2160 ? '4K' : h >= 1440 ? '2K' : h >= 1080 ? 'Full HD' : h >= 720 ? 'HD' : '';
   return name ? `${h}p (${name})` : `${h}p`;
 }
 
+/**
+ * The immersive player: artwork, names, seek bar and transport on the left;
+ * lyrics or the queue on the right; all over a moving mesh of the artwork's colours.
+ */
 export function FullScreenPlayer() {
   const track = usePlayer((s) => s.queue[s.index]?.track ?? null);
   const playing = usePlayer((s) => s.status === 'playing' || s.status === 'loading');
@@ -534,7 +533,7 @@ export function FullScreenPlayer() {
           <Scrubber />
           <Transport />
 
-          {/* Obsidian's action row: queue, lyrics, add to playlist, sleep timer — and the volume.
+          {/* The action row: queue, lyrics, add to playlist, sleep timer — and the volume.
               Volume doesn't pop up over anything: the same piece of glass morphs into a slider,
               the way Apple's controls change shape in place, and morphs back when the pointer
               leaves or you press ✕. */}

@@ -155,11 +155,11 @@ function PlaybackTab() {
           />
         </Row>
         <Row
-          title="Light mode"
+          title="Eco mode"
           detail="Uses much less of your PC: plain frosted glass, fewer animation frames, a still full-screen background, and animations you can’t see stop. Auto turns it on while your PC runs on battery; plugged in, Sonara looks and moves as designed."
         >
           <Segmented
-            label="Light mode"
+            label="Eco mode"
             value={s.powerSaver ?? 'auto'}
             options={[
               { value: 'auto', label: 'Auto' },
@@ -455,7 +455,7 @@ function MusicTab() {
   );
 }
 
-/** Lossless sources: servers speaking the addon protocol Echo Music and BitChord use. */
+/** Lossless sources: servers speaking the open addon protocol. */
 function LosslessSources({ onAdded }: { onAdded: () => void }) {
   const { s, set } = useSettings();
   const sources = s.losslessSources ?? [];

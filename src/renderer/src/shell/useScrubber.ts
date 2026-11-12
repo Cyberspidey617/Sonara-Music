@@ -25,7 +25,7 @@ export function useScrubber() {
       frame = requestAnimationFrame(tick);
       // Paused and not dragging, nothing moves: a look four times a second is enough (a seek still shows).
       const still = drag.current === null && usePlayer.getState().status !== 'playing';
-      // Light mode: paused, four looks a second; unseen, none.
+      // Eco mode: paused, four looks a second; unseen, none.
       if (powerSaving()) {
         if (still && now - lastCheck < 250) return;
         if (drag.current === null && !onScreen(bar.current, now)) return;

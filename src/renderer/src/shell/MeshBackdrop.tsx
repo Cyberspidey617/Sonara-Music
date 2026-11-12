@@ -2,8 +2,7 @@ import { useEffect, useRef } from 'react';
 import { GRID, meshPalette, NEUTRAL, type Rgb } from '@/lib/palette';
 
 /*
- * The artwork's colours as a slowly drifting mesh of soft blobs, the backdrop
- * BitChord's now-playing screen is known for. Each of the GRID² colours is a
+ * The artwork's colours as a slowly drifting mesh of soft blobs. Each of the GRID² colours is a
  * Gaussian blob; they're blended in linear light (clean mid-tones, not mud)
  * and dithered per frame so dark gradients don't band.
  */

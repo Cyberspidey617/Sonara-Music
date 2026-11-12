@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { rgb, tintFor, type Rgb } from '@/lib/palette';
 
 /**
- * A page, optionally tinted by its artwork as BitChord's album pages are: the
+ * A page, optionally tinted by its artwork: the
  * artwork's colour washes the top of the page and fades into black.
  */
 export function Page({ tintUrl, children }: { tintUrl?: string; children: ReactNode }) {

@@ -31,7 +31,7 @@ export interface Track {
 
 export type TrackSource = 'youtube' | 'local' | 'server' | 'download' | 'addon';
 
-/** A lossless source: a server speaking the open addon protocol (Echo Music, BitChord), added by its address. */
+/** A lossless source: a server speaking the open addon protocol, added by its address. */
 export interface LosslessSource {
   id: string;
   name: string;
@@ -372,7 +372,7 @@ export interface Settings {
   hideVideos: boolean;
   /** Incognito: nothing you play is kept (history, Wrapped, scrobbles, skips) or shapes your recommendations. */
   incognito: boolean;
-  /** Light mode: fewer frames and simpler glass, to use less of the PC. Auto: while on battery. */
+  /** Eco mode: fewer frames and simpler glass, to use less of the PC. Auto: while on battery. */
   powerSaver: 'auto' | 'on' | 'off';
   /** Music videos: the highest quality to stream. */
   videoQuality: VideoQuality;

@@ -1,5 +1,5 @@
 /*
- * About this song (Echo Music's "Music DNA"): the song's story from Wikipedia, or, when it has no
+ * About this song: the song's story from Wikipedia, or, when it has no
  * article of its own, its artist's. An article counts as the song's only if its title is the song's
  * and it names the artist, so a same-titled film or a cover's article isn't shown.
  */

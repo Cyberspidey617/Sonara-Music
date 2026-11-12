@@ -2,7 +2,7 @@
  * Turns a videoId into audio the renderer's <audio> element can play.
  *
  * 1. Resolve: ask YouTube for the track's player response through a walk of
- *    InnerTube clients, VISIONOS first. As measured by BitChord (Oct 2026),
+ *    InnerTube clients, VISIONOS first. As measured (Oct 2026),
  *    VISIONOS answers with direct audio URLs and needs no PO token; the others
  *    are fallbacks. A client that refuses a track sits out for 10 minutes.
  * 2. Serve: the renderer plays `ytstream://track/<videoId>?q=high`. The

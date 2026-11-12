@@ -177,7 +177,7 @@ function Pebble({ shown }: { shown: boolean }) {
 const reveal = (pebble: boolean, openDelay: string, closeDelay: string) =>
   `transition-[opacity,translate] ${pebble ? `opacity-0 -translate-x-1 duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] ${closeDelay}` : `opacity-100 translate-x-0 duration-300 ease-out ${openDelay}`}`;
 
-/** The floating glass player pill along the bottom of the window (BitChord's layout). */
+/** The floating glass player pill along the bottom of the window . */
 export function PlayerBar() {
   const sidePanel = useUi((s) => s.sidePanel);
   const toggleSidePanel = useUi((s) => s.toggleSidePanel);

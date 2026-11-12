@@ -202,7 +202,7 @@ export const SHORTCUTS: [string, string][] = [
   ['Ctrl + Alt + M', 'Show or hide the mini player'],
 ];
 
-/** A song's story from Wikipedia (or its artist's), as Echo Music's Music DNA shows. */
+/** A song's story from Wikipedia (or its artist's). */
 function AboutSong({ track, onClose }: { track: Track; onClose: () => void }) {
   const [about, setAbout] = useState<SongAbout | null | undefined>(undefined);
   const artist = track.artists?.[0]?.name ?? '';

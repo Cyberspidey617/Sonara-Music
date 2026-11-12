@@ -2,7 +2,7 @@ import { isElectron } from '@/lib/api';
 import { useOnline } from '@/state/online';
 /**
  * YouTube Music's image CDN resizes on request. Snapping to the sizes its own
- * pages ask for keeps requests on cached variants (BitChord measured bursts of
+ * pages ask for keeps requests on cached variants (measured bursts of
  * odd sizes being refused with 429).
  */
 const SQUARE_SIZES = [60, 120, 226, 544, 1200];

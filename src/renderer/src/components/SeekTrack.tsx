@@ -172,7 +172,7 @@ export function SeekTrack({
     );
 
   if (look.style === 'capsule') {
-    // Apple Music's scrubber (as BitChord draws it): a capsule with no knob, thicker under the pointer.
+    // A capsule with no knob, thicker under the pointer.
     const grown = Math.round(line * 1.7);
     return (
       <div className="relative flex w-full items-center" style={{ height: Math.max(box, grown) }} data-progress-host>

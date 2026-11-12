@@ -122,7 +122,7 @@ export function Waveform({ active, playing, options: o, stops, className = '' }:
         // As designed: every frame while playing; paused, the breathing on every other frame.
         if (!playing && (skip = !skip)) return;
       } else {
-        // Light mode: nothing while unseen; paused, a few frames a second, settling still after 20 s;
+        // Eco mode: nothing while unseen; paused, a few frames a second, settling still after 20 s;
         // playing, 20 frames a second (each frame also redraws the glass around the bars).
         if (!onScreen(el, now)) return;
         if (!playing) {

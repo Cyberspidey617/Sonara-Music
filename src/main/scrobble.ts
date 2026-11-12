@@ -1,5 +1,5 @@
 /*
- * Scrobbling: what you listen to, sent to ListenBrainz and Last.fm (as BitChord and Echo Music do).
+ * Scrobbling: what you listen to, sent to ListenBrainz and Last.fm.
  *
  * A song is "now playing" as it starts and is scrobbled once you've heard half of it or four
  * minutes, whichever comes first (and at least 30 seconds): the rule both services ask for.

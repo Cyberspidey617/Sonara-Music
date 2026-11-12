@@ -130,7 +130,7 @@ export interface TasteSignals {
 export const keptSkipping = (videoId: string, skips: Record<string, number> | undefined, plays = 0) => (skips?.[videoId] ?? 0) >= 2 && (skips?.[videoId] ?? 0) > plays;
 
 /**
- * How much a song you've listened to says about your taste (as Echo Music scores it): how much you
+ * How much a song you've listened to says about your taste: how much you
  * play it (with diminishing returns), more if you liked it or played it this week, less for each
  * time you skipped it early.
  */
@@ -142,7 +142,7 @@ function affinity(s: { track: Track; plays: number; lastAt: number }, liked: Set
   return score;
 }
 
-/** [count] of [ranked] at random, the higher the likelier (as BitChord's Top Picks): fresh on each refresh, still yours. */
+/** [count] of [ranked] at random, the higher the likelier: fresh on each refresh, still yours. */
 function weightedSample<T>(ranked: T[], count: number): T[] {
   const pool = ranked.map((item, i) => ({ item, weight: 1 / (i + 1) }));
   const out: T[] = [];
@@ -154,7 +154,7 @@ function weightedSample<T>(ranked: T[], count: number): T[] {
   return out;
 }
 
-/** The same list with no artist twice in a row where it can be helped (as Echo Music's feed spaces them). */
+/** The same list with no artist twice in a row where it can be helped. */
 function spaced(tracks: Track[]): Track[] {
   const left = [...tracks];
   const out: Track[] = [];

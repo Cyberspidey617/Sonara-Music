@@ -14,8 +14,8 @@ const NOTES: { version: string; notes: Note[] }[] = [
     notes: [
       {
         icon: Sparkles,
-        title: 'Light mode',
-        body: 'Sonara looks and moves as designed again. When you want it lighter on your PC, Light mode (Settings › Playback) uses simpler glass and fewer frames. On Auto it turns itself on while your PC runs on battery.',
+        title: 'Eco mode',
+        body: 'Sonara looks and moves as designed again. When you want it lighter on your PC, Eco mode (Settings › Playback) uses simpler glass and fewer frames. On Auto it turns itself on while your PC runs on battery.',
       },
       {
         icon: Clapperboard,
