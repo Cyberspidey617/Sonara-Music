@@ -254,7 +254,6 @@ export async function pairedVideo(songId: string, songDuration?: number): Promis
       synced: segments.length > 0 || !!(duration && songDuration && Math.abs(duration - songDuration) <= 3),
       title: text(video.title),
       channel: byline.split(' • ')[0] ?? '',
-      kind: 'official',
       ...(segments.length && { timeMap: segments }),
     };
   }

@@ -19,8 +19,8 @@ const NOTES: { version: string; notes: Note[] }[] = [
       },
       {
         icon: Clapperboard,
-        title: 'Lyric videos, and more videos found',
-        body: 'When a song has no official video, its lyric video plays, only from the artist’s own channel or a trusted label. Japanese titles find their videos in either script, and covers that are just a picture held still are skipped.',
+        title: 'More of the right videos found',
+        body: 'Japanese titles find their videos in either script, and uploads that are just a picture held still are skipped. Lyric videos and audio-only uploads never stand in for a music video.',
       },
       {
         icon: Clapperboard,

@@ -191,8 +191,6 @@ export interface OnlineMusicVideo {
   synced: boolean;
   title: string;
   channel: string;
-  /** The official music video, or (when there's none) a lyric video from a trusted channel. */
-  kind: 'official' | 'lyric';
   /** YouTube Music's own line-up of song and video: song-time → video-time stretches (seconds). */
   timeMap?: { from: number; to: number; length: number }[];
 }

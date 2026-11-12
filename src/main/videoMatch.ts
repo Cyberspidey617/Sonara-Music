@@ -24,16 +24,6 @@ export interface MatchCandidate {
   explicit?: boolean;
 }
 
-/**
- * Channels whose lyric videos can be trusted: record labels, film studios and broadcasters that
- * publish the song themselves. A lyric video from anyone else is left out.
- */
-export const TRUSTED_CHANNELS =
-  /\b(vevo|t[ -]?series|saregama|sony music|zee music|tips (music|official|films)|yrf|yash raj|eros now|speed records|desi melodies|white hill|think music|aditya music|lahari|muzik ?247|satyam audios|manorama music|mango music|venus|times music|junglee music|universal music|warner|atlantic records|columbia|interscope|republic records|capitol|def jam|island records|rca records|epic records|emi|hybe|big hit|smtown|jyp|yg entertainment|1thek|stone music|sun tv|sun pictures|sony music south|divo|think originals|lyca|aditya music|saregama (tamil|telugu|malayalam|music)|zee music south|goldmines|shemaroo|panorama music|vyrl|coke studio)\b/;
-
-/** A lyric video (the words on screen), as opposed to the music video. */
-export const LYRIC_VIDEO = /\b(lyrics?|lyrical)\b/;
-
 /** Hiragana and katakana to Hepburn romaji, so コイコガレ finds Koi Kogare (and the other way). */
 const KANA: Record<string, string> = {};
 (() => {

@@ -352,7 +352,7 @@ export function FullScreenPlayer() {
       {unsynced && found && (
         <div className={`pointer-events-none absolute inset-x-0 top-[60px] z-30 flex justify-center px-4 transition-opacity duration-700 ${syncNote ? 'opacity-100' : 'opacity-0'}`} aria-hidden={!syncNote}>
           <div className="glass max-w-[560px] animate-rise rounded-pill px-4 py-1.5 text-center type-callout text-secondary">
-            The {found.kind === 'lyric' ? 'lyric video' : 'official video'}{found.channel ? ` from ${found.channel}` : ''} isn’t the same length as the song, so it plays with its own sound.
+            The official video{found.channel ? ` from ${found.channel}` : ''} isn’t the same length as the song, so it plays with its own sound.
           </div>
         </div>
       )}
@@ -371,11 +371,9 @@ export function FullScreenPlayer() {
             title={
               showVideo
                 ? 'Hide the music video (Esc)'
-                : !videoAttached && found?.kind === 'lyric'
-                  ? `Lyric video${found.synced ? '' : ' (may not be in sync with the song)'}`
-                  : !videoAttached && found && !found.synced
-                    ? 'Official music video (may not be in sync with the song)'
-                    : 'Music video'
+                : !videoAttached && found && !found.synced
+                  ? 'Official music video (may not be in sync with the song)'
+                  : 'Music video'
             }
             onClick={() => (markStep('video'), setShowVideo((v) => !v))}
           >
