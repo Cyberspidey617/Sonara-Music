@@ -17,12 +17,13 @@ import { getScanState, localAlbum, localAlbums, localTracks, openLibrary, scan, 
 import { clearMatches } from './lossless';
 import { openAddons, testSource } from './addons';
 import { aboutSong } from './about';
+import { accountStatus, openAccount, signIn, signOut } from './account';
 import { beginLastFm, connectListenBrainz, disconnect as disconnectScrobbling, finishLastFm, maybeScrobble, nowPlaying, openScrobbler, scrobbleStatus } from './scrobble';
 import { handleMediaRequest, serveFile } from './media';
 import { checkServer, connect, disconnect, openServer, searchServer, serverAlbum, serverAlbums } from './subsonic';
 import { configureLog, log } from './log';
 import { flush, getLibrary, openStore, patchLibrary } from './store';
-import { handleStreamRequest, resolveStream, streamInfo, videoHeights } from './stream';
+import { clearUnplayable, handleStreamRequest, resolveStream, streamInfo, videoHeights } from './stream';
 import { losslessInfo } from './lossless';
 import {
   configureYouTube,
@@ -36,6 +37,7 @@ import {
   getUpNext,
   findOnYouTube,
   findMusicVideo,
+  clearMusicVideos,
   getMood,
   getMoods,
   importPlaylist,
@@ -435,6 +437,18 @@ function registerIpc() {
       .finally(() => preparing.delete(id));
   });
   handle('sources:test', (url: string) => testSource(String(url)));
+  handle('account:status', () => accountStatus());
+  handle('account:sign-in', async () => {
+    const status = await signIn(win);
+    clearMusicVideos();
+    clearUnplayable();
+    return status;
+  });
+  handle('account:sign-out', async () => {
+    const status = await signOut();
+    clearMusicVideos();
+    return status;
+  });
   handle('video:heights', (videoId: string) => videoHeights(String(videoId)));
   handle('stream:info', (videoId: string) => {
     const id = String(videoId);
@@ -599,6 +613,8 @@ function registerIpc() {
       artists: (track.artists ?? []).map((a) => String(a?.name ?? '')).filter(Boolean),
       duration: Number(track.duration) || undefined,
       isVideo: track.isVideo === true,
+      ...(track.album?.name && { album: String(track.album.name) }),
+      ...(typeof track.explicit === 'boolean' && { explicit: track.explicit }),
     });
   });
   handle('video:attach', (key: string, title: string) => attachMusicVideo(win, String(key), String(title ?? '')));
@@ -678,6 +694,7 @@ if (!app.requestSingleInstanceLock()) {
     openServer(dataDir);
     openCovers(dataDir);
     openAddons(dataDir);
+    openAccount(dataDir);
     openScrobbler(dataDir);
     openDownloads(dataDir, () => getLibrary().settings.downloadFolder ?? '', (items) => win?.webContents.send('downloads:changed', items));
     const country = (() => {

@@ -21,6 +21,9 @@ export interface Toast {
 
 interface UiState {
   fullScreen: boolean;
+  /** Video mode: the music video shows in the full-screen player (kept when it closes and reopens, and for the next song). */
+  videoMode: boolean;
+  setVideoMode: (on: boolean) => void;
   sidePanel: 'lyrics' | 'queue' | null;
   dialog: Dialog | null;
   toasts: Toast[];
@@ -39,6 +42,8 @@ let toastId = 0;
 
 export const useUi = create<UiState>((set, get) => ({
   fullScreen: false,
+  videoMode: false,
+  setVideoMode: (videoMode) => set({ videoMode }),
   sidePanel: null,
   dialog: null,
   toasts: [],

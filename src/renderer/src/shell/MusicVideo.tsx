@@ -33,6 +33,7 @@ export function MusicVideo({
   url,
   audioUrl,
   fit,
+  timeMap,
   onError,
   onClose,
 }: {
@@ -42,6 +43,8 @@ export function MusicVideo({
   /** The video's own sound, as a stream of its own; null to hear the song. */
   audioUrl: string | null;
   fit: VideoFit;
+  /** YouTube Music's line-up of song and video (song-time → video-time stretches), when it gave one. */
+  timeMap?: { from: number; to: number; length: number }[];
   onError?: () => void;
   onClose: () => void;
 }) {
@@ -122,6 +125,11 @@ export function MusicVideo({
         },
       });
 
+    const mapped = (t: number): number | null => {
+      if (!timeMap?.length) return t;
+      const seg = timeMap.find((s) => t >= s.from && t < s.from + s.length);
+      return seg ? seg.to + (t - seg.from) : null;
+    };
     let timer = 0;
     const tick = () => {
       const now = performance.now();
@@ -156,8 +164,13 @@ export function MusicVideo({
         // The picture follows its own sound.
         if (!a.paused && !a.seeking && a.readyState >= 2 && !settling) follow(a.currentTime, PICTURE_JUMP, want);
       } else if (!settling && Number.isFinite(song) && v.readyState >= 1) {
-        // A video in time with the song follows the song, which is heard.
-        follow(song, 0.4, want);
+        // A video in time with the song follows the song, which is heard; through YouTube Music's map
+        // when it gave one (an intro or a scene the song doesn't have is skipped, and the picture
+        // holds still over song the video doesn't have).
+        const at = mapped(song);
+        if (at === null) {
+          if (!v.paused) v.pause();
+        } else follow(at, 0.4, want);
       }
       timer = window.setTimeout(tick, 100);
     };
@@ -170,7 +183,7 @@ export function MusicVideo({
       setSongSilenced(false);
       if (a) setVideoClock(null);
     };
-  }, [url, audioUrl, active]);
+  }, [url, audioUrl, active, timeMap]);
 
   // Plays and pauses with the song (the video's own sound is started by the loop above, with the picture).
   useEffect(() => {

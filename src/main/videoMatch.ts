@@ -10,13 +10,73 @@ export interface MatchTarget {
   artists: string[];
   /** Seconds. */
   duration?: number;
+  /** The release it's on, when known: tells same-titled releases apart. */
+  album?: string;
+  /** Explicit or clean edition, when known. */
+  explicit?: boolean;
 }
 
 export interface MatchCandidate {
   title: string;
   artists: string[];
   duration?: number;
+  album?: string;
+  explicit?: boolean;
 }
+
+/**
+ * Channels whose lyric videos can be trusted: record labels, film studios and broadcasters that
+ * publish the song themselves. A lyric video from anyone else is left out.
+ */
+export const TRUSTED_CHANNELS =
+  /\b(vevo|t[ -]?series|saregama|sony music|zee music|tips (music|official|films)|yrf|yash raj|eros now|speed records|desi melodies|white hill|think music|aditya music|lahari|muzik ?247|satyam audios|manorama music|mango music|venus|times music|junglee music|universal music|warner|atlantic records|columbia|interscope|republic records|capitol|def jam|island records|rca records|epic records|emi|hybe|big hit|smtown|jyp|yg entertainment|1thek|stone music|sun tv|sun pictures|sony music south|divo|think originals|lyca|aditya music|saregama (tamil|telugu|malayalam|music)|zee music south|goldmines|shemaroo|panorama music|vyrl|coke studio)\b/;
+
+/** A lyric video (the words on screen), as opposed to the music video. */
+export const LYRIC_VIDEO = /\b(lyrics?|lyrical)\b/;
+
+/** Hiragana and katakana to Hepburn romaji, so コイコガレ finds Koi Kogare (and the other way). */
+const KANA: Record<string, string> = {};
+(() => {
+  const rows = 'a i u e o|ka ki ku ke ko|sa shi su se so|ta chi tsu te to|na ni nu ne no|ha hi fu he ho|ma mi mu me mo|ya  yu  yo|ra ri ru re ro|wa   wo|ga gi gu ge go|za ji zu ze zo|da ji zu de do|ba bi bu be bo|pa pi pu pe po'.split('|');
+  const kana = 'あいうえお|かきくけこ|さしすせそ|たちつてと|なにぬねの|はひふへほ|まみむめも|や ゆ よ|らりるれろ|わ  を|がぎぐげご|ざじずぜぞ|だぢづでど|ばびぶべぼ|ぱぴぷぺぽ'.split('|');
+  rows.forEach((r, i) => {
+    const sounds = r.split(' ');
+    [...kana[i]!].forEach((k, j) => k !== ' ' && sounds[j] && (KANA[k] = sounds[j]!));
+  });
+  Object.assign(KANA, { ん: 'n', ゔ: 'vu', ぁ: 'a', ぃ: 'i', ぅ: 'u', ぇ: 'e', ぉ: 'o' });
+})();
+const SMALL_Y: Record<string, string> = { ゃ: 'ya', ゅ: 'yu', ょ: 'yo' };
+
+/** The romaji reading of any kana in [text]; other characters are kept. */
+export function romajiOf(text: string): string {
+  // Katakana to hiragana first (same table).
+  const hira = [...text].map((c) => (c >= 'ァ' && c <= 'ヶ' ? String.fromCharCode(c.charCodeAt(0) - 0x60) : c));
+  let out = '';
+  for (let i = 0; i < hira.length; i++) {
+    const c = hira[i]!;
+    const next = hira[i + 1] ?? '';
+    if (c === 'っ') {
+      // A doubled consonant: the next sound's first letter twice.
+      const n = KANA[next];
+      if (n) out += n[0] === 'c' ? 't' : n[0];
+      continue;
+    }
+    if (c === 'ー') continue;
+    const base = KANA[c];
+    if (base && SMALL_Y[next]) {
+      // きゃ → kya, しゃ → sha, ちゃ → cha, じゃ → ja.
+      const stem = base.endsWith('i') ? base.slice(0, -1) : base;
+      out += (/(sh|ch|j)$/.test(stem) ? stem + SMALL_Y[next]!.slice(1) : stem + SMALL_Y[next]);
+      i++;
+      continue;
+    }
+    out += base ?? c;
+  }
+  return out;
+}
+
+const CJK = /[぀-ヿ㐀-鿿가-힯]/;
+const LATIN = /[a-z]/;
 
 /** Words that make a listing a different recording, not a different listing of the same one. */
 const VERSION_WORDS = new Set([
@@ -46,6 +106,8 @@ const normalize = (s: string) =>
     .toLowerCase()
     .normalize('NFKD')
     .replace(/[̀-ͯ]/g, '')
+    // Recomposed, so kana keep their voicing marks (が stays が).
+    .normalize('NFC')
     .replace(/[“”«»„]/g, '"')
     .replace(/[‘’`´]/g, "'")
     .replace(/\s+/g, ' ')
@@ -140,15 +202,35 @@ export function queriesFor(target: MatchTarget): string[] {
   const title = [p.core, ...p.versions].join(' ').trim();
   if (!title) return [];
   const artist = target.artists.flatMap(artistNames)[0] ?? '';
-  return [...new Set(artist ? [`${title} ${artist}`, title] : [title])];
+  const out = artist ? [`${title} ${artist}`, title] : [title];
+  // The title in the other script, without the artist: a kana title never meets its romaji-filed
+  // video otherwise (and the other way round).
+  const latin = romajiOf(title).trim();
+  if (CJK.test(title) && latin !== title && !CJK.test(latin)) out.push(latin);
+  return [...new Set(out)];
 }
+
+/** A title and its translation: one core written as the other's bracketed aside, across scripts. */
+function translationMatch(a: TitleParts, b: TitleParts): boolean {
+  const crosses = (x: string, y: string) => (CJK.test(x) && !LATIN.test(x) && LATIN.test(y)) || (CJK.test(y) && !LATIN.test(y) && LATIN.test(x));
+  if (!crosses(a.core, b.core)) return false;
+  const words = (p: TitleParts) => [...p.context].join(' ');
+  return words(b).includes(a.core) || words(a).includes(b.core);
+}
+
+const albumKey = (album?: string) => (album ? tokens(normalize(album)).filter((w) => !['album', 'deluxe', 'edition', 'expanded', 'remaster', 'remastered', 'version', 'explicit', 'clean', 'bonus', 'anniversary', 'from', 'the', 'original', 'motion', 'picture', 'soundtrack'].includes(w)).join(' ') : '');
 
 /** How sure [candidate] is the same recording as [target], or null when it isn't. */
 export function matchScore(candidate: MatchCandidate, target: MatchTarget): number | null {
   const want = parseTitle(target.title, target.artists);
   const got = parseTitle(candidate.title, candidate.artists);
   if (!want.core || !got.core) return null;
-  const titleOk = want.core === got.core || (Math.min(want.core.length, got.core.length) > 3 && (want.core.includes(got.core) || got.core.includes(want.core)));
+  const titleOk =
+    want.core === got.core ||
+    // Same word in another script: katakana and romaji meet by their reading.
+    romajiOf(want.core).replace(/ /g, '') === romajiOf(got.core).replace(/ /g, '') ||
+    translationMatch(want, got) ||
+    (Math.min(want.core.length, got.core.length) > 3 && (want.core.includes(got.core) || got.core.includes(want.core)));
   if (!titleOk) return null;
   if (!sameSet(want.versions, got.versions)) return null;
   // A take named in the middle of a title ("Song Live Pune 2023") counts too, unless the song's own title has it.
@@ -177,6 +259,10 @@ export function matchScore(candidate: MatchCandidate, target: MatchTarget): numb
     if (drift > 90) return null;
     durationScore = drift <= 3 ? 40 : drift <= 30 ? 15 : 0;
   }
+  // The explicit and the clean edition aren't the same recording.
+  if (target.explicit !== undefined && candidate.explicit !== undefined && target.explicit !== candidate.explicit) return null;
   const contextShared = [...want.context].some((w) => got.context.has(w) || titleWords.includes(w)) ? 20 : 0;
-  return 100 + (exact ? 25 : shared ? 10 : -30) + durationScore + contextShared + (want.core === got.core ? 10 : 0);
+  // The same release breaks ties between same-titled ones.
+  const albumShared = albumKey(target.album) && albumKey(target.album) === albumKey(candidate.album) ? 35 : 0;
+  return 100 + (exact ? 25 : shared ? 10 : -30) + durationScore + contextShared + albumShared + (want.core === got.core ? 10 : 0);
 }

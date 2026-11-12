@@ -15,6 +15,7 @@ import type { Innertube } from 'youtubei.js';
 import type { AudioQuality, StreamInfo } from '../shared/types';
 import { getInnertube, resetInnertube } from './youtube';
 import { serveSourceSong } from './addons';
+import { signedInSession } from './account';
 import { findLosslessMatch, forgetMatch, refineFormat, type LosslessMatch } from './lossless';
 import type { LosslessSource } from '../shared/types';
 import { serveFile, serveServerSong } from './media';
@@ -106,7 +107,7 @@ function clientsFor(videoId: string): ClientName[] {
 const AGE_GATE = /confirm your age|age-restricted|inappropriate for some users|sign in to confirm/i;
 
 function permanentReason(reason: string): string | null {
-  if (AGE_GATE.test(reason)) return 'This track is age-restricted, and YouTube won’t play it without a signed-in account.';
+  if (AGE_GATE.test(reason)) return 'This track is age-restricted. Sign in to YouTube Music (Settings › Your Music) to play it.';
   if (/country|region/i.test(reason)) return 'This track isn’t available in your country.';
   if (/private/i.test(reason)) return 'This track is private.';
   if (/terminated/i.test(reason)) return 'The channel behind this track was terminated.';
@@ -226,6 +227,23 @@ async function walkClients(videoId: string, quality: StreamKind, itag?: number):
       }
     }
   }
+  // Age-restricted, and you're signed in: asked again with your account, as the YouTube app would.
+  const signed = AGE_GATE.test(lastReason) || (permanent && AGE_GATE.test(permanent)) ? signedInSession() : null;
+  if (signed) {
+    const own = await signed.catch(() => null);
+    for (const client of ['TV', 'WEB', 'YTMUSIC'] as ClientName[]) {
+      if (!own) break;
+      try {
+        const result = await resolveWith(own, videoId, client, quality, itag);
+        if (typeof result !== 'string') {
+          log.info(`[${videoId}] age-restricted: played signed in (${client})`);
+          return result;
+        }
+      } catch {
+        // The next client.
+      }
+    }
+  }
   if (permanent) {
     unplayable.set(videoId, { reason: permanent, at: Date.now() });
     throw new UnplayableError(permanent);
@@ -234,6 +252,9 @@ async function walkClients(videoId: string, quality: StreamKind, itag?: number):
 }
 
 /** The stream for a track, reused while its URL is fresh. */
+/** Forget which tracks wouldn't play (after signing in, age-restricted ones can). */
+export const clearUnplayable = () => unplayable.clear();
+
 export async function resolveStream(videoId: string, quality: StreamKind, options: { fresh?: boolean; itag?: number } = {}): Promise<ResolvedStream> {
   const key = keyOf(videoId, quality);
   const cached = resolved.get(key);

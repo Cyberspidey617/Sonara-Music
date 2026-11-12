@@ -18,9 +18,15 @@ export function useScrubber() {
 
   useEffect(() => {
     let frame = 0;
-    let shown = '';
-    let times = '';
     let lastCheck = 0;
+    // Written only where it differs: each element's own value is checked (not a remembered one), so a
+    // bar drawn anew (another style, the pebble opening) gets its place at once, even while paused.
+    const put = (el: HTMLElement | null | undefined, value: string) => {
+      if (el && el.style.getPropertyValue('--progress') !== value) el.style.setProperty('--progress', value);
+    };
+    const say = (el: HTMLElement | null, value: string) => {
+      if (el && el.textContent !== value) el.textContent = value;
+    };
     const tick = (now: number) => {
       frame = requestAnimationFrame(tick);
       // Paused and not dragging, nothing moves: a look four times a second is enough (a seek still shows).
@@ -36,19 +42,11 @@ export function useScrubber() {
       const k = duration > 0 ? Math.min(1, position / duration) : 0;
       // Only what changed is written: an unchanged bar costs no style work or repaint.
       const progress = k.toFixed(4);
-      if (progress !== shown) {
-        shown = progress;
-        bar.current?.style.setProperty('--progress', progress);
-        // Also for a thumb drawn outside the clipped track.
-        (bar.current?.closest('[data-progress-host]') as HTMLElement | null)?.style.setProperty('--progress', progress);
-      }
-      const e = hasTrack ? formatTime(position) : '';
-      const r = hasTrack && duration > 0 ? `-${formatTime(Math.max(0, duration - position))}` : '';
-      if (e + r !== times) {
-        times = e + r;
-        if (elapsed.current) elapsed.current.textContent = e;
-        if (remaining.current) remaining.current.textContent = r;
-      }
+      put(bar.current, progress);
+      // Also for a thumb drawn outside the clipped track.
+      put(bar.current?.closest('[data-progress-host]') as HTMLElement | null, progress);
+      say(elapsed.current, hasTrack ? formatTime(position) : '');
+      say(remaining.current, hasTrack && duration > 0 ? `-${formatTime(Math.max(0, duration - position))}` : '');
     };
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);

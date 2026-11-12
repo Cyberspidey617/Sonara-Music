@@ -175,7 +175,12 @@ export function FullScreenPlayer() {
   // This song's music video: one you attached, or else its video on YouTube; and whether it's on screen.
   const [attachedUrl, setAttachedUrl] = useState<string | null>(null);
   const [found, setFound] = useState<OnlineMusicVideo | null>(null);
-  const [showVideo, setShowVideo] = useState(false);
+  // Video mode is the app's, not this screen's: closing the player and coming back keeps it, and the
+  // next song shows its video too when it has one.
+  const videoMode = useUi((s) => s.videoMode);
+  const setShowVideo = (on: boolean | ((was: boolean) => boolean)) => useUi.getState().setVideoMode(typeof on === 'function' ? on(useUi.getState().videoMode) : on);
+  // On while video mode is, for a song that has a video.
+  const showVideo = videoMode && !!(attachedUrl || found);
   // Once opened, the video stays loaded (paused while hidden), so switching back is instant.
   const [videoLoaded, setVideoLoaded] = useState(false);
   useEffect(() => {
@@ -184,7 +189,9 @@ export function FullScreenPlayer() {
   const videoQuality = useLibrary((s) => s.settings.videoQuality) ?? 'auto';
   // A height above Full HD that won't play here steps down to Full HD once (for that video).
   const [steppedDown, setSteppedDown] = useState<string | null>(null);
-  const wantedHeight = videoQuality === 'auto' ? 1080 : steppedDown === found?.videoId ? Math.min(videoQuality, 1080) : videoQuality;
+  // Auto: Full HD, or 480p when saving data (Low audio quality, or the system's data saver).
+  const savingData = useLibrary((s) => s.settings.quality === 'low') || !!(navigator as Navigator & { connection?: { saveData?: boolean } }).connection?.saveData;
+  const wantedHeight = videoQuality === 'auto' ? (savingData ? 480 : 1080) : steppedDown === found?.videoId ? Math.min(videoQuality, 1080) : videoQuality;
   const videoAttached = !!attachedUrl;
   const videoUrl = attachedUrl ?? (found ? `ytstream://track/${encodeURIComponent(found.videoId)}?q=video&h=${wantedHeight}` : null);
   // What the playing video offers, and the height on screen (known once it has loaded).
@@ -241,7 +248,6 @@ export function FullScreenPlayer() {
     return () => clearTimeout(timer);
   }, [unsynced, found?.videoId]);
   useEffect(() => {
-    setShowVideo(false);
     setVideoLoaded(false);
     setAttachedUrl(null);
     setFound(null);
@@ -329,6 +335,7 @@ export function FullScreenPlayer() {
           // with the song going on silently.
           audioUrl={!videoAttached && found && !found.synced ? `ytstream://track/${encodeURIComponent(found.videoId)}?q=high` : null}
           fit={videoFit}
+          {...(!videoAttached && found?.timeMap && { timeMap: found.timeMap })}
           onClose={() => setShowVideo(false)}
           onError={() => {
             if (found && wantedHeight > 1080 && steppedDown !== found.videoId) {
@@ -345,7 +352,7 @@ export function FullScreenPlayer() {
       {unsynced && found && (
         <div className={`pointer-events-none absolute inset-x-0 top-[60px] z-30 flex justify-center px-4 transition-opacity duration-700 ${syncNote ? 'opacity-100' : 'opacity-0'}`} aria-hidden={!syncNote}>
           <div className="glass max-w-[560px] animate-rise rounded-pill px-4 py-1.5 text-center type-callout text-secondary">
-            The official video{found.channel ? ` from ${found.channel}` : ''} isn’t the same length as the song, so it plays with its own sound.
+            The {found.kind === 'lyric' ? 'lyric video' : 'official video'}{found.channel ? ` from ${found.channel}` : ''} isn’t the same length as the song, so it plays with its own sound.
           </div>
         </div>
       )}
@@ -361,7 +368,15 @@ export function FullScreenPlayer() {
             className="relative grid size-8 animate-glyph place-items-center rounded-full text-secondary hover:bg-white/12 hover:text-primary aria-pressed:bg-white/16 aria-pressed:text-primary"
             aria-label={showVideo ? 'Hide the music video' : 'Show the music video'}
             aria-pressed={showVideo}
-            title={showVideo ? 'Hide the music video (Esc)' : !videoAttached && found && !found.synced ? 'Official music video (may not be in sync with the song)' : 'Music video'}
+            title={
+              showVideo
+                ? 'Hide the music video (Esc)'
+                : !videoAttached && found?.kind === 'lyric'
+                  ? `Lyric video${found.synced ? '' : ' (may not be in sync with the song)'}`
+                  : !videoAttached && found && !found.synced
+                    ? 'Official music video (may not be in sync with the song)'
+                    : 'Music video'
+            }
             onClick={() => (markStep('video'), setShowVideo((v) => !v))}
           >
             <Clapperboard size={16} />

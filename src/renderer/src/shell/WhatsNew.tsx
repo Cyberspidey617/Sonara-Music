@@ -10,6 +10,31 @@ type Note = { icon: LucideIcon; title: string; body: string; open?: () => void; 
 /** What each version brought, newest first. Shown once, after Sonara updates to it. */
 const NOTES: { version: string; notes: Note[] }[] = [
   {
+    version: '2.3.3',
+    notes: [
+      {
+        icon: Clapperboard,
+        title: 'Music videos from YouTube Music itself',
+        body: 'Sign in to YouTube Music (Settings › Your Music) and a song’s video is the one YouTube Music pairs with it, lined up with the song even when the video has an intro. Signed in, age-restricted songs play too.',
+      },
+      {
+        icon: Clapperboard,
+        title: 'Lyric videos, and more videos found',
+        body: 'When a song has no official video, its lyric video plays, only from the artist’s own channel or a trusted label. Japanese titles find their videos in either script, and covers that are just a picture held still are skipped.',
+      },
+      {
+        icon: Clapperboard,
+        title: 'Video mode stays on',
+        body: 'Close the full-screen player during a video and open it again: the video is still on, and the next song shows its video too. On Low quality or the system’s data saver, Auto plays videos at 480p.',
+      },
+      {
+        icon: Sparkles,
+        title: 'Seek bar knob fixed',
+        body: 'The knob no longer jumps to the start when the seek bar changes style or opens from the pebble, in the player or the Settings preview.',
+      },
+    ],
+  },
+  {
     version: '2.3.2',
     notes: [
       {

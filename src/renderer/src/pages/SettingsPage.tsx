@@ -6,7 +6,7 @@ import { Check, Clock, Download, FolderOpen, FolderPlus, Heart, House, Loader2, 
 import { Modal, SHORTCUTS } from '@/components/Dialogs';
 import { createContext, useContext, useEffect, useState, type CSSProperties, type ReactNode } from 'react';
 import { create } from 'zustand';
-import { DEFAULT_SETTINGS, seekLookOf, type BackupInfo, type ListeningProfile, type ProxyMode, type ScrobbleStatus, type AudioQuality, type DownloadQuality, type MiniPlayerWhen, type Settings, type SpatialAudio, type UpdateState } from '@shared/types';
+import { DEFAULT_SETTINGS, seekLookOf, type BackupInfo, type ListeningProfile, type ProxyMode, type ScrobbleStatus, type AccountStatus, type AudioQuality, type DownloadQuality, type MiniPlayerWhen, type Settings, type SpatialAudio, type UpdateState } from '@shared/types';
 import { api, errorMessage } from '@/lib/api';
 import { ACCENTS, LYRIC_FONTS, THEMES, themeVars, useThemeColors } from '@/lib/appearance';
 import { artworkAtPixels, largeArtwork } from '@/lib/artwork';
@@ -450,8 +450,39 @@ function MusicTab() {
           </form>
         )}
       </Section>
+      <YouTubeAccount />
       <LosslessSources onAdded={sourceAdded} />
     </>
+  );
+}
+
+/** Your YouTube Music account: for its Song/Video pairing and age-restricted songs. */
+function YouTubeAccount() {
+  const [status, setStatus] = useState<AccountStatus | null>(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => void api.accountStatus().then(setStatus), []);
+  if (!status) return null;
+  return (
+    <Section
+      title="YouTube Music account"
+      footer="Signed in, a song’s music video is the one YouTube Music itself pairs with it (its Song/Video switch), lined up with the song, and age-restricted songs play. You sign in on Google’s own page; Sonara keeps only the session, encrypted on this PC, and uses it only with YouTube. Your recommendations and library in Sonara stay as they are."
+    >
+      <Row title={status.signedIn ? (status.name ? `Signed in as ${status.name}` : 'Signed in') : 'Not signed in'} detail={status.signedIn ? 'Music videos come from YouTube Music’s own pairing first.' : 'Music videos are found by searching, and checked strictly.'}>
+        <button
+          className={status.signedIn ? `${button} text-[#ff6b61]` : `${button} bg-pill-bg text-pill hover:bg-white`}
+          disabled={busy}
+          onClick={async () => {
+            setBusy(true);
+            const next = status.signedIn ? await api.signOut() : await api.signIn();
+            setStatus(next);
+            setBusy(false);
+            if (!status.signedIn && next.signedIn) toast('Signed in to YouTube Music');
+          }}
+        >
+          {busy ? <Loader2 size={14} className="animate-spin" /> : null} {status.signedIn ? 'Sign Out' : 'Sign In with Google'}
+        </button>
+      </Row>
+    </Section>
   );
 }
 

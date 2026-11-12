@@ -7,7 +7,8 @@
  * shared/types.ts. They are defensive on purpose: YouTube changes its
  * responses often, and a missing field should drop one item, not a page.
  */
-import { matchScore, queriesFor } from './videoMatch';
+import { LYRIC_VIDEO, matchScore, queriesFor, TRUSTED_CHANNELS } from './videoMatch';
+import { pairedVideo } from './account';
 import vm from 'node:vm';
 import { Innertube, Platform, UniversalCache, YTNodes, type Types } from 'youtubei.js';
 import type {
@@ -730,41 +731,83 @@ export async function findOnYouTube(title: string, artist: string): Promise<stri
 }
 
 /** Not a music video: a lyric video, the audio on a still picture, a fan edit. */
-const NOT_A_VIDEO = /\b(lyrics?|lyrical|audio|visuali[sz]er|full song|jukebox|bass boosted|lofi|tutorial|status|whatsapp|shorts?|teaser|trailer|eclipsa|8d|reaction|making of)\b/;
+/** Not a music video: the audio on a still picture, a fan edit, a clip. (Lyric videos are judged apart.) */
+const NOT_A_VIDEO = /\b(audio|visuali[sz]er|full song|jukebox|bass boosted|lofi|tutorial|status|whatsapp|shorts?|teaser|trailer|eclipsa|8d|reaction|making of)\b/;
+
 export interface FoundVideo {
   videoId: string;
   /** As long as the song (within 3 s), so it plays in time with it. */
   synced: boolean;
   title: string;
   channel: string;
+  /** The official music video, or (when there is none) a lyric video from a trusted channel. */
+  kind: 'official' | 'lyric';
+  /** From YouTube Music's own Song/Video pairing: song-time → video-time stretches, when it gave them. */
+  timeMap?: { from: number; to: number; length: number }[];
 }
 
 const musicVideos = new Map<string, FoundVideo | null>();
+/** Forget what was found (after signing in or out, the answers change). */
+export const clearMusicVideos = () => musicVideos.clear();
+
+/** Narrower than this (width / height) is a cover held still, not a picture worth showing. */
+const MIN_VIDEO_ASPECT = 1.2;
+/** Whether a video's picture is a real video, judged by the shape of its largest frame. */
+async function realPicture(yt: Innertube, videoId: string): Promise<boolean> {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const info: any = await yt.getBasicInfo(videoId);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const frames = (info.streaming_data?.adaptive_formats ?? []).filter((f: any) => f.has_video && f.width && f.height);
+    if (!frames.length) return true;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const biggest = frames.reduce((a: any, b: any) => (b.height > a.height ? b : a));
+    return biggest.width / biggest.height >= MIN_VIDEO_ASPECT;
+  } catch {
+    return true;
+  }
+}
 
 /**
- * A song's music video on YouTube: from the artist's own channel or a label (never a reupload),
- * a real video (not the audio on a still picture or a lyric video). One as long as the song comes
- * first, since it plays in time with it; otherwise the official video, which may not.
+ * A song's music video. First YouTube Music's own Song/Video pairing (when you're signed in: the
+ * switch its app shows, with how the two line up); otherwise its Videos results, judged strictly
+ * (the same title, take and artist, a length within 90 s, a real picture). When there's no official
+ * video, a lyric video from the artist's or a trusted label's channel. Nothing is better than the
+ * wrong video.
  */
-export async function findMusicVideo(track: { videoId: string; title: string; artists: string[]; duration?: number; isVideo?: boolean }): Promise<FoundVideo | null> {
-  if (track.isVideo) return { videoId: track.videoId, synced: true, title: track.title, channel: track.artists[0] ?? '' };
+export async function findMusicVideo(track: { videoId: string; title: string; artists: string[]; duration?: number; isVideo?: boolean; album?: string; explicit?: boolean }): Promise<FoundVideo | null> {
+  if (track.isVideo) return { videoId: track.videoId, synced: true, title: track.title, channel: track.artists[0] ?? '', kind: 'official' };
   if (musicVideos.has(track.videoId)) return musicVideos.get(track.videoId)!;
+  const remember = (found: FoundVideo | null) => {
+    if (musicVideos.size > 300) musicVideos.clear();
+    musicVideos.set(track.videoId, found);
+    log.info(`[${track.videoId}] music video: ${found ? `${found.videoId} (${found.kind}, ${found.timeMap ? 'paired by YouTube Music' : found.synced ? 'in time' : 'may not be in time'}, ${found.channel})` : 'none'}`);
+    return found;
+  };
+
+  // 1. YouTube Music's own pairing (signed in only: it pairs nothing for a signed-out request).
+  const paired = isYouTubeId(track.videoId) ? await pairedVideo(track.videoId, track.duration).catch(() => null) : null;
+  if (paired) return remember(paired);
+
   // A song from a search suggestion comes without its length: ask for it.
   const duration = track.duration ?? (isYouTubeId(track.videoId) ? (await getTrack(track.videoId).catch(() => null))?.duration : undefined);
   const yt = await getInnertube();
-  // YouTube Music's own Videos results (official videos and the artist's uploads), judged strictly:
-  // the same recording by title, take, artist and length, the best of them, or none.
-  const target = { title: track.title, artists: track.artists, ...(duration && { duration }) };
+  const target = { title: track.title, artists: track.artists, ...(duration && { duration }), ...(track.album && { album: track.album }), ...(track.explicit !== undefined && { explicit: track.explicit }) };
   const seen = new Set<string>();
-  let best: { score: number; video: Track } | null = null;
-  for (const query of queriesFor(target)) {
+  const official: { score: number; video: Track }[] = [];
+  const lyric: { score: number; video: Track }[] = [];
+  const wantNames = track.artists.map((a) => a.toLowerCase());
+
+  const judge = async (query: string, lyricsOnly = false) => {
     const results = await yt.music.search(query, { type: 'video' }).catch(() => null);
-    if (!results) continue;
+    if (!results) return;
     for (const row of searchRows(results.contents as AnyNode[]).slice(0, 10)) {
       const video = trackFromListItem(row);
       if (!video || seen.has(video.videoId) || video.videoId === track.videoId) continue;
-      // A lyric video or the audio on a still picture isn't a music video.
-      if (NOT_A_VIDEO.test(video.title.toLowerCase())) continue;
+      const title = video.title.toLowerCase();
+      if (NOT_A_VIDEO.test(title)) continue;
+      const isLyric = LYRIC_VIDEO.test(title);
+      if (lyricsOnly && !isLyric) continue;
       seen.add(video.videoId);
       // Some rows come without their credit or length: the video's own details have them.
       if ((!video.artists.length || !video.duration) && matchScore({ title: video.title, artists: track.artists }, { title: track.title, artists: track.artists }) !== null) {
@@ -778,20 +821,46 @@ export async function findMusicVideo(track: { videoId: string; title: string; ar
           // Judged on what the row says.
         }
       }
-      const score = matchScore({ title: video.title, artists: video.artists.map((a) => a.name), ...(video.duration && { duration: video.duration }) }, target);
-      if (score !== null && (!best || score > best.score)) best = { score, video };
+      const score = matchScore({ title: video.title, artists: video.artists.map((a) => a.name), ...(video.duration && { duration: video.duration }), ...(video.explicit !== undefined && { explicit: video.explicit }), ...(video.album?.name && { album: video.album.name }) }, target);
+      if (score === null) continue;
+      if (!isLyric) official.push({ score, video });
+      else {
+        // A lyric video only from someone trusted: the artist's own channel, or a label that publishes it.
+        const channel = video.artists.map((a) => a.name.toLowerCase()).join(' ');
+        const byArtist = video.artists.some((a) => wantNames.includes(a.name.toLowerCase()));
+        if (byArtist || TRUSTED_CHANNELS.test(channel)) lyric.push({ score, video });
+      }
     }
+  };
+
+  // 2. YouTube Music's Videos results.
+  for (const query of queriesFor(target)) {
+    await judge(query);
     // A sure match from the first search needs no second.
-    if (best && best.score >= 150) break;
+    if (official.some((o) => o.score >= 150)) break;
   }
-  const pick = best?.video;
-  const found = pick
-    ? { videoId: pick.videoId, synced: !!(duration && pick.duration && Math.abs(pick.duration - duration) <= 3), title: pick.title, channel: pick.artists.map((a) => a.name).join(', ') }
-    : null;
-  if (musicVideos.size > 300) musicVideos.clear();
-  musicVideos.set(track.videoId, found);
-  log.info(`[${track.videoId}] music video: ${found ? `${found.videoId} (${found.synced ? 'in time' : 'may not be in time'}, ${found.channel})` : 'none'}`);
-  return found;
+  const pick = async (list: { score: number; video: Track }[]) => {
+    // Best first; a still picture (a cover held still) is passed over for the next.
+    for (const { video } of list.sort((a, b) => b.score - a.score).slice(0, 3)) if (await realPicture(yt, video.videoId)) return video;
+    return null;
+  };
+  const toFound = (v: Track, kind: FoundVideo['kind']): FoundVideo => ({
+    videoId: v.videoId,
+    synced: !!(duration && v.duration && Math.abs(v.duration - duration) <= 3),
+    title: v.title,
+    channel: v.artists.map((a) => a.name).join(', '),
+    kind,
+  });
+  const video = await pick(official);
+  if (video) return remember(toFound(video, 'official'));
+
+  // 3. No official video: a lyric video from a trusted channel.
+  if (!lyric.length) {
+    const [first] = queriesFor(target);
+    if (first) await judge(`${first} lyrics`, true);
+  }
+  const words = await pick(lyric);
+  return remember(words ? toFound(words, 'lyric') : null);
 }
 
 /** YouTube Music's Moods & genres: its sections (Moods & moments, Genres), each a list of buttons. */

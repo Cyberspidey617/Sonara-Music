@@ -191,9 +191,18 @@ export interface OnlineMusicVideo {
   synced: boolean;
   title: string;
   channel: string;
+  /** The official music video, or (when there's none) a lyric video from a trusted channel. */
+  kind: 'official' | 'lyric';
+  /** YouTube Music's own line-up of song and video: song-time → video-time stretches (seconds). */
+  timeMap?: { from: number; to: number; length: number }[];
 }
 
-/** The music video's picture: the most pixels high to stream. */
+/** Your YouTube Music account (for its Song/Video pairing). */
+export interface AccountStatus {
+  signedIn: boolean;
+  name?: string;
+}
+
 /** Music video quality: Auto (Full HD), or a height the video offers (up to 4K). */
 export type VideoQuality = 'auto' | number;
 export type VideoFit = 'fit' | 'fill' | '75' | '50';
@@ -808,6 +817,9 @@ export interface ObsidianApi {
   streamInfo(videoId: string): Promise<StreamInfo | null>;
   /** Checks a lossless source's address: its name, or why it can't be used. */
   /** The heights a music video offers (largest first) and the one playing, once it has loaded. */
+  accountStatus(): Promise<AccountStatus>;
+  signIn(): Promise<AccountStatus>;
+  signOut(): Promise<AccountStatus>;
   videoHeights(videoId: string): Promise<{ heights: number[]; active?: number } | null>;
   testLosslessSource(url: string): Promise<{ ok: true; name: string; url: string } | { ok: false; error: string }>;
   loadLibrary(): Promise<LibraryData>;
