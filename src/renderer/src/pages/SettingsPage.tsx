@@ -1379,7 +1379,7 @@ function AboutTab() {
           <img src={appIcon} alt="" className="size-16 flex-none drop-shadow-[0_6px_16px_rgb(0_0_0/0.4)]" />
           <div className="flex min-w-0 flex-col gap-0.5">
             <span className="type-title-3-emphasized">Sonara</span>
-            <span className="type-callout text-secondary">Version 2.3.2 · YouTube Music, plus your own lossless files, server and lossless sources · Lyrics via am-lyrics</span>
+            <span className="type-callout text-secondary">Version 2.3.3 · YouTube Music, plus your own lossless files, server and lossless sources · Lyrics via am-lyrics</span>
           </div>
         </div>
         <p className="px-5 pb-5 type-footnote text-tertiary">Not affiliated with YouTube or Google. Use in line with YouTube’s terms and your local laws.</p>
