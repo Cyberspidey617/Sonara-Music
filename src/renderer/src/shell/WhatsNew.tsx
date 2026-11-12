@@ -10,6 +10,31 @@ type Note = { icon: LucideIcon; title: string; body: string; open?: () => void; 
 /** What each version brought, newest first. Shown once, after Sonara updates to it. */
 const NOTES: { version: string; notes: Note[] }[] = [
   {
+    version: '2.3.2',
+    notes: [
+      {
+        icon: Sparkles,
+        title: 'Light mode',
+        body: 'Sonara looks and moves as designed again. When you want it lighter on your PC, Light mode (Settings › Playback) uses simpler glass and fewer frames. On Auto it turns itself on while your PC runs on battery.',
+      },
+      {
+        icon: Clapperboard,
+        title: 'The right music video, or none',
+        body: 'Videos are now matched strictly to the song: the same title and version, credited to the same artist, and close to the same length. Covers, remixes, lyric videos and fan uploads no longer stand in, and more official videos are found.',
+      },
+      {
+        icon: Clapperboard,
+        title: 'Video quality up to 4K',
+        body: 'The quality menu lists every quality the video offers, up to 4K, plus Auto (Full HD). If a quality won’t play on your PC, Sonara steps down to Full HD by itself.',
+      },
+      {
+        icon: Sparkles,
+        title: 'Seek bar fixes',
+        body: 'The seek bar preview in Settings and the mini player’s wave seek bar move again, and the Knob setting now works for every style.',
+      },
+    ],
+  },
+  {
     version: '2.3.1',
     notes: [
       {

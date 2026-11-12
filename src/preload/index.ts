@@ -62,6 +62,7 @@ const api: ObsidianApi = {
   },
   prefetch: (videoId) => ipcRenderer.invoke('stream:prefetch', videoId),
   streamInfo: (videoId) => ipcRenderer.invoke('stream:info', videoId),
+  videoHeights: (videoId) => ipcRenderer.invoke('video:heights', videoId),
   testLosslessSource: (url) => ipcRenderer.invoke('sources:test', url),
   loadLibrary: () => ipcRenderer.invoke('library:load'),
   saveLibrary: (patch) => ipcRenderer.invoke('library:save', patch),

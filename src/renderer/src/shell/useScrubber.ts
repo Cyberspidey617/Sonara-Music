@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type PointerEvent } from 'react';
 import { formatTime } from '@/lib/format';
 import { getDuration, getPlayhead, usePlayer } from '@/state/player';
-import { onScreen } from '@/lib/power';
+import { onScreen, powerSaving } from '@/lib/power';
 
 /**
  * A seek bar driven by the media clock each frame (no React state per frame),
@@ -25,8 +25,11 @@ export function useScrubber() {
       frame = requestAnimationFrame(tick);
       // Paused and not dragging, nothing moves: a look four times a second is enough (a seek still shows).
       const still = drag.current === null && usePlayer.getState().status !== 'playing';
-      if (still && now - lastCheck < 250) return;
-      if (drag.current === null && !onScreen(bar.current, now)) return;
+      // Light mode: paused, four looks a second; unseen, none.
+      if (powerSaving()) {
+        if (still && now - lastCheck < 250) return;
+        if (drag.current === null && !onScreen(bar.current, now)) return;
+      }
       lastCheck = now;
       const duration = getDuration();
       const position = drag.current !== null ? drag.current * duration : getPlayhead();

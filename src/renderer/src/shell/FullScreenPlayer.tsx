@@ -19,7 +19,7 @@ import { NowPlayingQuality } from '@/components/QualityBadge';
 import { rgb, tintFor } from '@/lib/palette';
 import { useLibrary } from '@/state/library';
 import { useOnline } from '@/state/online';
-import type { OnlineMusicVideo } from '@shared/types';
+import type { OnlineMusicVideo, VideoQuality } from '@shared/types';
 import { LyricsView } from './LyricsView';
 import { MusicVideo } from './MusicVideo';
 import { ArtworkBackdrop, MeshBackdrop, SolidBackdrop } from './MeshBackdrop';
@@ -147,6 +147,12 @@ function useStacked() {
  * desktop one): artwork, names, seek bar and transport on the left; lyrics or
  * the queue on the right; all over a moving mesh of the artwork's colours.
  */
+/** How a video height is named: 4K, 2K, Full HD, HD, else its height. */
+function qualityName(h: number): string {
+  const name = h >= 4320 ? '8K' : h >= 2160 ? '4K' : h >= 1440 ? '2K' : h >= 1080 ? 'Full HD' : h >= 720 ? 'HD' : '';
+  return name ? `${h}p (${name})` : `${h}p`;
+}
+
 export function FullScreenPlayer() {
   const track = usePlayer((s) => s.queue[s.index]?.track ?? null);
   const playing = usePlayer((s) => s.status === 'playing' || s.status === 'loading');
@@ -176,9 +182,25 @@ export function FullScreenPlayer() {
   useEffect(() => {
     if (showVideo) setVideoLoaded(true);
   }, [showVideo]);
-  const videoQuality = useLibrary((s) => s.settings.videoQuality) || 1080;
+  const videoQuality = useLibrary((s) => s.settings.videoQuality) ?? 'auto';
+  // A height above Full HD that won't play here steps down to Full HD once (for that video).
+  const [steppedDown, setSteppedDown] = useState<string | null>(null);
+  const wantedHeight = videoQuality === 'auto' ? 1080 : steppedDown === found?.videoId ? Math.min(videoQuality, 1080) : videoQuality;
   const videoAttached = !!attachedUrl;
-  const videoUrl = attachedUrl ?? (found ? `ytstream://track/${encodeURIComponent(found.videoId)}?q=video&h=${videoQuality}` : null);
+  const videoUrl = attachedUrl ?? (found ? `ytstream://track/${encodeURIComponent(found.videoId)}?q=video&h=${wantedHeight}` : null);
+  // What the playing video offers, and the height on screen (known once it has loaded).
+  const [heights, setHeights] = useState<{ heights: number[]; active?: number } | null>(null);
+  useEffect(() => {
+    setHeights(null);
+    if (!showVideo || !found) return;
+    let stop = false;
+    const look = () => void api.videoHeights(found.videoId).then((h) => !stop && h && setHeights(h));
+    const timers = [1500, 4000, 9000].map((ms) => window.setTimeout(look, ms));
+    return () => {
+      stop = true;
+      timers.forEach(clearTimeout);
+    };
+  }, [showVideo, found, wantedHeight]);
   const videoKey = track?.videoId;
   const online = useOnline((s) => s.online);
   // The "may not be in sync" note: shown when the video opens, then it fades away.
@@ -310,6 +332,11 @@ export function FullScreenPlayer() {
           fit={videoFit}
           onClose={() => setShowVideo(false)}
           onError={() => {
+            if (found && wantedHeight > 1080 && steppedDown !== found.videoId) {
+              setSteppedDown(found.videoId);
+              toast('That quality won’t play here: showing Full HD');
+              return;
+            }
             setShowVideo(false);
             toast('The music video couldn’t be loaded');
           }}
@@ -344,24 +371,27 @@ export function FullScreenPlayer() {
         {showVideo && !videoAttached && found && (
           <button
             className="relative flex h-8 animate-glyph items-center gap-1 rounded-full pr-2 pl-2.5 type-callout-emphasized text-secondary tabular-nums hover:bg-white/12 hover:text-primary"
-            aria-label={`Video quality: ${videoQuality}p`}
+            aria-label={`Video quality: ${videoQuality === 'auto' ? 'Auto' : qualityName(videoQuality)}`}
             title="Video quality"
-            onClick={(e) =>
+            onClick={(e) => {
+              const set = (videoQuality: VideoQuality) => {
+                setSteppedDown(null);
+                useLibrary.getState().updateSettings({ videoQuality });
+              };
+              // Every height this video offers, largest first (or the usual ones until it has loaded).
+              const offered = heights?.heights.length ? heights.heights : [1080, 720, 480, 360];
               openMenuAt(
                 e.currentTarget,
                 [
                   { header: 'Video quality' },
-                  ...([1080, 720, 480, 360] as const).map((q) => ({
-                    label: `${q}p${q === 1080 ? ' (Full HD)' : q === 720 ? ' (HD)' : ''}`,
-                    hint: q === videoQuality ? '✓' : undefined,
-                    onSelect: () => useLibrary.getState().updateSettings({ videoQuality: q }),
-                  })),
+                  { label: `Auto${videoQuality === 'auto' && heights?.active ? ` (${qualityName(heights.active)})` : ' (up to Full HD)'}`, hint: videoQuality === 'auto' ? '✓' : undefined, onSelect: () => set('auto') },
+                  ...offered.map((q) => ({ label: qualityName(q), hint: q === videoQuality ? '✓' : undefined, onSelect: () => set(q) })),
                 ],
                 'below-start',
-              )
-            }
+              );
+            }}
           >
-            {videoQuality}p <ChevronDown size={13} className="opacity-70" />
+            {videoQuality === 'auto' ? `Auto${heights?.active ? ` · ${heights.active}p` : ''}` : `${videoQuality}p`} <ChevronDown size={13} className="opacity-70" />
           </button>
         )}
         {showVideo && (

@@ -1,7 +1,7 @@
 import { useEffect, useRef, type CSSProperties, type Ref } from 'react';
 import { seekLookOf, type SeekLook } from '@shared/types';
 import { useLibrary } from '@/state/library';
-import { onScreen } from '@/lib/power';
+import { onScreen, powerSaving } from '@/lib/power';
 
 /** The seek bars' look, as Settings › Player › Seek bar has it. */
 export function useSeekLook(): SeekLook {
@@ -61,14 +61,24 @@ function WavePath({
     let last = performance.now();
     let drawn = '';
     let frame = 0;
-    // The bar's progress, as the scrubber writes it on the host (read without a style recalculation).
-    const host = (el.closest('[data-progress-host]') as HTMLElement | null) ?? el;
+    // The bar's progress, as the scrubber writes it: on the bar's host, or a wrapper (the mini player,
+    // the Settings preview set it further out). Read from where it's set, without restyling the page.
+    const holder = (): HTMLElement | null => {
+      for (let n: HTMLElement | null = el.parentElement; n; n = n.parentElement) if (n.style.getPropertyValue('--progress')) return n;
+      return null;
+    };
+    let source = holder();
+    const progressNow = () => {
+      if (!source?.isConnected || !source.style.getPropertyValue('--progress')) source = holder();
+      const raw = source ? source.style.getPropertyValue('--progress') : getComputedStyle(el).getPropertyValue('--progress');
+      return parseFloat(raw) || 0;
+    };
     let lastLook = 0;
     const draw = (now: number) => {
       // Paused, the bar only moves if you seek: a look four times a second is enough.
       // Moving, 30 frames a second are plenty for the wave; unseen (hidden, under the full-screen player), none.
       const minGap = moving.current && !el.closest('[data-dragging]') ? 1000 / 31 : !moving.current && !expressive && !el.closest('[data-dragging]') ? 250 : 0;
-      if (now - lastLook < minGap || !onScreen(el, now)) {
+      if (powerSaving() && (now - lastLook < minGap || !onScreen(el, now))) {
         frame = requestAnimationFrame(draw);
         return;
       }
@@ -77,7 +87,7 @@ function WavePath({
       const step = Math.min(100, now - last) / 1000;
       last = now;
       if (expressive) level = moving.current && !still ? Math.min(1, level + step * 3) : Math.max(0, level - step * 3);
-      const progress = Math.min(1, Math.max(0, parseFloat(host.style.getPropertyValue('--progress')) || 0));
+      const progress = Math.min(1, Math.max(0, progressNow()));
       const end = Math.max(0, progress * width - gap);
       const key = `${end.toFixed(1)}:${phase.toFixed(3)}:${width}:${level.toFixed(2)}`;
       if (key !== drawn && path.current) {
@@ -155,7 +165,7 @@ export function SeekTrack({
         <WavePath box={box} amplitude={Math.min(box / 2 - line, amplitude * 1.15)} stroke={line} color={fill} playing={playing && !loading} gap={gap} expressive className={`${tone} ${loading ? 'animate-pulse' : ''}`} />
         <span
           aria-hidden="true"
-          className={`pointer-events-none absolute top-1/2 left-[calc(var(--progress)*100%)] -translate-x-1/2 -translate-y-1/2 rounded-full transition-[height,width] duration-200 ease-(--ease-spring) group-data-dragging/scrub:w-[6px] ${tone}`}
+          className={`pointer-events-none absolute top-1/2 left-[calc(var(--progress)*100%)] -translate-x-1/2 -translate-y-1/2 rounded-full transition-[height,width,scale] duration-200 ease-(--ease-spring) group-data-dragging/scrub:w-[6px] ${knobShown} ${tone}`}
           style={{ background: fill, width: size === 'large' ? 4 : 3, height: box }}
         />
       </div>
@@ -172,6 +182,12 @@ export function SeekTrack({
         >
           <div ref={barRef} className={`size-full origin-left scale-x-(--progress) ${loading ? 'animate-pulse' : ''}`} style={{ background: fill, opacity: look.color === 'white' ? 0.92 : 1 }} />
         </div>
+        {/* The knob, as chosen in Settings (the capsule itself has none). */}
+        <span
+          aria-hidden="true"
+          className={`pointer-events-none absolute top-1/2 left-[calc(var(--progress)*100%)] h-(--k) w-(--k) -translate-x-1/2 -translate-y-1/2 rounded-full bg-white shadow-[0_1px_4px_rgb(0_0_0/0.4)] transition-[scale] duration-300 ease-(--ease-spring) ${knobShown}`}
+          style={{ '--k': `${knob + 2}px` } as CSSProperties}
+        />
       </div>
     );
   }

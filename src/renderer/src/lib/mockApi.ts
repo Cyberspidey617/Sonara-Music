@@ -121,6 +121,7 @@ export function createMockApi(): ObsidianApi {
     track: (videoId) => delay(data.radio.find((t) => t.videoId === videoId) ?? null),
     importPlaylist: () => delay({ title: data.playlist.title, tracks: data.playlist.tracks, thumbnail: data.playlist.thumbnail }, 800),
     prefetch: async () => undefined,
+    videoHeights: async () => ({ heights: [2160, 1440, 1080, 720, 480, 360], active: 1080 }),
     testLosslessSource: async (url) => ({ ok: true, name: 'Mock source', url }),
     streamInfo: async (videoId) => ({ videoId, source: 'youtube', client: 'MOCK', mimeType: 'audio/webm', loudnessDb: 0, format: { codec: 'Opus', lossless: false, bitrate: 160000, sampleRate: 48000 } }),
     loadLibrary: () => delay(library, 10),

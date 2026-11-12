@@ -115,23 +115,25 @@ export function Waveform({ active, playing, options: o, stops, className = '' }:
     let frame = 0;
     let last = performance.now();
     const pausedAt = last;
+    let skip = false;
     const tick = (now: number) => {
       frame = requestAnimationFrame(tick);
-      if (!onScreen(el, now)) return;
-      // Paused, the slow breathing needs only a few frames a second, and settles still after a while
-      // (an app left paused shouldn't keep the PC busy).
-      if (!playing) {
-        if (now - pausedAt > 20_000) {
-          cancelAnimationFrame(frame);
-          rest(0.2);
-          draw();
-          return;
-        }
-        if (now - last < 1000 / 12) return;
-      } else if (now - last < 1000 / (powerSaving() ? 21 : 31)) {
-        // Playing: 30 frames a second (20 saving power) look just as smooth for eased bars, and each
-        // frame redraws the glass around them, so fewer is much lighter on the PC.
-        return;
+      if (!powerSaving()) {
+        // As designed: every frame while playing; paused, the breathing on every other frame.
+        if (!playing && (skip = !skip)) return;
+      } else {
+        // Light mode: nothing while unseen; paused, a few frames a second, settling still after 20 s;
+        // playing, 20 frames a second (each frame also redraws the glass around the bars).
+        if (!onScreen(el, now)) return;
+        if (!playing) {
+          if (now - pausedAt > 20_000) {
+            cancelAnimationFrame(frame);
+            rest(0.2);
+            draw();
+            return;
+          }
+          if (now - last < 1000 / 12) return;
+        } else if (now - last < 1000 / 21) return;
       }
       const dt = Math.min(64, now - last) / 16.67;
       last = now;

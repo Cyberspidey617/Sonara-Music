@@ -45,7 +45,11 @@ const DESKTOP_UA =
 type YouTubeQuality = Exclude<AudioQuality, 'lossless'>;
 /** What a stream is for: the song's audio at a quality, or a music video's picture (no sound) up to a height. */
 type StreamKind = AudioQuality | `video-${number}`;
-export const VIDEO_HEIGHTS = [1080, 720, 480, 360];
+/** Where Auto opens: the top of YouTube's H.264 ladder. */
+export const AUTO_VIDEO_HEIGHT = 1080;
+/** The heights each music video offers, and the one playing: for the quality menu. */
+const videoHeightsOf = new Map<string, { heights: number[]; active?: number }>();
+export const videoHeights = (videoId: string) => videoHeightsOf.get(videoId) ?? null;
 const ITAG_PREFERENCE: Record<YouTubeQuality, number[]> = {
   // Opus ~160 kbps, AAC 128 kbps, then the smaller ones.
   high: [251, 140, 250, 249, 139],
@@ -164,6 +168,12 @@ async function resolveWith(yt: Innertube, videoId: string, client: ClientName, q
     .sort((a: any, b: any) => (b.bitrate ?? 0) - (a.bitrate ?? 0))[0];
   if (!format) return `no video format up to ${maxHeight}p`;
   if (!format.url && !format.signature_cipher && !format.cipher) return 'only SABR streams (no direct URL)';
+  if (video) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const heights = [...new Set(pool.map((f: any) => Number(f.height) || 0).filter((h: number) => h >= 144))].sort((a, b) => b - a);
+    videoHeightsOf.set(videoId, { heights, active: Number(format.height) || undefined });
+    if (videoHeightsOf.size > 100) videoHeightsOf.delete(videoHeightsOf.keys().next().value!);
+  }
   const url = await format.decipher(yt.session.player);
   if (!url) return 'decipher produced no URL';
   const userAgent = USER_AGENTS[client] ?? DESKTOP_UA;
@@ -369,7 +379,7 @@ export async function handleStreamRequest(request: Request, defaultQuality: () =
   // q=video: a music video's picture, for the full-screen player, up to h pixels high.
   const height = Number(url.searchParams.get('h'));
   let quality: StreamKind =
-    q === 'video' ? `video-${VIDEO_HEIGHTS.includes(height) ? height : 1080}` : q === 'normal' || q === 'low' || q === 'high' || q === 'lossless' ? q : defaultQuality();
+    q === 'video' ? `video-${height >= 144 && height <= 4320 ? Math.round(height) : AUTO_VIDEO_HEIGHT}` : q === 'normal' || q === 'low' || q === 'high' || q === 'lossless' ? q : defaultQuality();
   if (!/^[\w-]{11}$/.test(videoId)) return new Response('bad video id', { status: 400 });
 
   // Lossless when available: your own copy of the song, if you have one.

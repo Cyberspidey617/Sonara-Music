@@ -22,7 +22,7 @@ import { handleMediaRequest, serveFile } from './media';
 import { checkServer, connect, disconnect, openServer, searchServer, serverAlbum, serverAlbums } from './subsonic';
 import { configureLog, log } from './log';
 import { flush, getLibrary, openStore, patchLibrary } from './store';
-import { handleStreamRequest, resolveStream, streamInfo } from './stream';
+import { handleStreamRequest, resolveStream, streamInfo, videoHeights } from './stream';
 import { losslessInfo } from './lossless';
 import {
   configureYouTube,
@@ -435,6 +435,7 @@ function registerIpc() {
       .finally(() => preparing.delete(id));
   });
   handle('sources:test', (url: string) => testSource(String(url)));
+  handle('video:heights', (videoId: string) => videoHeights(String(videoId)));
   handle('stream:info', (videoId: string) => {
     const id = String(videoId);
     if (!isYouTubeId(id)) return null;

@@ -154,9 +154,12 @@ function PlaybackTab() {
             }}
           />
         </Row>
-        <Row title="Power saver" detail="Simpler glass, fewer animation frames and a still full-screen background, to go easy on your PC. Auto turns it on while on battery.">
+        <Row
+          title="Light mode"
+          detail="Uses much less of your PC: plain frosted glass, fewer animation frames, a still full-screen background, and animations you can’t see stop. Auto turns it on while your PC runs on battery; plugged in, Sonara looks and moves as designed."
+        >
           <Segmented
-            label="Power saver"
+            label="Light mode"
             value={s.powerSaver ?? 'auto'}
             options={[
               { value: 'auto', label: 'Auto' },
@@ -762,7 +765,7 @@ function PlayerTab() {
       <Row title="Thickness">
         <Slider label="Seek bar thickness" value={s.seekThickness ?? 1} min={0.5} max={2} step={0.1} defaultValue={1} format={percent} onChange={(seekThickness) => set({ seekThickness })} />
       </Row>
-      <Row title="Knob" detail="The round handle at the playing point.">
+      <Row title="Knob" detail="The handle at the playing point, for every style.">
         <Segmented
           label="Seek bar knob"
           value={s.seekKnob ?? 'hover'}

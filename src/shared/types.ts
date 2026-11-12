@@ -194,7 +194,8 @@ export interface OnlineMusicVideo {
 }
 
 /** The music video's picture: the most pixels high to stream. */
-export type VideoQuality = 1080 | 720 | 480 | 360;
+/** Music video quality: Auto (Full HD), or a height the video offers (up to 4K). */
+export type VideoQuality = 'auto' | number;
 export type VideoFit = 'fit' | 'fill' | '75' | '50';
 
 /** Off: as before. System: everything through the system's proxy. Custom: through the one you give. */
@@ -371,7 +372,7 @@ export interface Settings {
   hideVideos: boolean;
   /** Incognito: nothing you play is kept (history, Wrapped, scrobbles, skips) or shapes your recommendations. */
   incognito: boolean;
-  /** Power saver: fewer frames and simpler glass. Auto: while on battery. */
+  /** Light mode: fewer frames and simpler glass, to use less of the PC. Auto: while on battery. */
   powerSaver: 'auto' | 'on' | 'off';
   /** Music videos: the highest quality to stream. */
   videoQuality: VideoQuality;
@@ -515,6 +516,8 @@ export function migrateSettings(saved: Record<string, unknown>): Partial<Setting
   // "Compact song lists" (on/off), then three row densities, became a row height.
   if (typeof settings.rowHeight !== 'number' && (compact === true || typeof density === 'string'))
     settings.rowHeight = ({ compact: 44, comfortable: 56, spacious: 66 } as Record<string, number>)[compact === true ? 'compact' : String(density)] ?? 56;
+  // The old default, 1080p, is what Auto plays.
+  if (settings.videoQuality === (1080 as never)) settings.videoQuality = 'auto';
   // Lossless downloads were removed; a saved default of Lossless becomes Best.
   if (settings.downloadQuality === ('lossless' as string)) settings.downloadQuality = 'best';
   // The mini player's on/off became when it comes up; off stays off.
@@ -569,7 +572,7 @@ export const DEFAULT_SETTINGS: Settings = {
   hideVideos: false,
   incognito: false,
   powerSaver: 'auto',
-  videoQuality: 1080,
+  videoQuality: 'auto',
   videoFit: 'fit',
   seekStyle: 'rounded',
   seekColor: 'white',
@@ -804,6 +807,8 @@ export interface ObsidianApi {
   prefetch(videoId: string): Promise<void>;
   streamInfo(videoId: string): Promise<StreamInfo | null>;
   /** Checks a lossless source's address: its name, or why it can't be used. */
+  /** The heights a music video offers (largest first) and the one playing, once it has loaded. */
+  videoHeights(videoId: string): Promise<{ heights: number[]; active?: number } | null>;
   testLosslessSource(url: string): Promise<{ ok: true; name: string; url: string } | { ok: false; error: string }>;
   loadLibrary(): Promise<LibraryData>;
   saveLibrary(patch: Partial<LibraryData>): Promise<void>;
