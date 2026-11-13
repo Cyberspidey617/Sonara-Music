@@ -197,6 +197,8 @@ export interface OnlineMusicVideo {
   channel: string;
   /** YouTube Music's own line-up of song and video: song-time → video-time stretches (seconds). */
   timeMap?: { from: number; to: number; length: number }[];
+  /** A new song's official lyric video or visualizer, until its music video is out. */
+  stopgap?: boolean;
 }
 
 /** Your YouTube Music account (for its Song/Video pairing). */

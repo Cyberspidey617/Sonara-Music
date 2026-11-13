@@ -10,6 +10,21 @@ type Note = { icon: LucideIcon; title: string; body: string; open?: () => void; 
 /** What each version brought, newest first. Shown once, after Sonara updates to it. */
 const NOTES: { version: string; notes: Note[] }[] = [
   {
+    version: '2.3.5',
+    notes: [
+      {
+        icon: Clapperboard,
+        title: 'The official video, the one everyone watches',
+        body: 'When a song has several videos that fit, Sonara now picks the most-watched official one.',
+      },
+      {
+        icon: Clapperboard,
+        title: 'New songs get a video right away',
+        body: 'A brand-new song whose music video isn’t out yet shows its official lyric video or visualizer from the artist’s or label’s channel. Sonara looks again later and switches to the music video once it’s out.',
+      },
+    ],
+  },
+  {
     version: '2.3.4',
     notes: [
       {

@@ -741,11 +741,32 @@ export interface FoundVideo {
   channel: string;
   /** From YouTube Music's own Song/Video pairing: song-time → video-time stretches, when it gave them. */
   timeMap?: { from: number; to: number; length: number }[];
+  /**
+   * A new song's official lyric video or visualizer, shown until its music video is out: looked for
+   * again after a while, and on every launch.
+   */
+  stopgap?: boolean;
 }
 
-const musicVideos = new Map<string, FoundVideo | null>();
+/** What was found for each song, and when (a stopgap or nothing is looked for again after a while). */
+const musicVideos = new Map<string, { found: FoundVideo | null; at: number }>();
+const LOOK_AGAIN = 6 * 60 * 60_000;
+/** Official, but not the music video: a lyric video or a visualizer (a new song's stopgap). */
+const LYRIC_LIKE = /\b(lyrics?|lyrical|visuali[sz]er)\b/;
+/** Uploaded within about three months ("3 weeks ago", "2 months ago"): a new song. */
+const RECENT = /\b(\d+\s*(seconds?|minutes?|hours?|days?|weeks?)|[1-3]\s*months?)\s*ago\b/i;
 /** Forget what was found (after signing in or out, the answers change). */
 export const clearMusicVideos = () => musicVideos.clear();
+
+/** Views from a label like "417M views" or "1,234,567 views"; 0 when it doesn't say. */
+export function parseViews(text: string): number {
+  const m = text.match(/([\d.,]+)\s*([KMB])?\s*views?\b/i);
+  if (!m) return 0;
+  const n = Number(m[1]!.replace(/,/g, ''));
+  return Number.isFinite(n) ? n * ({ K: 1e3, M: 1e6, B: 1e9 }[(m[2] ?? '').toUpperCase() as 'K' | 'M' | 'B'] ?? 1) : 0;
+}
+/** Of the videos that are the song, the most watched is the official one: a few points per tenfold. */
+const popularity = (views: number) => (views > 0 ? Math.round(Math.log10(views) * 8) : 0);
 
 /** Narrower than this (width / height) is a cover held still, not a picture worth showing. */
 const MIN_VIDEO_ASPECT = 1.2;
@@ -773,11 +794,13 @@ async function realPicture(yt: Innertube, videoId: string): Promise<boolean> {
  */
 export async function findMusicVideo(track: { videoId: string; title: string; artists: string[]; duration?: number; isVideo?: boolean; album?: string; explicit?: boolean }): Promise<FoundVideo | null> {
   if (track.isVideo) return { videoId: track.videoId, synced: true, title: track.title, channel: track.artists[0] ?? '' };
-  if (musicVideos.has(track.videoId)) return musicVideos.get(track.videoId)!;
+  const known = musicVideos.get(track.videoId);
+  // A music video found stays; a stopgap or nothing is looked for again after a while.
+  if (known && (known.found && !known.found.stopgap ? true : Date.now() - known.at < LOOK_AGAIN)) return known.found;
   const remember = (found: FoundVideo | null) => {
     if (musicVideos.size > 300) musicVideos.clear();
-    musicVideos.set(track.videoId, found);
-    log.info(`[${track.videoId}] music video: ${found ? `${found.videoId} (${found.timeMap ? 'paired by YouTube Music' : found.synced ? 'in time' : 'may not be in time'}, ${found.channel})` : 'none'}`);
+    musicVideos.set(track.videoId, { found, at: Date.now() });
+    log.info(`[${track.videoId}] music video: ${found ? `${found.videoId} (${found.stopgap ? 'stopgap until the music video is out' : found.timeMap ? 'paired by YouTube Music' : found.synced ? 'in time' : 'may not be in time'}, ${found.channel})` : 'none'}`);
     return found;
   };
 
@@ -819,7 +842,9 @@ export async function findMusicVideo(track: { videoId: string; title: string; ar
         }
       }
       const score = matchScore({ title: video.title, artists: video.artists.map((a) => a.name), ...(video.duration && { duration: video.duration }), ...(video.explicit !== undefined && { explicit: video.explicit }), ...(video.album?.name && { album: video.album.name }) }, target);
-      if (score !== null) official.push({ score, video });
+      // The row's "… • 417M views".
+      const views = parseViews(String(row.views ?? '') || JSON.stringify(row.flex_columns ?? row.subtitle ?? ''));
+      if (score !== null) official.push({ score: score + popularity(views), video });
     }
   };
 
@@ -837,6 +862,8 @@ export async function findMusicVideo(track: { videoId: string; title: string; ar
   let video = await pick(official);
   // 3. Not in YouTube Music's Videos: YouTube's own search, judged the same way (the artist's channel
   // or a trusted label's, never anyone else's upload).
+  // A new song's official lyric video or visualizer, for until its music video is out.
+  const stopgaps: { score: number; video: Track }[] = [];
   if (!video) {
     const more: { score: number; video: Track }[] = [];
     // Judged afresh, by its channel this time (YouTube Music may have listed it with other credits).
@@ -854,18 +881,27 @@ export async function findMusicVideo(track: { videoId: string; title: string; ar
         const title = String(v.title?.text ?? v.title ?? '');
         const channel = String(v.author?.name ?? '').replace(/\s*-\s*Topic$/i, '');
         const seconds = Number(v.duration?.seconds) || undefined;
-        if (!id || !title || !channel || judged.has(id) || id === track.videoId || NOT_A_VIDEO.test(title.toLowerCase())) continue;
+        if (!id || !title || !channel || judged.has(id) || id === track.videoId) continue;
+        const lower = title.toLowerCase();
+        // A lyric video or visualizer, only as a new song's stopgap: from the artist's or a trusted
+        // label's own channel (the match below), uploaded in the last few months.
+        const lyricLike = LYRIC_LIKE.test(lower) && RECENT.test(String(v.published?.text ?? ''));
+        if (NOT_A_VIDEO.test(lyricLike ? lower.replace(new RegExp(LYRIC_LIKE, 'g'), ' ') : lower)) continue;
         judged.add(id);
         // The uploader's own title, with YouTube Music's credits for the same video when it listed it
         // (it can title a video differently, "Mayavi (Balkan Mix)" for the original, and the channel
         // can be the composer's rather than the singer's).
         const artists = [channel, ...(credits.get(id) ?? [])];
         const score = matchScore({ title, artists, ...(seconds && { duration: seconds }) }, target);
-        if (score !== null) more.push({ score, video: { videoId: id, title, artists: artists.map((name) => ({ name })), ...(seconds && { duration: seconds }) } });
+        const views = parseViews(String(v.view_count?.text ?? v.short_view_count?.text ?? ''));
+        if (score !== null) (lyricLike ? stopgaps : more).push({ score: score + popularity(views), video: { videoId: id, title, artists: artists.map((name) => ({ name })), ...(seconds && { duration: seconds }) } });
       }
     }
     video = await pick(more);
   }
+  // Still none: a new song whose music video isn't out yet plays its official lyric video meanwhile.
+  const stopgap = !video && stopgaps.length ? await pick(stopgaps) : null;
+  if (stopgap) video = stopgap;
   return remember(
     video
       ? {
@@ -873,6 +909,7 @@ export async function findMusicVideo(track: { videoId: string; title: string; ar
           synced: !!(duration && video.duration && Math.abs(video.duration - duration) <= 3),
           title: video.title,
           channel: video.artists.map((a) => a.name).join(', '),
+          ...(stopgap && { stopgap: true }),
         }
       : null,
   );

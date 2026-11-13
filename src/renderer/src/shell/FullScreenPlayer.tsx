@@ -367,7 +367,13 @@ export function FullScreenPlayer() {
             className="relative grid size-8 animate-glyph place-items-center rounded-full text-secondary hover:bg-white/12 hover:text-primary aria-pressed:bg-white/16 aria-pressed:text-primary"
             aria-label={showVideo ? 'Hide the music video' : 'Show the music video'}
             aria-pressed={showVideo}
-            title={showVideo ? 'Hide the music video (Esc)' : 'Music video (plays with its own sound)'}
+            title={
+              showVideo
+                ? 'Hide the music video (Esc)'
+                : !videoAttached && found?.stopgap
+                  ? 'Official lyric video (the music video isn’t out yet; Sonara switches to it once it is)'
+                  : 'Music video (plays with its own sound)'
+            }
             onClick={() => (markStep('video'), setShowVideo((v) => !v))}
           >
             <Clapperboard size={16} />
