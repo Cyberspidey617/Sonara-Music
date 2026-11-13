@@ -10,6 +10,16 @@ type Note = { icon: LucideIcon; title: string; body: string; open?: () => void; 
 /** What each version brought, newest first. Shown once, after Sonara updates to it. */
 const NOTES: { version: string; notes: Note[] }[] = [
   {
+    version: '2.3.6',
+    notes: [
+      {
+        icon: Clapperboard,
+        title: 'No more frozen videos',
+        body: 'Some songs showed a single still picture in Video mode, which looked like a stuck video. Sonara now passes over those and finds the real music video, including a film’s shorter cut of the song.',
+      },
+    ],
+  },
+  {
     version: '2.3.5',
     notes: [
       {
