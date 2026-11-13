@@ -42,6 +42,10 @@ export interface LosslessSource {
 export interface AudioFormat {
   codec: string;
   lossless: boolean;
+  /** A Dolby Atmos mix (from a lossless source), played as its 5.1 or 7.1 channels. */
+  atmos?: boolean;
+  /** Channels, when more than two. */
+  channels?: number;
   bitDepth?: number;
   sampleRate?: number;
   /** Bits per second. */
@@ -379,6 +383,8 @@ export interface Settings {
   hideVideos: boolean;
   /** Incognito: nothing you play is kept (history, Wrapped, scrobbles, skips) or shapes your recommendations. */
   incognito: boolean;
+  /** Dolby Atmos: play a song's Atmos mix when a lossless source offers one. */
+  dolbyAtmos: boolean;
   /** Eco mode: fewer frames and simpler glass, to use less of the PC. Auto: while on battery. */
   powerSaver: 'auto' | 'on' | 'off';
   /** Music videos: the highest quality to stream. */
@@ -579,6 +585,7 @@ export const DEFAULT_SETTINGS: Settings = {
   hideVideos: false,
   incognito: false,
   powerSaver: 'auto',
+  dolbyAtmos: true,
   videoQuality: 'auto',
   videoFit: 'fit',
   seekStyle: 'rounded',

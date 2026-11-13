@@ -6,7 +6,7 @@
  * overlap for the crossfade's length. Only the active deck's events count.
  */
 import { markStep } from '@/lib/checklist';
-import { attachEqualizer } from '@/lib/equalizer';
+import { attachEqualizer, setSurround } from '@/lib/equalizer';
 import { markOffline } from './online';
 import { create } from 'zustand';
 import { isYouTubeId, seekLookOf, type AudioFormat, type Track, type TrackSource } from '@shared/types';
@@ -999,4 +999,11 @@ api.onCommand((command) => {
     const track = s.queue[s.index]?.track;
     if (track) toast(useLibrary.getState().toggleLike(track) ? `Liked “${track.title}”` : `Removed “${track.title}” from Liked Songs`);
   }
+});
+
+// A Dolby Atmos mix plays as its 5.1 or 7.1 channels; everything else, as stereo.
+usePlayer.subscribe((s, before) => {
+  if (s.playingAs === before.playingAs) return;
+  const f = s.playingAs?.format;
+  setSurround(f?.atmos ? (f.channels ?? 6) : 0);
 });

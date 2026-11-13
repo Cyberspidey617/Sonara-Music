@@ -19,6 +19,7 @@ import path from 'node:path';
 import type { AudioFormat, LosslessSource } from '../shared/types';
 import { log } from './log';
 import { proxy, serveFile } from './media';
+import { atmosDecoderAvailable, decodeAtmos, downloadTo } from './atmos';
 
 interface Manifest {
   id?: string;
@@ -44,6 +45,8 @@ export interface AddonTrack {
 
 interface AddonStream {
   url?: string;
+  audioMode?: string;
+  audioModes?: string[];
   format?: string;
   quality?: string;
   streamQuality?: string;
@@ -83,7 +86,7 @@ async function manifestOf(base: string): Promise<Manifest | null> {
 }
 
 /** The parameters every request carries: the source's own defaults, then the best quality it offers. */
-async function paramsFor(base: string): Promise<URLSearchParams> {
+async function paramsFor(base: string, atmos = false): Promise<URLSearchParams> {
   const params = new URLSearchParams();
   const settings = (await manifestOf(base))?.settings ?? [];
   for (const s of settings) {
@@ -92,6 +95,8 @@ async function paramsFor(base: string): Promise<URLSearchParams> {
   // A source with a quality picker lists its options best first; one without one takes the word.
   const options = settings.find((s) => s.key === 'quality')?.options?.map((o) => String(o.value ?? '')).filter(Boolean) ?? [];
   params.set('quality', options.find((o) => /hi[-_ ]?res/i.test(o)) ?? options.find((o) => /lossless|flac/i.test(o)) ?? options[0] ?? 'LOSSLESS');
+  // Dolby Atmos wanted: the protocol's hint that an Atmos mix may be sent where there is one.
+  if (atmos && !params.has('atmos')) params.set('atmos', 'auto');
   return params;
 }
 
@@ -118,7 +123,9 @@ export async function testSource(raw: string): Promise<{ ok: true; name: string;
   }
 }
 
-const ATMOS = /atmos|dolby|eac3|ec-?3|360ra/i;
+export const ATMOS = /atmos|dolby|eac3|ec-?3|360ra/i;
+/** A row that is a song's Atmos mix (some catalogues list it as a track of its own). */
+export const isAtmosRow = (t: AddonTrack) => !!t.atmos || ATMOS.test(`${t.audioQuality ?? ''} ${t.audioMode ?? ''} ${(t.audioModes ?? []).join(' ')}`);
 const LOSSLESS = /flac|alac|lossless|hi[-_ ]?res|wav|pcm|24[-_ ]?bit/i;
 
 /** What a row or stream says it is, from its fields or its quality label. */
@@ -138,18 +145,20 @@ export function formatFrom(text: string, fields: { codec?: string; sampleRate?: 
   };
 }
 
-/** Stereo, playable rows a source holds for a query. */
-export async function searchSource(source: LosslessSource, query: string): Promise<AddonTrack[]> {
+/** Playable rows a source holds for a query: stereo ones, and Atmos mixes when they're wanted. */
+export async function searchSource(source: LosslessSource, query: string, atmos = false): Promise<AddonTrack[]> {
   const base = normalizeBase(source.url);
-  const params = await paramsFor(base);
+  const params = await paramsFor(base, atmos);
   params.set('q', query);
   const res = await getJson<{ tracks?: AddonTrack[] }>(`${base}/search?${params}`);
-  return (res.tracks ?? []).filter((t) => t?.id && t.title && !t.atmos && !ATMOS.test(`${t.audioQuality ?? ''} ${t.audioMode ?? ''} ${(t.audioModes ?? []).join(' ')}`));
+  return (res.tracks ?? []).filter((t) => t?.id && t.title && (atmos || !isAtmosRow(t)));
 }
 
 interface Resolved {
   url: string;
   dash: boolean;
+  /** A Dolby Atmos mix, played once decoded. */
+  atmos: boolean;
   format: AudioFormat;
   at: number;
 }
@@ -157,26 +166,33 @@ const resolved = new Map<string, Resolved>();
 /** Links from a source expire; a found one is reused for a few minutes (the player asks many times while seeking). */
 const LINK_TTL = 4 * 60_000;
 
-export async function resolveSourceStream(source: LosslessSource, trackId: string, rowStreamUrl?: string): Promise<Resolved> {
-  const key = `${source.id}:${trackId}`;
+export async function resolveSourceStream(source: LosslessSource, trackId: string, rowStreamUrl?: string, atmos = false): Promise<Resolved> {
+  const key = `${source.id}:${trackId}:${atmos ? 'atmos' : 'stereo'}`;
   const hit = resolved.get(key);
   if (hit && Date.now() - hit.at < LINK_TTL) return hit;
   const base = normalizeBase(source.url);
   let answer: AddonStream;
   if (rowStreamUrl) answer = { url: rowStreamUrl };
   else {
-    const params = await paramsFor(base);
+    const params = await paramsFor(base, atmos);
     answer = await getJson<AddonStream>(`${base}/stream/${encodeURIComponent(trackId)}?${params}`);
   }
   if (!answer.url) throw new Error(answer.error || 'The source had no audio for this song.');
   const encrypted = typeof answer.encrypted === 'string' ? !/^(false|none|)$/i.test(answer.encrypted) : answer.encrypted === true;
   if (encrypted) throw new Error('The source sent protected audio, which Sonara can’t play.');
   const text = `${answer.quality ?? ''} ${answer.streamQuality ?? ''} ${answer.audioQuality ?? ''} ${answer.format ?? ''}`;
-  if (ATMOS.test(`${text} ${answer.codec ?? ''}`)) throw new Error('The source sent a Dolby Atmos mix, which Sonara can’t play.');
+  const isAtmos = ATMOS.test(`${text} ${answer.codec ?? ''} ${answer.audioMode ?? ''} ${(answer.audioModes ?? []).join(' ')}`);
+  if (isAtmos && !(atmos && atmosDecoderAvailable())) throw new Error('The source sent a Dolby Atmos mix, and Dolby Atmos is off.');
   const transport = (answer.manifest || answer.mediaType || answer.format || '').toLowerCase();
   if (/hls|m3u8|mpegurl/.test(transport)) throw new Error('The source sent an HLS stream, which Sonara can’t play yet.');
   const dash = /dash|mpd/.test(transport) || /\.mpd(\?|$)/i.test(answer.url) || answer.url.startsWith('data:application/dash+xml');
-  const r: Resolved = { url: answer.url, dash, format: formatFrom(text, answer), at: Date.now() };
+  const r: Resolved = {
+    url: answer.url,
+    dash,
+    atmos: isAtmos,
+    format: isAtmos ? { codec: 'Dolby Atmos', lossless: false, atmos: true, ...(answer.bitrate && answer.bitrate > 0 && { bitrate: answer.bitrate > 3000 ? answer.bitrate : answer.bitrate * 1000 }) } : formatFrom(text, answer),
+    at: Date.now(),
+  };
   resolved.set(key, r);
   if (resolved.size > 200) resolved.delete(resolved.keys().next().value!);
   return r;
@@ -286,20 +302,43 @@ async function assemble(key: string, manifestUrl: string): Promise<string> {
     await fs.promises.writeFile(`${file}.part`, Buffer.concat(parts));
     await fs.promises.rename(`${file}.part`, file);
     // Keep the cache to the last dozen songs.
-    const kept = (await fs.promises.readdir(cacheDir)).filter((f) => f.endsWith('.m4a')).map((f) => path.join(cacheDir, f));
-    if (kept.length > 12) {
-      const byAge = kept.map((f) => ({ f, t: fs.statSync(f).mtimeMs })).sort((a, b) => a.t - b.t);
-      for (const { f } of byAge.slice(0, kept.length - 12)) fs.rm(f, { force: true }, () => undefined);
-    }
+    trimCache();
     return file;
   })().finally(() => assembling.delete(file));
   assembling.set(file, job);
   return job;
 }
 
-/** Serves a source's song to the player: proxied with byte ranges, or put together from DASH first. */
-export async function serveSourceSong(source: LosslessSource, trackId: string, rowStreamUrl: string | undefined, range: string | null): Promise<{ response: Response; format: AudioFormat }> {
-  const r = await resolveSourceStream(source, trackId, rowStreamUrl);
+/** Keeps the cache to the last dozen songs (each song's files go together). */
+function trimCache() {
+  void fs.promises
+    .readdir(cacheDir)
+    .then((names) => {
+      const songs = new Map<string, { files: string[]; t: number }>();
+      for (const name of names) {
+        const id = name.split('.')[0]!;
+        const file = path.join(cacheDir, name);
+        const entry = songs.get(id) ?? { files: [], t: 0 };
+        entry.files.push(file);
+        entry.t = Math.max(entry.t, fs.statSync(file).mtimeMs);
+        songs.set(id, entry);
+      }
+      const byAge = [...songs.values()].sort((a, b) => a.t - b.t);
+      for (const { files } of byAge.slice(0, Math.max(0, byAge.length - 12))) for (const f of files) fs.rm(f, { force: true }, () => undefined);
+    })
+    .catch(() => undefined);
+}
+
+/** Serves a source's song to the player: proxied with byte ranges, put together from DASH first, or (an Atmos mix) decoded first. */
+export async function serveSourceSong(source: LosslessSource, trackId: string, rowStreamUrl: string | undefined, range: string | null, atmos = false): Promise<{ response: Response; format: AudioFormat }> {
+  const r = await resolveSourceStream(source, trackId, rowStreamUrl, atmos);
+  if (r.atmos) {
+    const key = `${source.id}:${trackId}:atmos`;
+    const input = r.dash ? await assemble(key, r.url) : await downloadTo(r.url, cacheDir, key);
+    const decoded = await decodeAtmos(input);
+    trimCache();
+    return { response: await serveFile(decoded.file, range), format: { ...r.format, channels: decoded.channels, sampleRate: decoded.sampleRate } };
+  }
   if (r.dash) {
     const file = await assemble(`${source.id}:${trackId}`, r.url);
     return { response: await serveFile(file, range), format: r.format };
@@ -307,7 +346,7 @@ export async function serveSourceSong(source: LosslessSource, trackId: string, r
   const response = await proxy(r.url, range);
   if (!response.ok) {
     log.warn(`lossless source ${source.name}: stream answered ${response.status}`);
-    resolved.delete(`${source.id}:${trackId}`);
+    resolved.delete(`${source.id}:${trackId}:${atmos ? 'atmos' : 'stereo'}`);
   }
   return { response, format: r.format };
 }

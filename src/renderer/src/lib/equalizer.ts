@@ -104,7 +104,7 @@ type Graph = {
   out: GainNode;
   meter: AnalyserNode;
   routed: 'direct' | 'eq' | null;
-  spatial: { node: AudioNode; mode: SpatialAudio } | null;
+  spatial: { node: AudioNode; mode: SpatialAudio | 'surround' } | null;
 };
 
 let elements: readonly HTMLAudioElement[] = [];
@@ -283,13 +283,81 @@ function speakerStage(ctx: BaseAudioContext, input: AudioNode, output: AudioNode
   merge.connect(room).connect(roomLevel).connect(output);
 }
 
+// ---- Dolby Atmos: 5.1 and 7.1 ---------------------------------------------------------
+
+/** The channels playing now: 6 or 8 for a Dolby Atmos mix, 0 for stereo. */
+let surround = 0;
+
+/**
+ * Where each channel of a 5.1 or 7.1 mix sits around you, in the order the decoder gives them:
+ * front left and right, centre, LFE (the bass channel, no place of its own), then the surrounds
+ * (beside you in 5.1; behind, then beside, in 7.1).
+ */
+const SPEAKERS: Record<number, (number | null)[]> = {
+  6: [-30, 30, 0, null, -110, 110],
+  8: [-30, 30, 0, null, -150, 150, -95, 95],
+};
+
+/**
+ * A surround mix on headphones or stereo speakers: each channel from a virtual speaker at its place,
+ * through HRTF, the LFE low-passed into both ears, with the headphone tone correction and a touch
+ * of room. (A surround system gets the channels as they are instead.)
+ */
+function surroundStage(ctx: BaseAudioContext, input: AudioNode, output: AudioNode, channels: number) {
+  const places = SPEAKERS[channels] ?? SPEAKERS[6]!;
+  const split = ctx.createChannelSplitter(places.length);
+  split.channelInterpretation = 'discrete';
+  input.connect(split);
+  const wet = ctx.createGain();
+  // Six or eight sources add up: a little lower, the limiter after catches the rest.
+  wet.gain.value = 0.62;
+  places.forEach((degrees, channel) => {
+    if (degrees === null) {
+      const lfe = ctx.createGain();
+      lfe.gain.value = 0.7;
+      split.connect(filter(ctx, 'lowpass', 120), channel).connect(lfe).connect(wet);
+    } else split.connect(virtualSpeaker(ctx, degrees, degrees === 0 ? 0 : 5), channel).connect(wet);
+  });
+  let voiced: AudioNode = wet;
+  for (const [frequency, gain, q] of HEADPHONE_CORRECTION) {
+    const peak = ctx.createBiquadFilter();
+    peak.type = 'peaking';
+    peak.frequency.value = frequency;
+    peak.gain.value = gain;
+    peak.Q.value = q;
+    voiced = voiced.connect(peak);
+  }
+  voiced.connect(output);
+  const room = ctx.createConvolver();
+  room.normalize = false;
+  room.buffer = roomImpulse(ctx);
+  const roomLevel = ctx.createGain();
+  roomLevel.gain.value = 0.08;
+  voiced.connect(room).connect(roomLevel).connect(output);
+}
+
+/** Whether the output (a surround system) takes this many channels as they are. */
+const discreteOutput = (channels: number) => !!graph && graph.ctx.destination.maxChannelCount >= channels;
+
 /** Puts Spatial Audio after the equalizer, or takes it out of the path entirely when off. */
-function applySpatial(mode: SpatialAudio) {
+function applySpatial(requested: SpatialAudio) {
   const g = graph!;
-  if ((g.spatial?.mode ?? 'off') === mode) return;
+  // A Dolby Atmos mix takes the stage: out to a surround system as it is, or around you on virtual speakers.
+  const mode = surround ? 'surround' : requested;
+  if ((g.spatial?.mode ?? 'off') === mode && !(mode === 'surround')) return;
   g.post.disconnect();
   g.spatial?.node.disconnect();
   g.spatial = null;
+  const dest = g.ctx.destination;
+  if (surround && discreteOutput(surround)) {
+    dest.channelCount = surround;
+    dest.channelInterpretation = 'discrete';
+    g.post.connect(g.out);
+    g.spatial = { node: g.post, mode: 'surround' };
+    return;
+  }
+  dest.channelCount = 2;
+  dest.channelInterpretation = 'speakers';
   if (mode === 'off') {
     g.post.connect(g.out);
     return;
@@ -302,15 +370,28 @@ function applySpatial(mode: SpatialAudio) {
   limiter.ratio.value = 20;
   limiter.attack.value = 0.002;
   limiter.release.value = 0.12;
-  (mode === 'headphones' ? headphoneStage : speakerStage)(g.ctx, input, limiter);
+  if (mode === 'surround') surroundStage(g.ctx, input, limiter, surround);
+  else (mode === 'headphones' ? headphoneStage : speakerStage)(g.ctx, input, limiter);
   limiter.connect(g.out);
   g.post.connect(input);
   g.spatial = { node: input, mode };
 }
 
+/** The player says how many channels the song has: 6 or 8 for a Dolby Atmos mix, 0 for stereo. */
+export function setSurround(channels: number) {
+  const next = channels >= 6 ? channels : 0;
+  if (next === surround) return;
+  surround = next;
+  const { eq, spatialAudio } = useLibrary.getState().settings;
+  if (eq) applyAudio(eq, spatialAudio ?? 'off');
+}
+
+/** How a Dolby Atmos mix is being played, for the badge: on a surround system, or on virtual speakers. */
+export const surroundOutput = (): 'system' | 'virtual' | null => (surround ? (discreteOutput(surround) ? 'system' : 'virtual') : null);
+
 /** The equalizer and Spatial Audio, as the settings say. */
 export function applyAudio(eq: EqSettings, spatial: SpatialAudio = 'off') {
-  if (!graph && !eq.enabled && spatial === 'off') return; // never used: the untouched path
+  if (!graph && !eq.enabled && spatial === 'off' && !surround) return; // never used: the untouched path
   if (!graph) build();
   const g = graph!;
   const now = g.ctx.currentTime;
@@ -356,10 +437,10 @@ function measure(freqs: number[]): { rms: number; bands: Record<number, number> 
   }
   return { rms, bands };
 }
-(window as unknown as { __obsidianEq: unknown }).__obsidianEq = { path: () => eqPath(), measure, stages: { headphones: headphoneStage, speakers: speakerStage } };
+(window as unknown as { __obsidianEq: unknown }).__obsidianEq = { path: () => eqPath(), measure, stages: { headphones: headphoneStage, speakers: speakerStage, surround: surroundStage } };
 
 /** For tests and the readout: what the audio is going through right now. */
-export function eqPath(): { path: 'native' | 'direct' | 'eq'; spatial?: SpatialAudio; sampleRate?: number } {
+export function eqPath(): { path: 'native' | 'direct' | 'eq'; spatial?: SpatialAudio | 'surround'; sampleRate?: number } {
   if (!graph) return { path: 'native' };
   return { path: graph.routed ?? 'direct', spatial: graph.spatial?.mode ?? 'off', sampleRate: graph.ctx.sampleRate };
 }

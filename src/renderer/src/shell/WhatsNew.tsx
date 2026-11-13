@@ -10,6 +10,26 @@ type Note = { icon: LucideIcon; title: string; body: string; open?: () => void; 
 /** What each version brought, newest first. Shown once, after Sonara updates to it. */
 const NOTES: { version: string; notes: Note[] }[] = [
   {
+    version: '2.3.4',
+    notes: [
+      {
+        icon: Sparkles,
+        title: 'Dolby Atmos',
+        body: 'With Audio quality on Lossless, a song’s Dolby Atmos mix plays when one of your lossless sources has it: its 5.1 or 7.1 channels on a surround system, or placed around you on headphones and stereo speakers. It takes a few seconds to start the first time. Turn it off in Settings › Playback.',
+      },
+      {
+        icon: Clapperboard,
+        title: 'More official videos',
+        body: 'Videos from labels’ and studios’ own channels (Sony Music South, T-Series, Saregama, Sun TV and more) are found now, even with an intro that makes them longer than the song.',
+      },
+      {
+        icon: Clapperboard,
+        title: 'Video controls come back',
+        body: 'Moving the mouse along the top of a video brings its controls back, every time.',
+      },
+    ],
+  },
+  {
     version: '2.3.3',
     notes: [
       {

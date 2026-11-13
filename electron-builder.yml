@@ -12,6 +12,11 @@ extraResources:
   - from: resources
     to: .
     filter: ['**/*']
+  # FFmpeg as WebAssembly (GPL-2.0-or-later): decodes Dolby Atmos (E-AC-3) mixes from lossless
+  # sources, which Chromium can't. One file for every platform.
+  - from: node_modules/@ffmpeg/core/dist/umd
+    to: ffmpeg
+    filter: ['ffmpeg-core.js', 'ffmpeg-core.wasm']
 asar: true
 # Electron fuses: switches baked into the executable. Off, nothing else on the PC can run code as
 # Sonara by starting it as plain Node (ELECTRON_RUN_AS_NODE), through NODE_OPTIONS, or with

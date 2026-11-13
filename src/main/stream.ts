@@ -393,7 +393,7 @@ function chunkedBody(videoId: string, quality: StreamKind, first: ResolvedStream
   });
 }
 
-export async function handleStreamRequest(request: Request, defaultQuality: () => AudioQuality, sources: () => LosslessSource[] = () => []): Promise<Response> {
+export async function handleStreamRequest(request: Request, defaultQuality: () => AudioQuality, sources: () => LosslessSource[] = () => [], atmos: () => boolean = () => false): Promise<Response> {
   const url = new URL(request.url);
   const videoId = decodeURIComponent(url.pathname.replace(/^\/+/, '')).split('/')[0] ?? '';
   const q = url.searchParams.get('q');
@@ -409,13 +409,13 @@ export async function handleStreamRequest(request: Request, defaultQuality: () =
     const artist = url.searchParams.get('a') ?? '';
     const duration = Number(url.searchParams.get('d')) || undefined;
     let match: LosslessMatch | null = null;
-    if (title) match = await findLosslessMatch({ videoId, title, artist, duration }, sources()).catch(() => null);
+    if (title) match = await findLosslessMatch({ videoId, title, artist, duration }, sources(), atmos()).catch(() => null);
     if (match) {
       const range = request.headers.get('range');
       let response: Response;
       try {
         if (match.source === 'addon') {
-          const served = await serveSourceSong(match.addon, match.trackId, match.streamURL, range);
+          const served = await serveSourceSong(match.addon, match.trackId, match.streamURL, range, atmos());
           refineFormat(videoId, served.format);
           response = served.response;
         } else response = match.source === 'local' ? await serveFile(match.entry.path, range) : await serveServerSong(match.id, range);

@@ -17,6 +17,7 @@ import { getScanState, localAlbum, localAlbums, localTracks, openLibrary, scan, 
 import { clearMatches } from './lossless';
 import { openAddons, testSource } from './addons';
 import { aboutSong } from './about';
+import { atmosDecoderAvailable } from './atmos';
 import { accountStatus, cancelCodeSignIn, openAccount, signIn, signInWithCode, signOut } from './account';
 import { beginLastFm, connectListenBrainz, disconnect as disconnectScrobbling, finishLastFm, maybeScrobble, nowPlaying, openScrobbler, scrobbleStatus } from './scrobble';
 import { handleMediaRequest, serveFile } from './media';
@@ -332,7 +333,7 @@ function registerProtocols() {
   protocol.handle('ytstream', (request) => {
     const id = decodeURIComponent(new URL(request.url).pathname.replace(/^\/+/, '')).split('/')[0] ?? '';
     const saved = downloadedFile(id);
-    return saved ? serveFile(saved.path!, request.headers.get('range')) : handleStreamRequest(request, () => getLibrary().settings.quality, () => getLibrary().settings.losslessSources ?? []);
+    return saved ? serveFile(saved.path!, request.headers.get('range')) : handleStreamRequest(request, () => getLibrary().settings.quality, () => getLibrary().settings.losslessSources ?? [], () => getLibrary().settings.dolbyAtmos !== false && atmosDecoderAvailable());
   });
   protocol.handle('media', (request) => {
     const url = new URL(request.url);
@@ -495,7 +496,7 @@ function registerIpc() {
     if (patch.settings && ('proxy' in patch.settings || 'proxyUrl' in patch.settings)) void applyProxy(getLibrary().settings.proxy, getLibrary().settings.proxyUrl);
     if (patch.settings && 'closeToTray' in patch.settings) ensureTray();
     if (patch.settings && 'globalShortcuts' in patch.settings) registerShortcuts();
-    if (patch.settings && 'losslessSources' in patch.settings) clearMatches();
+    if (patch.settings && ('losslessSources' in patch.settings || 'dolbyAtmos' in patch.settings)) clearMatches();
   });
   handle('app:open-external', async (url: string) => {
     if (/^https:\/\//.test(url)) await shell.openExternal(url);

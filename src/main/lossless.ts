@@ -8,7 +8,7 @@
  * don't stand in for the studio track).
  */
 import type { AudioFormat, LosslessSource, StreamInfo } from '../shared/types';
-import { formatFrom, searchSource } from './addons';
+import { formatFrom, isAtmosRow, searchSource } from './addons';
 import { allEntries, type LocalEntry } from './library';
 import { log } from './log';
 import { isServerConfigured, searchServer, songInfo } from './subsonic';
@@ -60,7 +60,7 @@ function durationOk(a: number | undefined, b: number | undefined, exactTitle: bo
 }
 
 function score(q: MatchQuery, title: string, artists: string[], duration: number | undefined, format: AudioFormat): number {
-  if (!format.lossless) return 0;
+  if (!format.lossless && !format.atmos) return 0;
   const want = normalizeTitle(q.title);
   const have = normalizeTitle(title);
   if (!want || !have) return 0;
@@ -79,7 +79,7 @@ export function clearMatches() {
   cache.clear();
 }
 
-export async function findLosslessMatch(q: MatchQuery, sources: LosslessSource[] = []): Promise<LosslessMatch | null> {
+export async function findLosslessMatch(q: MatchQuery, sources: LosslessSource[] = [], atmos = false): Promise<LosslessMatch | null> {
   const known = cache.get(q.videoId);
   if (known && (known.match || Date.now() - known.at < MISS_TTL)) return known.match;
 
@@ -109,12 +109,13 @@ export async function findLosslessMatch(q: MatchQuery, sources: LosslessSource[]
   for (const addon of best ? [] : sources.filter((x) => x.enabled)) {
     try {
       const query = `${normalizeTitle(q.title)} ${artistTokens(q.artist)[0] ?? ''}`.trim();
-      for (const t of await searchSource(addon, query)) {
-        const format = formatFrom(`${t.audioQuality ?? ''} ${t.format ?? ''}`);
+      for (const t of await searchSource(addon, query, atmos)) {
+        // An Atmos mix (wanted, or it wouldn't be listed) beats the stereo master of the same song.
+        const format = isAtmosRow(t) ? { codec: 'Dolby Atmos', lossless: false, atmos: true } : formatFrom(`${t.audioQuality ?? ''} ${t.format ?? ''}`);
         // A row that doesn't say its quality is taken as lossless: what the stream says decides the badge.
         if (!t.audioQuality && !t.format) format.lossless = true;
-        const s = score(q, t.title, [t.artist], t.duration && t.duration > 0 ? Math.round(t.duration) : undefined, format);
-        if (s > 0 && (!best || s > best.score)) best = { score: s, match: { source: 'addon', addon, trackId: t.id, ...(t.streamURL && { streamURL: t.streamURL }), format } };
+        const s = score(q, t.title, [t.artist], t.duration && t.duration > 0 ? Math.round(t.duration) : undefined, format) + (format.atmos ? 50 : 0);
+        if (s > 50 * Number(!!format.atmos) && (!best || s > best.score)) best = { score: s, match: { source: 'addon', addon, trackId: t.id, ...(t.streamURL && { streamURL: t.streamURL }), format } };
       }
       if (best) break;
     } catch (error) {
@@ -132,7 +133,7 @@ export async function findLosslessMatch(q: MatchQuery, sources: LosslessSource[]
 export function losslessInfo(videoId: string): StreamInfo | null {
   const match = cache.get(videoId)?.match;
   if (!match) return null;
-  return { videoId, source: match.source, ...(match.source === 'addon' && { sourceName: match.addon.name }), mimeType: `audio/${match.format.codec.toLowerCase()}`, format: match.format };
+  return { videoId, source: match.source, ...(match.source === 'addon' && { sourceName: match.addon.name }), mimeType: match.format.atmos ? 'audio/flac' : `audio/${match.format.codec.toLowerCase()}`, format: match.format };
 }
 
 /** A source's stream said more about the audio than its search row did (24-bit, 96 kHz…). */

@@ -1,8 +1,13 @@
 import type { AudioFormat, TrackSource } from '@shared/types';
 import { usePlayer } from '@/state/player';
+import { surroundOutput } from '@/lib/equalizer';
 
 export function describeFormat(f: AudioFormat | undefined): string {
   if (!f) return '';
+  if (f.atmos) {
+    const output = surroundOutput();
+    return ['Dolby Atmos', f.channels === 8 ? '7.1' : '5.1', output === 'system' ? 'on your surround system' : 'on virtual speakers'].join(' · ');
+  }
   const parts = [f.codec];
   if (f.lossless && f.bitDepth) parts.push(`${f.bitDepth}-bit`);
   if (f.lossless && f.sampleRate) parts.push(`${+(f.sampleRate / 1000).toFixed(1)} kHz`);
@@ -19,6 +24,20 @@ export function NowPlayingQuality({ detailed = false, className = '' }: { detail
   const { format, source, sourceName } = playingAs;
   const from = sourceName ?? SOURCE[source];
   const hiRes = format.lossless && ((format.bitDepth ?? 16) > 16 || (format.sampleRate ?? 44100) > 48000);
+  if (format.atmos) {
+    return detailed ? (
+      <span className={`inline-flex items-center gap-2 ${className}`} title={from}>
+        <span className="inline-flex h-[17px] items-center rounded-[4px] bg-white/90 px-1.5 text-[10px] leading-none font-bold tracking-wide text-black">DOLBY ATMOS</span>
+        <span className="type-callout-medium text-tertiary">
+          {describeFormat(format)} · {from}
+        </span>
+      </span>
+    ) : (
+      <span className={`inline-flex h-[15px] flex-none items-center rounded-[3px] border border-current px-1 text-[9px] leading-none font-bold tracking-wide text-key ${className}`} title={`${describeFormat(format)} · ${from}`}>
+        ATMOS
+      </span>
+    );
+  }
   if (!detailed) {
     if (!format.lossless) return null;
     return (

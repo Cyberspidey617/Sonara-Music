@@ -175,6 +175,12 @@ function PlaybackTab() {
         <Row title="Hide music videos" detail="Songs only on Home and in search: music videos are left out. You can still watch a song’s video in the full-screen player.">
           <Toggle label="Hide music videos" on={s.hideVideos} onChange={(hideVideos) => set({ hideVideos })} />
         </Row>
+        <Row
+          title="Dolby Atmos"
+          detail="With Audio quality on Lossless, a song’s Dolby Atmos mix plays when one of your lossless sources has it: its 5.1 or 7.1 channels, on your surround system, or placed around you on headphones and stereo speakers. Sonara decodes it itself, so it takes a few seconds to start."
+        >
+          <Toggle label="Dolby Atmos" on={s.dolbyAtmos !== false} onChange={(dolbyAtmos) => set({ dolbyAtmos })} />
+        </Row>
         <Row title="Normalize volume" detail="Even out loudness between YouTube songs. Your own files play as mastered.">
           <Toggle label="Normalize volume" on={s.normalize} onChange={(normalize) => set({ normalize })} />
         </Row>
