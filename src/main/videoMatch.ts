@@ -1,7 +1,7 @@
 /*
  * Whether a video is the same recording as a song: the title with its packaging taken off ("(From
  * …)", "Official Video", "Artist - "), the take it is (remix, live, cover…, which must agree both
- * ways), the song's artist credited on the video, and a length within 90 s (a music video runs
+ * ways), the song's artist credited on the video, and a length within 3 minutes (a music video runs
  * longer for its intro and outro). Strict on purpose: no video is better than the wrong one.
  */
 
@@ -257,8 +257,9 @@ export function matchScore(candidate: MatchCandidate, target: MatchTarget): numb
   const titleSet = new Set(titleWords.split(' '));
   const namesArtist = wantNames.some((w) => titleWords.includes(w) || w.split(' ').some((part) => part.length > 4 && titleSet.has(part)));
   // A trusted label's own upload counts like the artist's, when its title names the film (the
-  // song's "From …") or one of its artists: so it's that song, not another of the label's.
-  const namesRelease = [...want.context].some((w) => w.length > 3 && titleSet.has(w));
+  // song's "From …", or its album) or one of its artists: so it's that song, not another of the label's.
+  const releaseWords = [...want.context, ...albumKey(target.album).split(' ')];
+  const namesRelease = releaseWords.some((w) => w.length > 3 && titleSet.has(w));
   const byLabel = TRUSTED_LABELS.test(gotNames.join(' ')) && (namesArtist || namesRelease);
   const shared = exact || byLabel || wantNames.some((w) => gotNames.some((g) => sameArtist(w, g)));
   const drift = target.duration && candidate.duration ? Math.abs(target.duration - candidate.duration) : null;
@@ -273,7 +274,8 @@ export function matchScore(candidate: MatchCandidate, target: MatchTarget): numb
   }
   let durationScore = 0;
   if (drift !== null) {
-    if (drift > 90) return null;
+    // The video plays with its own sound, so a long intro or outro is fine; a far longer one isn't the same piece.
+    if (drift > 180) return null;
     durationScore = drift <= 3 ? 40 : drift <= 30 ? 15 : 0;
   }
   // The explicit and the clean edition aren't the same recording.

@@ -209,8 +209,6 @@ export function FullScreenPlayer() {
   }, [showVideo, found, wantedHeight]);
   const videoKey = track?.videoId;
   const online = useOnline((s) => s.online);
-  // The "may not be in sync" note: shown when the video opens, then it fades away.
-  const unsynced = showVideo && !videoAttached && !!found && !found.synced;
   const videoFit = useLibrary((s) => s.settings.videoFit) || 'fit';
   // While the video is on, the controls (and the pointer) fade away when the mouse rests.
   const [idle, setIdle] = useState(false);
@@ -240,13 +238,6 @@ export function FullScreenPlayer() {
     else delete document.documentElement.dataset.videoIdle;
     return () => void delete document.documentElement.dataset.videoIdle;
   }, [hidden]);
-  const [syncNote, setSyncNote] = useState(false);
-  useEffect(() => {
-    setSyncNote(unsynced);
-    if (!unsynced) return;
-    const timer = setTimeout(() => setSyncNote(false), 6000);
-    return () => clearTimeout(timer);
-  }, [unsynced, found?.videoId]);
   useEffect(() => {
     setVideoLoaded(false);
     setAttachedUrl(null);
@@ -331,9 +322,9 @@ export function FullScreenPlayer() {
         <MusicVideo
           active={showVideo}
           url={videoUrl}
-          // In time with the song: the song is heard, as before. Not in time: the video's own sound,
-          // with the song going on silently.
-          audioUrl={!videoAttached && found && !found.synced ? `ytstream://track/${encodeURIComponent(found.videoId)}?q=high` : null}
+          // In video mode you hear the video itself (its own sound, always in time with its picture),
+          // the song going on silently; minimised, the song plays again.
+          audioUrl={!videoAttached && found ? `ytstream://track/${encodeURIComponent(found.videoId)}?q=high` : null}
           fit={videoFit}
           {...(!videoAttached && found?.timeMap && { timeMap: found.timeMap })}
           onClose={() => setShowVideo(false)}
@@ -349,13 +340,6 @@ export function FullScreenPlayer() {
         />
       )}
       {showVideo && videoUrl && <VideoControls hidden={hidden} />}
-      {unsynced && found && (
-        <div className={`pointer-events-none absolute inset-x-0 top-[60px] z-30 flex justify-center px-4 transition-opacity duration-700 ${syncNote ? 'opacity-100' : 'opacity-0'}`} aria-hidden={!syncNote}>
-          <div className="glass max-w-[560px] animate-rise rounded-pill px-4 py-1.5 text-center type-callout text-secondary">
-            The official video{found.channel ? ` from ${found.channel}` : ''} isn’t the same length as the song, so it plays with its own sound.
-          </div>
-        </div>
-      )}
       {/* The window's drag strip, with the close, music video and full-screen buttons. */}
       {/* Faded out, the strip isn't the window's drag area: Windows keeps the mouse's movement over a
           drag area to itself, so moving along the top wouldn't bring the controls back. The app's own
@@ -372,13 +356,7 @@ export function FullScreenPlayer() {
             className="relative grid size-8 animate-glyph place-items-center rounded-full text-secondary hover:bg-white/12 hover:text-primary aria-pressed:bg-white/16 aria-pressed:text-primary"
             aria-label={showVideo ? 'Hide the music video' : 'Show the music video'}
             aria-pressed={showVideo}
-            title={
-              showVideo
-                ? 'Hide the music video (Esc)'
-                : !videoAttached && found && !found.synced
-                  ? 'Official music video (may not be in sync with the song)'
-                  : 'Music video'
-            }
+            title={showVideo ? 'Hide the music video (Esc)' : 'Music video (plays with its own sound)'}
             onClick={() => (markStep('video'), setShowVideo((v) => !v))}
           >
             <Clapperboard size={16} />

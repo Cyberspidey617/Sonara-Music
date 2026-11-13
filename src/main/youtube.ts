@@ -731,7 +731,7 @@ export async function findOnYouTube(title: string, artist: string): Promise<stri
 }
 
 /** Not a music video: a lyric video, the audio on a still picture, a fan edit, a clip. */
-const NOT_A_VIDEO = /\b(lyrics?|lyrical|audio|visuali[sz]er|full song|jukebox|bass boosted|lofi|tutorial|status|whatsapp|shorts?|teaser|trailer|eclipsa|8d|reaction|making of)\b/;
+const NOT_A_VIDEO = /\b(lyrics?|lyrical|audio|visuali[sz]er|jukebox|bass boosted|lofi|tutorial|status|whatsapp|shorts?|teaser|trailer|eclipsa|8d|reaction|making of|subs?|subtitles?|subbed|translations?|traduction|tradução|traducida|letra|legendado)\b|แปล|中字|歌詞/;
 
 export interface FoundVideo {
   videoId: string;
@@ -826,10 +826,37 @@ export async function findMusicVideo(track: { videoId: string; title: string; ar
   }
   const pick = async (list: { score: number; video: Track }[]) => {
     // Best first; a still picture (a cover held still) is passed over for the next.
-    for (const { video } of list.sort((a, b) => b.score - a.score).slice(0, 3)) if (await realPicture(yt, video.videoId)) return video;
+    for (const { video } of list.sort((a, b) => b.score - a.score).slice(0, 6)) if (await realPicture(yt, video.videoId)) return video;
     return null;
   };
-  const video = await pick(official);
+  let video = await pick(official);
+  // 3. Not in YouTube Music's Videos: YouTube's own search, judged the same way (the artist's channel
+  // or a trusted label's, never anyone else's upload).
+  if (!video) {
+    const more: { score: number; video: Track }[] = [];
+    // Judged afresh, by its channel this time (YouTube Music may have listed it with other credits).
+    const judged = new Set<string>();
+    const [first] = queriesFor(target);
+    // The film or album too: labels title their uploads "Song - Film | Video Song".
+    const albumWord = track.album ? track.album.replace(/\s*\(.*$/, '').trim() : '';
+    const queries = [...new Set([...queriesFor(target).slice(0, 2), ...(first && albumWord ? [`${first} ${albumWord} video song`] : [])])];
+    for (const query of queries) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const results: any = await yt.search(query, { type: 'video' }).catch(() => null);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      for (const v of ((results?.videos ?? []) as any[]).slice(0, 12)) {
+        const id = String(v.id ?? v.video_id ?? '');
+        const title = String(v.title?.text ?? v.title ?? '');
+        const channel = String(v.author?.name ?? '').replace(/\s*-\s*Topic$/i, '');
+        const seconds = Number(v.duration?.seconds) || undefined;
+        if (!id || !title || !channel || judged.has(id) || id === track.videoId || NOT_A_VIDEO.test(title.toLowerCase())) continue;
+        judged.add(id);
+        const score = matchScore({ title, artists: [channel], ...(seconds && { duration: seconds }) }, target);
+        if (score !== null) more.push({ score, video: { videoId: id, title, artists: [{ name: channel }], ...(seconds && { duration: seconds }) } });
+      }
+    }
+    video = await pick(more);
+  }
   return remember(
     video
       ? {

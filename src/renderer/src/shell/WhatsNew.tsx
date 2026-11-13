@@ -19,8 +19,13 @@ const NOTES: { version: string; notes: Note[] }[] = [
       },
       {
         icon: Clapperboard,
+        title: 'Videos with their own sound',
+        body: 'In video mode you now hear the video itself, so sound and picture are always together. Close the full-screen player and the song plays on.',
+      },
+      {
+        icon: Clapperboard,
         title: 'More official videos',
-        body: 'Videos from labels’ and studios’ own channels (Sony Music South, T-Series, Saregama, Sun TV and more) are found now, even with an intro that makes them longer than the song.',
+        body: 'Videos from labels’ and studios’ own channels (Sony Music South, T-Series, Zee Music, Saregama, Sun TV and more) are found now, also when they’re only on YouTube and not YouTube Music, and even with a long intro. Subtitled and translated uploads are left out.',
       },
       {
         icon: Clapperboard,
