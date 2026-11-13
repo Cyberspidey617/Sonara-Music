@@ -1,8 +1,8 @@
 /*
  * Whether a video is the same recording as a song: the title with its packaging taken off ("(From
  * …)", "Official Video", "Artist - "), the take it is (remix, live, cover…, which must agree both
- * ways), the song's artist credited on the video, and a length within 3 minutes (a music video runs
- * longer for its intro and outro). Strict on purpose: no video is better than the wrong one.
+ * ways), the song's artist credited on the video, and a length near the song's (a music video can run
+ * longer for its story, never far shorter). Strict on purpose: no video is better than the wrong one.
  */
 
 export interface MatchTarget {
@@ -78,6 +78,16 @@ const VERSION_WORDS = new Set([
   'sped', 'slowed', 'reverb', 'nightcore', 'lofi', 'orchestral', 'symphonic',
   'part', 'pt', 'chapter', 'reprised', 'unreleased', 'teaser', 'trailer', 'shorts', 'short',
 ]);
+/** A different performance or a cut-down: never the song's video when the song's own title doesn't say so. */
+const OTHER_TAKE = /\b(live|concert|unplugged|acoustic|instrumental|karaoke|cover|remix|reprise|slowed|sped|reverb|mashup|medley|teaser|trailer|promo|glimpse)\b/g;
+/**
+ * Whether a video's own title (as its uploader wrote it: YouTube Music can list "Song - Live" as
+ * just "Song") names a take the song's title doesn't.
+ */
+export function otherTake(videoTitle: string, songTitle: string): boolean {
+  const song = songTitle.toLowerCase();
+  return [...videoTitle.toLowerCase().matchAll(OTHER_TAKE)].some(([w]) => !new RegExp(`\\b${w}\\b`).test(song));
+}
 /** Version words that count even bare at the end of a title ("Song Instrumental"). */
 const TRAILING_TAKES = new Set(['instrumental', 'karaoke', 'acapella', 'acappella', 'remix', 'rmx', 'nightcore']);
 /** Asides that read like a version but describe the ordinary release. */
@@ -139,6 +149,11 @@ function classify(segment: string, versions: Set<string>, context: Set<string>) 
   if (NEUTRAL_SEGMENTS.has(words.join(''))) return;
   // "feat. Someone" in brackets says who sings, not what take it is.
   if (/^(feat|ft|featuring|with|prod)\b/.test(words[0] ?? '')) return;
+  // "From …" names the film or album ("From "OM Chapter 1""): context, never a take.
+  if (words[0] === 'from') {
+    for (const w of words.slice(1)) if (!NOISE_WORDS.has(w)) context.add(w);
+    return;
+  }
   for (const w of words) {
     if (VERSION_WORDS.has(w)) versions.add(w === 'remixes' ? 'remix' : w === 'rmx' ? 'remix' : w === 'pt' ? 'part' : w);
     else if (!NOISE_WORDS.has(w)) context.add(w);
@@ -278,9 +293,13 @@ export function matchScore(candidate: MatchCandidate, target: MatchTarget): numb
   }
   let durationScore = 0;
   if (drift !== null) {
-    // The video plays with its own sound, so a long intro or outro is fine; a far longer one isn't the same piece.
-    if (drift > 180) return null;
-    durationScore = drift <= 3 ? 40 : drift <= 30 ? 15 : 0;
+    // The video plays with its own sound, so a long story before or after the song is fine (a music
+    // video can run twice the song); far longer than that isn't the same piece.
+    if (drift > Math.max(180, (target.duration ?? 0) * 1.5)) return null;
+    // Far shorter than the song is a promo or a cut, not the song.
+    if (candidate.duration! < target.duration! * 0.7) return null;
+    // Small: of the videos that are the song, the most watched should win, not the one cut to its length.
+    durationScore = drift <= 30 ? 5 : 0;
   }
   // The explicit and the clean edition aren't the same recording.
   if (target.explicit !== undefined && candidate.explicit !== undefined && target.explicit !== candidate.explicit) return null;

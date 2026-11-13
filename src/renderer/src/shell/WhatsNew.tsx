@@ -15,7 +15,7 @@ const NOTES: { version: string; notes: Note[] }[] = [
       {
         icon: Clapperboard,
         title: 'The official video, the one everyone watches',
-        body: 'When a song has several videos that fit, Sonara now picks the most-watched official one.',
+        body: 'When a song has several videos that fit, Sonara now picks the most-watched official one. Long music videos with a story count too, while lyric videos, live takes and short promos are passed over.',
       },
       {
         icon: Clapperboard,

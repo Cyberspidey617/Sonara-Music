@@ -7,7 +7,7 @@
  * shared/types.ts. They are defensive on purpose: YouTube changes its
  * responses often, and a missing field should drop one item, not a page.
  */
-import { matchScore, queriesFor } from './videoMatch';
+import { matchScore, otherTake, queriesFor } from './videoMatch';
 import { pairedVideo } from './account';
 import vm from 'node:vm';
 import { Innertube, Platform, UniversalCache, YTNodes, type Types } from 'youtubei.js';
@@ -731,7 +731,7 @@ export async function findOnYouTube(title: string, artist: string): Promise<stri
 }
 
 /** Not a music video: a lyric video, the audio on a still picture, a fan edit, a clip. */
-const NOT_A_VIDEO = /\b(lyrics?|lyrical|audio|visuali[sz]er|jukebox|bass boosted|lofi|tutorial|status|whatsapp|shorts?|teaser|trailer|eclipsa|8d|reaction|making of|subs?|subtitles?|subbed|translations?|traduction|tradução|traducida|letra|legendado)\b|แปล|中字|歌詞/;
+const NOT_A_VIDEO = /\b(lyrics?|lyrical|audio|visuali[sz]er|jukebox|bass boosted|lofi|tutorial|status|whatsapp|shorts?|teaser|trailer|promo|glimpse|eclipsa|8d|reaction|making of|subs?|subtitles?|subbed|translations?|traduction|tradução|traducida|letra|legendado)\b|แปล|中字|歌詞/;
 
 export interface FoundVideo {
   videoId: string;
@@ -753,8 +753,11 @@ const musicVideos = new Map<string, { found: FoundVideo | null; at: number }>();
 const LOOK_AGAIN = 6 * 60 * 60_000;
 /** Official, but not the music video: a lyric video or a visualizer (a new song's stopgap). */
 const LYRIC_LIKE = /\b(lyrics?|lyrical|visuali[sz]er)\b/;
-/** Uploaded within about three months ("3 weeks ago", "2 months ago"): a new song. */
-const RECENT = /\b(\d+\s*(seconds?|minutes?|hours?|days?|weeks?)|[1-3]\s*months?)\s*ago\b/i;
+/** Uploaded within about three months ("3 weeks ago", "8d ago", "2mo ago"): a new song. */
+const RECENT = /\b(\d+\s*(seconds?|minutes?|hours?|days?|weeks?|[smhdw])|[1-3]\s*(months?|mo))\s*ago\b/i;
+/** Fewer views than this is a stray re-upload, not the official video (when the count is known). */
+const FEW_VIEWS = 1000;
+const fewViews = (views: number) => views > 0 && views < FEW_VIEWS;
 /** Forget what was found (after signing in or out, the answers change). */
 export const clearMusicVideos = () => musicVideos.clear();
 
@@ -766,15 +769,22 @@ export function parseViews(text: string): number {
   return Number.isFinite(n) ? n * ({ K: 1e3, M: 1e6, B: 1e9 }[(m[2] ?? '').toUpperCase() as 'K' | 'M' | 'B'] ?? 1) : 0;
 }
 /** Of the videos that are the song, the most watched is the official one: a few points per tenfold. */
-const popularity = (views: number) => (views > 0 ? Math.round(Math.log10(views) * 8) : 0);
+const popularity = (views: number) => (views > 0 ? Math.round(Math.log10(views) * 12) : 0);
 
 /** Narrower than this (width / height) is a cover held still, not a picture worth showing. */
 const MIN_VIDEO_ASPECT = 1.2;
-/** Whether a video's picture is a real video, judged by the shape of its largest frame. */
-async function realPicture(yt: Innertube, videoId: string): Promise<boolean> {
+/**
+ * Whether a video is worth showing: a real picture (judged by the shape of its largest frame), and
+ * the song by its own title: YouTube Music often drops the "(Lyrical Video)" or "Live" its uploader
+ * put in. A lyric video only when one is wanted.
+ */
+async function realPicture(yt: Innertube, videoId: string, songTitle: string, lyricOk = false): Promise<boolean> {
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const info: any = await yt.getBasicInfo(videoId);
+    const title = String(info.basic_info?.title ?? '');
+    if (!lyricOk && LYRIC_LIKE.test(title.toLowerCase())) return false;
+    if (otherTake(title, songTitle)) return false;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const frames = (info.streaming_data?.adaptive_formats ?? []).filter((f: any) => f.has_video && f.width && f.height);
     if (!frames.length) return true;
@@ -821,31 +831,39 @@ export async function findMusicVideo(track: { videoId: string; title: string; ar
     const results = await yt.music.search(query, { type: 'video' }).catch(() => null);
     if (!results) return;
     for (const row of searchRows(results.contents as AnyNode[]).slice(0, 10)) {
-      const video = trackFromListItem(row);
-      if (!video || seen.has(video.videoId) || video.videoId === track.videoId) continue;
-      // Names only: a row's byline can also carry a date or a view count.
-      const names = video.artists.map((a) => a.name).filter((n) => !/\b(19|20)\d\d\b|\bviews?\b|\bago\b/i.test(n));
-      if (names.length) credits.set(video.videoId, names);
-      const title = video.title.toLowerCase();
-      if (NOT_A_VIDEO.test(title)) continue;
-      seen.add(video.videoId);
-      // Some rows come without their credit or length: the video's own details have them.
-      if ((!video.artists.length || !video.duration) && matchScore({ title: video.title, artists: track.artists }, { title: track.title, artists: track.artists }) !== null) {
-        try {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const info: any = await yt.getBasicInfo(video.videoId);
-          const author = String(info.basic_info?.author ?? '').replace(/\s*-\s*Topic$/i, '');
-          if (!video.artists.length && author) video.artists = [{ name: author }];
-          if (!video.duration && Number(info.basic_info?.duration)) video.duration = Number(info.basic_info.duration);
-        } catch {
-          // Judged on what the row says.
-        }
+      try {
+        await judgeRow(row);
+      } catch (e) {
+        // One odd row (no title, no credits) mustn't end the whole search.
+        log.warn(`music video search: skipped a row (${e instanceof Error ? e.message : e})`);
       }
-      const score = matchScore({ title: video.title, artists: video.artists.map((a) => a.name), ...(video.duration && { duration: video.duration }), ...(video.explicit !== undefined && { explicit: video.explicit }), ...(video.album?.name && { album: video.album.name }) }, target);
-      // The row's "… • 417M views".
-      const views = parseViews(String(row.views ?? '') || JSON.stringify(row.flex_columns ?? row.subtitle ?? ''));
-      if (score !== null) official.push({ score: score + popularity(views), video });
     }
+  };
+  const judgeRow = async (row: AnyNode) => {
+    const video = trackFromListItem(row);
+    if (!video || seen.has(video.videoId) || video.videoId === track.videoId) return;
+    // Names only: a row's byline can also carry a date or a view count.
+    const names = video.artists.map((a) => a.name).filter((n) => !/\b(19|20)\d\d\b|\bviews?\b|\bago\b/i.test(n));
+    if (names.length) credits.set(video.videoId, names);
+    const title = video.title.toLowerCase();
+    if (NOT_A_VIDEO.test(title)) return;
+    seen.add(video.videoId);
+    // Some rows come without their credit or length: the video's own details have them.
+    if ((!video.artists.length || !video.duration) && matchScore({ title: video.title, artists: track.artists }, { title: track.title, artists: track.artists }) !== null) {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const info: any = await yt.getBasicInfo(video.videoId);
+        const author = String(info.basic_info?.author ?? '').replace(/\s*-\s*Topic$/i, '');
+        if (!video.artists.length && author) video.artists = [{ name: author }];
+        if (!video.duration && Number(info.basic_info?.duration)) video.duration = Number(info.basic_info.duration);
+      } catch {
+        // Judged on what the row says.
+      }
+    }
+    const score = matchScore({ title: video.title, artists: video.artists.map((a) => a.name), ...(video.duration && { duration: video.duration }), ...(video.explicit !== undefined && { explicit: video.explicit }), ...(video.album?.name && { album: video.album.name }) }, target);
+    // The row's "… • 417M views".
+    const views = parseViews(String(row.views ?? '') || JSON.stringify(row.flex_columns ?? row.subtitle ?? ''));
+    if (score !== null && !fewViews(views)) official.push({ score: score + popularity(views), video });
   };
 
   // 2. YouTube Music's Videos results.
@@ -854,9 +872,9 @@ export async function findMusicVideo(track: { videoId: string; title: string; ar
     // A sure match from the first search needs no second.
     if (official.some((o) => o.score >= 150)) break;
   }
-  const pick = async (list: { score: number; video: Track }[]) => {
-    // Best first; a still picture (a cover held still) is passed over for the next.
-    for (const { video } of list.sort((a, b) => b.score - a.score).slice(0, 6)) if (await realPicture(yt, video.videoId)) return video;
+  const pick = async (list: { score: number; video: Track }[], lyricOk = false) => {
+    // Best first; a still picture (a cover held still) or a lyric video is passed over for the next.
+    for (const { video } of list.sort((a, b) => b.score - a.score).slice(0, 6)) if (await realPicture(yt, video.videoId, track.title, lyricOk)) return video;
     return null;
   };
   let video = await pick(official);
@@ -894,13 +912,13 @@ export async function findMusicVideo(track: { videoId: string; title: string; ar
         const artists = [channel, ...(credits.get(id) ?? [])];
         const score = matchScore({ title, artists, ...(seconds && { duration: seconds }) }, target);
         const views = parseViews(String(v.view_count?.text ?? v.short_view_count?.text ?? ''));
-        if (score !== null) (lyricLike ? stopgaps : more).push({ score: score + popularity(views), video: { videoId: id, title, artists: artists.map((name) => ({ name })), ...(seconds && { duration: seconds }) } });
+        if (score !== null && !fewViews(views)) (lyricLike ? stopgaps : more).push({ score: score + popularity(views), video: { videoId: id, title, artists: artists.map((name) => ({ name })), ...(seconds && { duration: seconds }) } });
       }
     }
     video = await pick(more);
   }
   // Still none: a new song whose music video isn't out yet plays its official lyric video meanwhile.
-  const stopgap = !video && stopgaps.length ? await pick(stopgaps) : null;
+  const stopgap = !video && stopgaps.length ? await pick(stopgaps, true) : null;
   if (stopgap) video = stopgap;
   return remember(
     video
