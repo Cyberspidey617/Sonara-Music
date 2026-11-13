@@ -158,6 +158,8 @@ export function FullScreenPlayer() {
   const status = usePlayer((s) => s.status);
   const error = usePlayer((s) => s.error);
   const setFullScreen = useUi((s) => s.setFullScreen);
+  // Closed while a video plays: kept, unseen, so the video's sound goes on (see AppShell).
+  const open = useUi((s) => s.fullScreen);
   const [panel, setPanel] = useState<'lyrics' | 'queue' | null>('lyrics');
   const stacked = useStacked();
   const [windowFull, setWindowFull] = useState(false);
@@ -214,7 +216,7 @@ export function FullScreenPlayer() {
   const [idle, setIdle] = useState(false);
   useEffect(() => {
     setIdle(false);
-    if (!showVideo) return;
+    if (!showVideo || !open) return;
     let timer = window.setTimeout(() => setIdle(true), 2500);
     const wake = () => {
       setIdle(false);
@@ -230,8 +232,8 @@ export function FullScreenPlayer() {
       window.removeEventListener('pointerdown', wake);
       window.removeEventListener('keydown', wake);
     };
-  }, [showVideo]);
-  const hidden = showVideo && idle;
+  }, [showVideo, open]);
+  const hidden = showVideo && idle && open;
   useEffect(() => {
     // The window's own buttons fade too.
     if (hidden) document.documentElement.dataset.videoIdle = '';
@@ -273,6 +275,13 @@ export function FullScreenPlayer() {
 
   useEffect(() => api.onFullScreenChange(setWindowFull), []);
 
+  // Tell the app a video is playing with its own sound, so closing this screen leaves it playing.
+  const videoPlaying = showVideo && !!videoUrl;
+  useEffect(() => {
+    useUi.getState().setVideoPlaying(videoPlaying);
+  }, [videoPlaying]);
+  useEffect(() => () => useUi.getState().setVideoPlaying(false), []);
+
   useEffect(() => {
     if (!track) setFullScreen(false);
   }, [track, setFullScreen]);
@@ -295,13 +304,14 @@ export function FullScreenPlayer() {
 
   return (
     <div
-      className={`fixed inset-0 z-50 isolate ${hasViewTransitions ? '' : 'animate-enter'} overflow-hidden text-primary ${
+      className={`fixed inset-0 z-50 isolate ${open ? '' : 'hidden'} ${hasViewTransitions ? '' : 'animate-enter'} overflow-hidden text-primary ${
         stacked
           ? '[--art:max(200px,min(calc(88vw*var(--art-scale)),calc(100vh-420px),calc(520px*var(--art-scale))))] [--col:min(92vw,500px)]'
           : '[--art:max(240px,min(calc(36vw*var(--art-scale)),calc(100vh-404px),calc(640px*var(--art-scale))))] [--col:max(var(--art),340px)]'
       }`}
       style={{ '--art-scale': artScale } as CSSProperties}
       data-immersive
+      aria-hidden={!open || undefined}
       data-cursor-hidden={hidden || undefined}
       role="dialog"
       aria-modal="true"
@@ -326,6 +336,7 @@ export function FullScreenPlayer() {
           // the song going on silently; minimised, the song plays again.
           audioUrl={!videoAttached && found ? `ytstream://track/${encodeURIComponent(found.videoId)}?q=high` : null}
           fit={videoFit}
+          pictureHidden={!open}
           {...(!videoAttached && found?.timeMap && { timeMap: found.timeMap })}
           onClose={() => setShowVideo(false)}
           onError={() => {

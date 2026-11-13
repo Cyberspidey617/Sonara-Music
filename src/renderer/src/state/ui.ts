@@ -24,6 +24,9 @@ interface UiState {
   /** Video mode: the music video shows in the full-screen player (kept when it closes and reopens, and for the next song). */
   videoMode: boolean;
   setVideoMode: (on: boolean) => void;
+  /** A music video is playing (with its own sound): it keeps playing, unseen, when the full-screen player closes. */
+  videoPlaying: boolean;
+  setVideoPlaying: (on: boolean) => void;
   sidePanel: 'lyrics' | 'queue' | null;
   dialog: Dialog | null;
   toasts: Toast[];
@@ -44,6 +47,8 @@ export const useUi = create<UiState>((set, get) => ({
   fullScreen: false,
   videoMode: false,
   setVideoMode: (videoMode) => set({ videoMode }),
+  videoPlaying: false,
+  setVideoPlaying: (videoPlaying) => set({ videoPlaying }),
   sidePanel: null,
   dialog: null,
   toasts: [],

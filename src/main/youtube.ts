@@ -791,6 +791,8 @@ export async function findMusicVideo(track: { videoId: string; title: string; ar
   const target = { title: track.title, artists: track.artists, ...(duration && { duration }), ...(track.album && { album: track.album }), ...(track.explicit !== undefined && { explicit: track.explicit }) };
   const seen = new Set<string>();
   const official: { score: number; video: Track }[] = [];
+  // YouTube Music's credits for each video it listed: YouTube's own search knows only the channel.
+  const credits = new Map<string, string[]>();
 
   const judge = async (query: string) => {
     const results = await yt.music.search(query, { type: 'video' }).catch(() => null);
@@ -798,6 +800,9 @@ export async function findMusicVideo(track: { videoId: string; title: string; ar
     for (const row of searchRows(results.contents as AnyNode[]).slice(0, 10)) {
       const video = trackFromListItem(row);
       if (!video || seen.has(video.videoId) || video.videoId === track.videoId) continue;
+      // Names only: a row's byline can also carry a date or a view count.
+      const names = video.artists.map((a) => a.name).filter((n) => !/\b(19|20)\d\d\b|\bviews?\b|\bago\b/i.test(n));
+      if (names.length) credits.set(video.videoId, names);
       const title = video.title.toLowerCase();
       if (NOT_A_VIDEO.test(title)) continue;
       seen.add(video.videoId);
@@ -851,8 +856,12 @@ export async function findMusicVideo(track: { videoId: string; title: string; ar
         const seconds = Number(v.duration?.seconds) || undefined;
         if (!id || !title || !channel || judged.has(id) || id === track.videoId || NOT_A_VIDEO.test(title.toLowerCase())) continue;
         judged.add(id);
-        const score = matchScore({ title, artists: [channel], ...(seconds && { duration: seconds }) }, target);
-        if (score !== null) more.push({ score, video: { videoId: id, title, artists: [{ name: channel }], ...(seconds && { duration: seconds }) } });
+        // The uploader's own title, with YouTube Music's credits for the same video when it listed it
+        // (it can title a video differently, "Mayavi (Balkan Mix)" for the original, and the channel
+        // can be the composer's rather than the singer's).
+        const artists = [channel, ...(credits.get(id) ?? [])];
+        const score = matchScore({ title, artists, ...(seconds && { duration: seconds }) }, target);
+        if (score !== null) more.push({ score, video: { videoId: id, title, artists: artists.map((name) => ({ name })), ...(seconds && { duration: seconds }) } });
       }
     }
     video = await pick(more);

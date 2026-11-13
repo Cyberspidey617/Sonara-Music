@@ -34,6 +34,7 @@ export function MusicVideo({
   audioUrl,
   fit,
   timeMap,
+  pictureHidden = false,
   onError,
   onClose,
 }: {
@@ -45,6 +46,8 @@ export function MusicVideo({
   fit: VideoFit;
   /** YouTube Music's line-up of song and video (song-time → video-time stretches), when it gave one. */
   timeMap?: { from: number; to: number; length: number }[];
+  /** The full-screen player is closed: the sound goes on, the picture rests (and catches up when it opens). */
+  pictureHidden?: boolean;
   onError?: () => void;
   onClose: () => void;
 }) {
@@ -53,6 +56,9 @@ export function MusicVideo({
   const startAt = useRef(0);
   const playing = usePlayer((s) => s.status === 'playing');
   const [ratio, setRatio] = useState(16 / 9);
+  // Read by the loop, which outlives a render.
+  const hiddenRef = useRef(pictureHidden);
+  hiddenRef.current = pictureHidden;
 
   useEffect(() => {
     const v = video.current;
@@ -64,7 +70,8 @@ export function MusicVideo({
       return;
     }
     const songPlaying = () => usePlayer.getState().status === 'playing';
-    const loading = () => v.seeking || v.readyState < 3;
+    // The picture loading holds the sound back, except while it's unseen (the sound goes on alone).
+    const loading = () => !hiddenRef.current && (v.seeking || v.readyState < 3);
     let jumpedAt = 0;
     // How far ahead a jump aims: the time the last one took to load (a guess at first).
     let lead = 0.5;
@@ -161,14 +168,18 @@ export function MusicVideo({
           void a.play().catch(() => undefined);
         }
         if (a.playbackRate !== playbackSpeed()) a.playbackRate = playbackSpeed();
-        // The picture follows its own sound.
-        if (!a.paused && !a.seeking && a.readyState >= 2 && !settling) follow(a.currentTime, PICTURE_JUMP, want);
+        // The picture follows its own sound (resting, unseen, while the player is closed).
+        if (hiddenRef.current) {
+          if (!v.paused) v.pause();
+        } else if (!a.paused && !a.seeking && a.readyState >= 2 && !settling) follow(a.currentTime, PICTURE_JUMP, want);
       } else if (!settling && Number.isFinite(song) && v.readyState >= 1) {
         // A video in time with the song follows the song, which is heard; through YouTube Music's map
         // when it gave one (an intro or a scene the song doesn't have is skipped, and the picture
         // holds still over song the video doesn't have).
         const at = mapped(song);
-        if (at === null) {
+        if (hiddenRef.current) {
+          if (!v.paused) v.pause();
+        } else if (at === null) {
           if (!v.paused) v.pause();
         } else follow(at, 0.4, want);
       }
@@ -189,11 +200,11 @@ export function MusicVideo({
   useEffect(() => {
     const v = video.current;
     if (v) {
-      if (playing && active) void v.play().catch(() => undefined);
+      if (playing && active && !pictureHidden) void v.play().catch(() => undefined);
       else v.pause();
     }
     if (!playing || !active) audio.current?.pause();
-  }, [playing, url, audioUrl, active]);
+  }, [playing, url, audioUrl, active, pictureHidden]);
 
   // The video's sound as loud as the song: your volume, and, with "Same loudness for every song" on,
   // turned down by YouTube's loudness figure for it, as the song is.
@@ -227,9 +238,9 @@ export function MusicVideo({
     };
   }, [audioUrl]);
 
-  // Esc closes the video first, before the full-screen player itself.
+  // Esc closes the video first, before the full-screen player itself (not while it's closed).
   useEffect(() => {
-    if (!active) return;
+    if (!active || pictureHidden) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
       e.preventDefault();
@@ -238,7 +249,7 @@ export function MusicVideo({
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
-  }, [onClose, active]);
+  }, [onClose, active, pictureHidden]);
 
   // The picture keeps its own shape: a box of its ratio, as large as the size allows.
   const scale = fit === '75' ? 0.75 : fit === '50' ? 0.5 : 1;

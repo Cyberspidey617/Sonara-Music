@@ -248,6 +248,10 @@ export function matchScore(candidate: MatchCandidate, target: MatchTarget): numb
   // A take named in the middle of a title ("Song Live Pune 2023") counts too, unless the song's own title has it.
   const wantWords = new Set(want.core.split(' '));
   if (got.core.split(' ').some((w) => VERSION_WORDS.has(w) && !wantWords.has(w))) return null;
+  // A number the song's title doesn't have is another song ("Mayavi 2.0" isn't "Mayavi"), unless it's
+  // part of the film's or album's name ("Aashiqui 2: Tum Hi Ho").
+  const releaseTokens = new Set([...want.context, ...albumKey(target.album).split(' '), ...tokens(normalize(target.album ?? ''))]);
+  if (got.core.split(' ').some((w) => /^\d+$/.test(w) && !wantWords.has(w) && !releaseTokens.has(w))) return null;
 
   const wantNames = target.artists.flatMap(artistNames);
   const gotNames = candidate.artists.flatMap(artistNames);

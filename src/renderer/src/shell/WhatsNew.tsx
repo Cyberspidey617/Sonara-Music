@@ -20,7 +20,7 @@ const NOTES: { version: string; notes: Note[] }[] = [
       {
         icon: Clapperboard,
         title: 'Videos with their own sound',
-        body: 'In video mode you now hear the video itself, so sound and picture are always together. Close the full-screen player and the song plays on.',
+        body: 'In video mode you now hear the video itself, so sound and picture are always together. Go back to the app and the video’s sound plays on; open the player again and the picture is right where the sound is.',
       },
       {
         icon: Clapperboard,

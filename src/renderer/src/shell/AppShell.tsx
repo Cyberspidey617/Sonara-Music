@@ -191,6 +191,8 @@ export function AppShell() {
   const entry = useNav((s) => s.stack[s.index]!);
   const saveScroll = useNav((s) => s.saveScroll);
   const fullScreen = useUi((s) => s.fullScreen);
+  // A music video keeps playing (its sound; its picture rests) after the full-screen player closes.
+  const videoPlaying = useUi((s) => s.videoPlaying);
   // Covered: the full-screen player has finished opening over the app (it shows again the moment it closes).
   const [covered, setCovered] = useState(false);
   useEffect(() => {
@@ -249,7 +251,7 @@ export function AppShell() {
       <SidePanel />
       <PlayerBar />
       </div>
-      {fullScreen && (
+      {(fullScreen || videoPlaying) && (
         <Suspense fallback={null}>
           <FullScreenPlayer />
         </Suspense>
