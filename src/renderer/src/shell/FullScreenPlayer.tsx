@@ -357,7 +357,11 @@ export function FullScreenPlayer() {
         </div>
       )}
       {/* The window's drag strip, with the close, music video and full-screen buttons. */}
-      <div className={`app-drag absolute inset-x-0 top-0 z-30 flex h-[52px] items-center pl-3 transition-opacity duration-500 ${hidden ? 'pointer-events-none opacity-0' : ''}`}>
+      {/* Faded out, the strip isn't the window's drag area: Windows keeps the mouse's movement over a
+          drag area to itself, so moving along the top wouldn't bring the controls back. The app's own
+          drag areas underneath are covered over too. */}
+      {hidden && <div className="app-no-drag absolute inset-x-0 top-0 z-30 h-[64px]" aria-hidden="true" />}
+      <div className={`absolute inset-x-0 top-0 z-30 flex h-[52px] items-center pl-3 transition-opacity duration-500 ${hidden ? 'pointer-events-none opacity-0' : 'app-drag'}`}>
         {/* Related controls share one piece of glass. */}
         <div className="glass app-no-drag relative flex items-center gap-0.5 rounded-pill p-[3px]">
         <button className="relative grid size-8 place-items-center rounded-full text-secondary hover:bg-white/12 hover:text-primary" aria-label="Close (Esc)" title="Close (Esc)" onClick={close}>

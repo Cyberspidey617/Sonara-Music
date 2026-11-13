@@ -111,6 +111,8 @@ export interface TitleParts {
   versions: Set<string>;
   /** Everything else that was in brackets: only a tie-break. */
   context: Set<string>;
+  /** Each part of a "Film - Song | Cast" title, for when the song isn't the part the parse kept. */
+  parts: string[];
 }
 
 function artistNames(credit: string): string[] {
@@ -160,6 +162,15 @@ export function parseTitle(raw: string, artists: string[] = []): TitleParts {
     classify(text.slice(open), versions, context);
     text = text.slice(0, open);
   }
+  // Every part between dashes and bars, as a title of its own ("Film - Song Video Song | Cast").
+  const parts = text
+    .split(/\s+[-–—|]\s+|\s*\|\s*/)
+    .map((part) => {
+      const words = tokens(part.replace(/\s(feat|ft|featuring)\.?\s.*$/, ' '));
+      while (words.length > 1 && TRAILING_NOISE.has(words.at(-1)!)) words.pop();
+      return words.filter((w) => w !== 'and').join(' ');
+    })
+    .filter(Boolean);
   // "Artist - Song", "Song - From Film", "Song | Artist | Label": keep the part that's the song.
   for (let i = 0; i < 3; i++) {
     const dash = text.match(/\s+[-–—|]\s+|\s*\|\s*/);
@@ -178,8 +189,16 @@ export function parseTitle(raw: string, artists: string[] = []): TitleParts {
   const words = tokens(text);
   while (words.length > 1 && TRAILING_NOISE.has(words.at(-1)!)) words.pop();
   while (words.length > 1 && TRAILING_TAKES.has(words.at(-1)!)) versions.add(words.pop()!);
-  return { core: words.filter((w) => w !== 'and').join(' '), versions, context };
+  return { core: words.filter((w) => w !== 'and').join(' '), versions, context, parts };
 }
+
+/**
+ * Official channels of record labels, film studios and broadcasters, whose uploads of their own
+ * songs count like the artist's own: they're credited to the channel, and a video with its intro
+ * runs longer than the song.
+ */
+const TRUSTED_LABELS =
+  /\b(vevo|t[ -]?series|saregama( (tamil|telugu|malayalam|music))?|sony music( (south|india|india vevo|entertainment))?|zee music( (company|south))?|tips (music|official|films)|yrf|yash raj films|eros now music|speed records|desi melodies|white hill music|think music( india)?|aditya music|lahari music|muzik ?247|satyam audios|manorama music|mango music|times music|junglee music|sun tv|sun music|sun pictures|sun nxt|divo music|think originals|lyca productions|wunderbar films|goldmines|shemaroo|universal music|warner music|atlantic records|columbia records|interscope|republic records|capitol records|def jam|island records|rca records|epic records|hybe labels|smtown|jyp entertainment|yg entertainment|1thek|stone music|coke studio|trend music|u1 records|vels film|madras talkies|lahari|anand audio|saregama south)\b/;
 
 /** A channel named like a record label, film studio or broadcaster. */
 const LABEL_CHANNEL = /\b(music|musics|records|recordings|tv|pictures|films|studios|entertainment|productions|vevo|series|official|label|audio)\b/;
@@ -215,8 +234,11 @@ export function matchScore(candidate: MatchCandidate, target: MatchTarget): numb
   const want = parseTitle(target.title, target.artists);
   const got = parseTitle(candidate.title, candidate.artists);
   if (!want.core || !got.core) return null;
+  // The song as any part of a "Film - Song | Cast" title, when the parse kept another part.
+  const inParts = got.parts.some((part) => part === want.core || (want.core.length > 3 && part.startsWith(want.core + ' ')));
   const titleOk =
     want.core === got.core ||
+    inParts ||
     // Same word in another script: katakana and romaji meet by their reading.
     romajiOf(want.core).replace(/ /g, '') === romajiOf(got.core).replace(/ /g, '') ||
     translationMatch(want, got) ||
@@ -232,7 +254,13 @@ export function matchScore(candidate: MatchCandidate, target: MatchTarget): numb
   const titleWords = tokens(normalize(candidate.title)).join(' ');
   // The video must be credited to the song's artist: a name in a fan upload's title doesn't count.
   const exact = wantNames.some((w) => gotNames.includes(w));
-  const shared = exact || wantNames.some((w) => gotNames.some((g) => sameArtist(w, g)));
+  const titleSet = new Set(titleWords.split(' '));
+  const namesArtist = wantNames.some((w) => titleWords.includes(w) || w.split(' ').some((part) => part.length > 4 && titleSet.has(part)));
+  // A trusted label's own upload counts like the artist's, when its title names the film (the
+  // song's "From …") or one of its artists: so it's that song, not another of the label's.
+  const namesRelease = [...want.context].some((w) => w.length > 3 && titleSet.has(w));
+  const byLabel = TRUSTED_LABELS.test(gotNames.join(' ')) && (namesArtist || namesRelease);
+  const shared = exact || byLabel || wantNames.some((w) => gotNames.some((g) => sameArtist(w, g)));
   const drift = target.duration && candidate.duration ? Math.abs(target.duration - candidate.duration) : null;
   // Credited to someone else: only a label's or broadcaster's own upload (its channel named like one),
   // naming the song's artist in its title, and running the same length to the second (the same
@@ -241,8 +269,7 @@ export function matchScore(candidate: MatchCandidate, target: MatchTarget): numb
     if (drift === null || drift > 2) return null;
     if (!LABEL_CHANNEL.test(gotNames.join(' '))) return null;
     // By name or by either part of it ("Anirudh" for Anirudh Ravichander).
-    const titleSet = new Set(titleWords.split(' '));
-    if (!wantNames.some((w) => titleWords.includes(w) || w.split(' ').some((part) => part.length > 4 && titleSet.has(part)))) return null;
+    if (!namesArtist) return null;
   }
   let durationScore = 0;
   if (drift !== null) {
@@ -254,5 +281,5 @@ export function matchScore(candidate: MatchCandidate, target: MatchTarget): numb
   const contextShared = [...want.context].some((w) => got.context.has(w) || titleWords.includes(w)) ? 20 : 0;
   // The same release breaks ties between same-titled ones.
   const albumShared = albumKey(target.album) && albumKey(target.album) === albumKey(candidate.album) ? 35 : 0;
-  return 100 + (exact ? 25 : shared ? 10 : -30) + durationScore + contextShared + albumShared + (want.core === got.core ? 10 : 0);
+  return 100 + (exact ? 25 : shared ? 10 : -30) + durationScore + (inParts && want.core !== got.core ? -5 : 0) + contextShared + albumShared + (want.core === got.core ? 10 : 0);
 }
