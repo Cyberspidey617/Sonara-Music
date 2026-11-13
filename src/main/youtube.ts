@@ -774,6 +774,11 @@ const popularity = (views: number) => (views > 0 ? Math.round(Math.log10(views) 
 /** Narrower than this (width / height) is a cover held still, not a picture worth showing. */
 const MIN_VIDEO_ASPECT = 1.2;
 /**
+ * Fewer average H.264 bits per pixel than this is a still picture over the song (those run near
+ * 0.1; a real video, even a quiet one, several times that).
+ */
+const MIN_MOTION_BITS = 0.2;
+/**
  * Whether a video is worth showing: a real picture (judged by the shape of its largest frame), and
  * the song by its own title: YouTube Music often drops the "(Lyrical Video)" or "Live" its uploader
  * put in. A lyric video only when one is wanted.
@@ -790,7 +795,17 @@ async function realPicture(yt: Innertube, videoId: string, songTitle: string, ly
     if (!frames.length) return true;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const biggest = frames.reduce((a: any, b: any) => (b.height > a.height ? b : a));
-    return biggest.width / biggest.height >= MIN_VIDEO_ASPECT;
+    if (biggest.width / biggest.height < MIN_VIDEO_ASPECT) return false;
+    // A picture that never moves compresses to almost nothing: judged on the H.264 stream (the
+    // same codec at every video, so the numbers compare), by its average bits for each pixel.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const avc = frames.filter((f: any) => /avc1/.test(String(f.mime_type)) && Number(f.average_bitrate) > 0);
+    if (avc.length) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const top = avc.reduce((a: any, b: any) => (b.height > a.height ? b : a));
+      if (Number(top.average_bitrate) / (top.width * top.height) < MIN_MOTION_BITS) return false;
+    }
+    return true;
   } catch {
     return true;
   }

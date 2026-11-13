@@ -296,8 +296,9 @@ export function matchScore(candidate: MatchCandidate, target: MatchTarget): numb
     // The video plays with its own sound, so a long story before or after the song is fine (a music
     // video can run twice the song); far longer than that isn't the same piece.
     if (drift > Math.max(180, (target.duration ?? 0) * 1.5)) return null;
-    // Far shorter than the song is a promo or a cut, not the song.
-    if (candidate.duration! < target.duration! * 0.7) return null;
+    // A film's video is often a shorter cut of the song (6 minutes on the album, under 4 in the film),
+    // but under half of it is a promo, not the song.
+    if (candidate.duration! < target.duration! * 0.5) return null;
     // Small: of the videos that are the song, the most watched should win, not the one cut to its length.
     durationScore = drift <= 30 ? 5 : 0;
   }
