@@ -309,3 +309,57 @@ export function matchScore(candidate: MatchCandidate, target: MatchTarget): numb
   const albumShared = albumKey(target.album) && albumKey(target.album) === albumKey(candidate.album) ? 35 : 0;
   return 100 + (exact ? 25 : shared ? 10 : -30) + durationScore + (inParts && want.core !== got.core ? -5 : 0) + contextShared + albumShared + (want.core === got.core ? 10 : 0);
 }
+
+// What a search result is, before whether it is the song: rules youtube.ts applies to each candidate.
+
+/** Not a music video: a lyric video, the audio on a still picture, a fan edit, a clip. */
+export const NOT_A_VIDEO = /\b(lyrics?|lyrical|audio|visuali[sz]er|jukebox|bass boosted|lofi|tutorial|status|whatsapp|shorts?|teaser|trailer|promo|glimpse|eclipsa|8d|reaction|making of|subs?|subtitles?|subbed|translations?|traduction|tradução|traducida|letra|legendado)\b|แปล|中字|歌詞/;
+/** Official, but not the music video: a lyric video or a visualizer (a new song's stopgap). */
+export const LYRIC_LIKE = /\b(lyrics?|lyrical|visuali[sz]er)\b/;
+/** Uploaded within about three months ("3 weeks ago", "8d ago", "2mo ago"): a new song. */
+export const RECENT = /\b(\d+\s*(seconds?|minutes?|hours?|days?|weeks?|[smhdw])|[1-3]\s*(months?|mo))\s*ago\b/i;
+/** Fewer views than this is a stray re-upload, not the official video (when the count is known). */
+export const FEW_VIEWS = 1000;
+export const fewViews = (views: number) => views > 0 && views < FEW_VIEWS;
+
+/** Views from a label like "417M views" or "1,234,567 views"; 0 when it doesn't say. */
+export function parseViews(text: string): number {
+  const m = text.match(/([\d.,]+)\s*([KMB])?\s*views?\b/i);
+  if (!m) return 0;
+  const n = Number(m[1]!.replace(/,/g, ''));
+  return Number.isFinite(n) ? n * ({ K: 1e3, M: 1e6, B: 1e9 }[(m[2] ?? '').toUpperCase() as 'K' | 'M' | 'B'] ?? 1) : 0;
+}
+/** Of the videos that are the song, the most watched is the official one: a few points per tenfold. */
+export const popularity = (views: number) => (views > 0 ? Math.round(Math.log10(views) * 12) : 0);
+
+/** Narrower than this (width / height) is a cover held still, not a picture worth showing. */
+export const MIN_VIDEO_ASPECT = 1.2;
+/**
+ * Fewer average H.264 bits per pixel than this is a still picture over the song (those run near
+ * 0.1; a real video, even a quiet one, several times that).
+ */
+export const MIN_MOTION_BITS = 0.2;
+
+/** A video's stream, as far as judging its picture goes. */
+export interface VideoFrame {
+  width: number;
+  height: number;
+  mime_type?: string;
+  average_bitrate?: number;
+}
+
+/**
+ * Whether a video's picture isn't worth showing: a cover held still (narrower than a video frame), or
+ * a picture that never moves. That compresses to almost nothing: judged on the H.264 stream (the same
+ * codec at every video, so the numbers compare), by its average bits for each pixel. No frames: no
+ * evidence either way, so it's shown.
+ */
+export function stillOrNarrow(frames: VideoFrame[]): boolean {
+  if (!frames.length) return false;
+  const biggest = frames.reduce((a, b) => (b.height > a.height ? b : a));
+  if (biggest.width / biggest.height < MIN_VIDEO_ASPECT) return true;
+  const avc = frames.filter((f) => /avc1/.test(String(f.mime_type)) && Number(f.average_bitrate) > 0);
+  if (!avc.length) return false;
+  const top = avc.reduce((a, b) => (b.height > a.height ? b : a));
+  return Number(top.average_bitrate) / (top.width * top.height) < MIN_MOTION_BITS;
+}

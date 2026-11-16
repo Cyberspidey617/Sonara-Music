@@ -39,6 +39,9 @@ jobs:
 
       - run: npm run typecheck
 
+      # The video-matching and lyric-translation rules, on cases from real bug reports.
+      - run: npm test
+
       - run: npx electron-vite build
 
       - name: Package

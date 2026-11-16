@@ -166,12 +166,12 @@ async function translateSong(lines: string[], to: string, track: Track): Promise
   if (to === 'en') {
     const human = await api.humanTranslation(track.title, track.artists.map((a) => a.name), track.album?.name).catch(() => null);
     if (human) {
-      const { text, covered } = alignTranslation(lines, human.pairs);
+      const { text, matched } = alignTranslation(lines, human.pairs);
       const sung = lines.filter((l) => l.trim()).length;
-      const matched = lines.filter((l, i) => l.trim() && (text[i] || covered[i])).length;
       // Most lines matched: it's this song's translation (a few lines can differ from the lyrics shown).
-      if (sung && matched >= sung * 0.5) {
-        const missing = lines.map((l, i) => (text[i] || covered[i] || !l.trim() ? -1 : i)).filter((i) => i >= 0);
+      if (sung && lines.filter((l, i) => l.trim() && matched[i]).length >= sung * 0.5) {
+        // Every sung line gets a meaning: machine translation where the person's has none for it.
+        const missing = lines.map((l, i) => (text[i] || !l.trim() ? -1 : i)).filter((i) => i >= 0);
         const machine = missing.length ? await translateLines(missing.map((i) => lines[i]!), to).catch(() => [] as string[]) : [];
         missing.forEach((i, k) => (text[i] = machine[k] ?? ''));
         return { trans: text, by: human.source };

@@ -7,7 +7,7 @@
  * shared/types.ts. They are defensive on purpose: YouTube changes its
  * responses often, and a missing field should drop one item, not a page.
  */
-import { matchScore, otherTake, queriesFor } from './videoMatch';
+import { fewViews, LYRIC_LIKE, matchScore, NOT_A_VIDEO, otherTake, parseViews, popularity, queriesFor, RECENT, stillOrNarrow } from './videoMatch';
 import { pairedVideo } from './account';
 import vm from 'node:vm';
 import { Innertube, Platform, UniversalCache, YTNodes, type Types } from 'youtubei.js';
@@ -730,9 +730,6 @@ export async function findOnYouTube(title: string, artist: string): Promise<stri
   return null;
 }
 
-/** Not a music video: a lyric video, the audio on a still picture, a fan edit, a clip. */
-const NOT_A_VIDEO = /\b(lyrics?|lyrical|audio|visuali[sz]er|jukebox|bass boosted|lofi|tutorial|status|whatsapp|shorts?|teaser|trailer|promo|glimpse|eclipsa|8d|reaction|making of|subs?|subtitles?|subbed|translations?|traduction|tradução|traducida|letra|legendado)\b|แปล|中字|歌詞/;
-
 export interface FoundVideo {
   videoId: string;
   /** As long as the song (within 3 s), so it plays in time with it. */
@@ -751,33 +748,9 @@ export interface FoundVideo {
 /** What was found for each song, and when (a stopgap or nothing is looked for again after a while). */
 const musicVideos = new Map<string, { found: FoundVideo | null; at: number }>();
 const LOOK_AGAIN = 6 * 60 * 60_000;
-/** Official, but not the music video: a lyric video or a visualizer (a new song's stopgap). */
-const LYRIC_LIKE = /\b(lyrics?|lyrical|visuali[sz]er)\b/;
-/** Uploaded within about three months ("3 weeks ago", "8d ago", "2mo ago"): a new song. */
-const RECENT = /\b(\d+\s*(seconds?|minutes?|hours?|days?|weeks?|[smhdw])|[1-3]\s*(months?|mo))\s*ago\b/i;
-/** Fewer views than this is a stray re-upload, not the official video (when the count is known). */
-const FEW_VIEWS = 1000;
-const fewViews = (views: number) => views > 0 && views < FEW_VIEWS;
 /** Forget what was found (after signing in or out, the answers change). */
 export const clearMusicVideos = () => musicVideos.clear();
 
-/** Views from a label like "417M views" or "1,234,567 views"; 0 when it doesn't say. */
-export function parseViews(text: string): number {
-  const m = text.match(/([\d.,]+)\s*([KMB])?\s*views?\b/i);
-  if (!m) return 0;
-  const n = Number(m[1]!.replace(/,/g, ''));
-  return Number.isFinite(n) ? n * ({ K: 1e3, M: 1e6, B: 1e9 }[(m[2] ?? '').toUpperCase() as 'K' | 'M' | 'B'] ?? 1) : 0;
-}
-/** Of the videos that are the song, the most watched is the official one: a few points per tenfold. */
-const popularity = (views: number) => (views > 0 ? Math.round(Math.log10(views) * 12) : 0);
-
-/** Narrower than this (width / height) is a cover held still, not a picture worth showing. */
-const MIN_VIDEO_ASPECT = 1.2;
-/**
- * Fewer average H.264 bits per pixel than this is a still picture over the song (those run near
- * 0.1; a real video, even a quiet one, several times that).
- */
-const MIN_MOTION_BITS = 0.2;
 /**
  * Whether a video is worth showing: a real picture (judged by the shape of its largest frame), and
  * the song by its own title: YouTube Music often drops the "(Lyrical Video)" or "Live" its uploader
@@ -792,20 +765,7 @@ async function realPicture(yt: Innertube, videoId: string, songTitle: string, ly
     if (otherTake(title, songTitle)) return false;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const frames = (info.streaming_data?.adaptive_formats ?? []).filter((f: any) => f.has_video && f.width && f.height);
-    if (!frames.length) return true;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const biggest = frames.reduce((a: any, b: any) => (b.height > a.height ? b : a));
-    if (biggest.width / biggest.height < MIN_VIDEO_ASPECT) return false;
-    // A picture that never moves compresses to almost nothing: judged on the H.264 stream (the
-    // same codec at every video, so the numbers compare), by its average bits for each pixel.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const avc = frames.filter((f: any) => /avc1/.test(String(f.mime_type)) && Number(f.average_bitrate) > 0);
-    if (avc.length) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const top = avc.reduce((a: any, b: any) => (b.height > a.height ? b : a));
-      if (Number(top.average_bitrate) / (top.width * top.height) < MIN_MOTION_BITS) return false;
-    }
-    return true;
+    return !stillOrNarrow(frames);
   } catch {
     return true;
   }

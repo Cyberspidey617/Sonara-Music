@@ -100,27 +100,42 @@ export async function translateLines(lines: string[], target: string): Promise<s
   });
 }
 
+/** One word as its sound: the spellings people vary for the same sound folded together. */
+function wordSound(word: string): string {
+  return (
+    word
+      // Two letters for one sound first: zh (ழ), and the aspirates written with an h.
+      .replace(/zh/g, 'l')
+      .replace(/[cs]h/g, 's')
+      .replace(/([tdkgbp])h/g, '$1')
+      // ச is written ch or s (Chenjudare, Senjudare); a lone h is often a g or k (Arogara, Arohara).
+      .replace(/[cjzs]/g, 's')
+      .replace(/[ghkq]/g, 'k')
+      .replace(/x/g, 'ks')
+      .replace(/w/g, 'v')
+      .replace(/[dt]/g, 't')
+      .replace(/[bpf]/g, 'p')
+      // Vowels are where spellings differ most (love, lav; mein, men; taaron, taro): one sound for all.
+      .replace(/[aeiouy]+/g, 'a')
+      .replace(/(.)\1+/g, '$1')
+  );
+}
+
 /**
- * A line as its sound in plain letters, for matching a lyric to a translation's line: Indian
- * scripts read into Latin letters, then the spellings people vary folded together (Senkaan,
- * Sengan; Thiruvadi, Tiruvadi; Kaarkuzhal, Karkuzhal; love, lav).
+ * A line as the sounds of its words, for matching a lyric to a translation's line: Indian scripts read
+ * into Latin letters, then the spellings people vary folded together (Senkaan, Sengan; Thiruvadi,
+ * Tiruvadi; Kaarkuzhal, Karkuzhal; love, lav).
  */
-function sound(line: string): string {
+function wordSounds(line: string): string[] {
   const script = indicScript(line);
   const latin = script ? romanizeIndic(line, script) : line;
   return latin
     .toLowerCase()
     .normalize('NFKD')
     .replace(/[̀-ͯ]/g, '')
-    .replace(/[^a-z]/g, '')
-    .replace(/h/g, '')
-    .replace(/w/g, 'v')
-    .replace(/[gk]/g, 'k')
-    .replace(/[dt]/g, 't')
-    .replace(/[bp]/g, 'p')
-    // Vowels are where spellings differ most (love, lav; mein, men; taaron, taro): one sound for all.
-    .replace(/[aeiouy]+/g, 'a')
-    .replace(/(.)\1+/g, '$1');
+    .split(/[^a-z]+/)
+    .filter(Boolean)
+    .map(wordSound);
 }
 
 /** A sound's letter pairs, counted. */
@@ -130,74 +145,133 @@ function letterPairs(s: string): Map<string, number> {
   return m;
 }
 
-/** Letter pairs two sounds share. */
-function shared(a: Map<string, number>, b: Map<string, number>): number {
+/** How alike two sounds are, 0–1 (letter pairs they share). */
+function likeness(a: string, b: string): number {
+  if (a === b) return 1;
+  if (a.length < 2 || b.length < 2) return 0;
+  const pa = letterPairs(a);
+  const pb = letterPairs(b);
   let n = 0;
-  for (const [k, c] of a) n += Math.min(c, b.get(k) ?? 0);
-  return n;
+  for (const [k, c] of pa) n += Math.min(c, pb.get(k) ?? 0);
+  return (2 * n) / (a.length - 1 + b.length - 1);
 }
 
 /** What laying a person's translation onto the lyrics gave each lyric line. */
 export interface AlignedTranslation {
-  /** The meaning to show under each line ('' for none). */
-  text: string[];
   /**
-   * Lines the translation covers without a meaning of their own: the later parts of one of its
-   * sentences that the lyrics break over several lines (the meaning shows on the first part).
+   * The meaning to show under each line: '' where the translation lacks the line, or where its
+   * sentence couldn't be shared out that far (both are left for machine translation).
    */
-  covered: boolean[];
+  text: string[];
+  /** The lines the translation has (whether or not its sentence could be shared out to them). */
+  matched: boolean[];
 }
+
+/** A meaning split where its sentence pauses (commas, semicolons, dashes). */
+const clauses = (english: string) =>
+  english
+    .split(/(?<=[,;:–—])\s+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+/**
+ * One sentence's meaning shared out over the sung lines it runs over, at its pauses: one part each
+ * when it has as many, the parts grouped in order when it has more. With fewer pauses than lines, the
+ * first line shows it all and the rest get nothing from it ('').
+ */
+function shareOut(meaning: string, lines: number): string[] {
+  const parts = clauses(meaning);
+  if (lines === 1 || parts.length < lines) return [meaning];
+  const out: string[] = [];
+  for (let j = 0; j < lines; j++) out.push(parts.slice(Math.round((j * parts.length) / lines), Math.round(((j + 1) * parts.length) / lines)).join(' '));
+  return out;
+}
+
+/** Whether a line only sings words of the line before (a phrase sung again, not the sentence going on). */
+const repeats = (words: string[], before: string[]) => words.length > 0 && words.every((w) => among(w, before));
+
+/** Whether a word is among others: the same sound, or (long enough to tell) nearly. */
+const among = (word: string, others: string[]) => others.some((x) => x === word || (word.length >= 3 && x.length >= 3 && likeness(word, x) >= 0.75));
+
+/** How many of a line's words are among another's. */
+const wordsAmong = (words: string[], others: string[]) => words.filter((w) => among(w, others)).length;
 
 /**
  * A person's translation laid onto the lyrics. Each lyric line gets the meaning of the translation's
- * line that sounds like it. The translation often joins two or three sung lines into one sentence; then
- * the run of lines it contains shows the meaning once, on its first line. Lines no translation line
- * sounds like are left for machine translation.
+ * line it sings, judged word by word. The lyrics and the translation break lines differently: a sung
+ * line can hold two or three of the translation's lines (their meanings are joined), and one of the
+ * translation's sentences can run over several sung lines (its meaning is shared out over them at its
+ * pauses). Lines the translation lacks, or that its meaning can't be shared out to, are left for
+ * machine translation.
  */
 export function alignTranslation(lines: string[], pairs: { original: string; english: string }[]): AlignedTranslation {
-  const known = pairs.map((p) => {
-    const s = sound(p.original);
-    return { sound: s, pairs: letterPairs(s), english: p.english };
-  });
-  // The translation line each lyric line belongs to (-1: none). Songs run in order, so a short line
-  // that could be in several sentences goes with the one the line before was in, or the next one.
+  const single = pairs.map((p) => wordSounds(p.original));
+  // Each translation line, and each run of two or three of them, as something a sung line can be.
+  const known: { words: string[]; english: string; first: number; last: number }[] = [];
+  for (let first = 0; first < pairs.length; first++)
+    for (let last = first; last < Math.min(pairs.length, first + 3); last++)
+      known.push({
+        words: single.slice(first, last + 1).flat(),
+        english: pairs
+          .slice(first, last + 1)
+          .map((p) => p.english)
+          .join(' '),
+        first,
+        last,
+      });
+  const sounds = lines.map((l) => wordSounds(l.trim()));
+  // What each lyric line sings (-1: none). Songs run in order, so a short line that could be in several
+  // sentences goes with the one the line before was in, or the next one.
   const owner: number[] = [];
   let previous = -1;
-  for (const line of lines) {
-    const s = sound(line.trim());
-    if (s.length < 3) {
+  for (const words of sounds) {
+    if (words.join('').length < 3) {
       owner.push(-1);
       continue;
     }
-    const mine = letterPairs(s);
-    const size = s.length - 1;
     let best = { index: -1, score: 0 };
     known.forEach((k, index) => {
-      const both = shared(mine, k.pairs);
-      // The same line…
-      const whole = (2 * both) / Math.max(1, size + k.sound.length - 1);
-      // …or a part of a longer one (long enough to tell: a word or two could be anywhere).
-      const part = s.length >= 8 && k.sound.length > s.length ? both / size : 0;
-      let score = Math.max(whole >= 0.6 ? whole : 0, part >= 0.8 ? part * 0.95 : 0);
-      if (score && previous >= 0 && (index === previous || index === previous + 1)) score += 0.2;
+      // The same words, both ways, or (spelled further apart: Kesriya, Kesariya) nearly the same
+      // letters all through…
+      const mine = wordsAmong(words, k.words) / words.length;
+      const theirs = wordsAmong(k.words, words) / k.words.length;
+      const letters = likeness(words.join(''), k.words.join(''));
+      const whole = Math.max(mine && theirs ? (2 * mine * theirs) / (mine + theirs) : 0, letters >= 0.8 ? letters : 0);
+      // …or a part of one longer line (not words found here and there over several): most of its
+      // words, two or more and one of them long enough to tell, are in it.
+      const part = k.first === k.last && words.length >= 2 && k.words.length > words.length && words.some((w) => w.length >= 4 && among(w, k.words)) ? mine : 0;
+      let score = Math.max(whole >= 0.7 ? whole : 0, part >= 0.7 ? part * 0.9 : 0);
+      if (!score) return;
+      // One translation line fitting beats a run of them that fits as well.
+      score -= (k.last - k.first) * 0.05;
+      const order = previous >= 0 ? known[previous]!.last : -1;
+      if (order >= 0 && (k.first === known[previous]!.first || k.first === order + 1)) score += 0.2;
       // The very line, sung again (a chorus), wins over going on in order.
       if (whole >= 0.9) score += 0.25;
       // A translation repeats its choruses: of copies that fit as well, the next one on.
-      const ahead = (i: number) => (i > previous ? i - previous : i + known.length);
-      if (score > best.score + 1e-9 || (score > 0 && Math.abs(score - best.score) <= 1e-9 && ahead(index) < ahead(best.index))) best = { index, score };
+      const ahead = (i: number) => (known[i]!.first > order ? known[i]!.first - order : known[i]!.first + pairs.length);
+      if (score > best.score + 1e-9 || (Math.abs(score - best.score) <= 1e-9 && ahead(index) < ahead(best.index))) best = { index, score };
     });
     owner.push(best.index);
-    previous = best.index;
+    if (best.index >= 0) previous = best.index;
   }
-  const text: string[] = [];
-  const covered: boolean[] = [];
-  owner.forEach((k, i) => {
-    // The next part of the same sentence (not the same line sung again) shows nothing of its own.
-    const continues = k >= 0 && i > 0 && owner[i - 1] === k && sound(lines[i]!) !== sound(lines[i - 1]!);
-    text.push(k >= 0 && !continues ? known[k]!.english : '');
-    covered.push(continues);
-  });
-  return { text, covered };
+  const text: string[] = lines.map(() => '');
+  const matched: boolean[] = lines.map(() => false);
+  for (let i = 0; i < lines.length; ) {
+    const k = owner[i]!;
+    // The run of lines that are parts of the same sentence (not the same words sung again).
+    let end = i + 1;
+    while (k >= 0 && end < lines.length && owner[end] === k && !repeats(sounds[end]!, sounds[end - 1]!)) end++;
+    if (k >= 0) {
+      const shares = shareOut(known[k]!.english, end - i);
+      for (let j = i; j < end; j++) {
+        text[j] = shares[j - i] ?? '';
+        matched[j] = true;
+      }
+    }
+    i = end;
+  }
+  return { text, matched };
 }
 
 /** What pronunciation can do for these lyrics. */

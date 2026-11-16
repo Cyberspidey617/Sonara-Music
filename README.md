@@ -53,6 +53,7 @@ Node.js 22 or later:
 npm install
 npm run dev                 # development, with hot reload
 npm run typecheck
+npm test                    # music-video and lyric-translation matching, on cases from real bug reports
 npx electron-vite build && npx electron-builder --win --x64 --arm64   # Windows installers and zips
 npx electron-vite build && npx electron-builder --mac --arm64 --x64   # macOS .dmg (on a Mac)
 npx electron-vite build && npx electron-builder --linux --x64 --arm64 # Linux AppImage and .deb
