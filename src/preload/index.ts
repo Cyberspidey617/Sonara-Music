@@ -26,6 +26,7 @@ const api: ObsidianApi = {
   nowPlaying: (track) => ipcRenderer.send('scrobble:now-playing', track),
   scrobbleStatus: () => ipcRenderer.invoke('scrobble:status'),
   aboutSong: (title, artist) => ipcRenderer.invoke('about:song', title, artist),
+  humanTranslation: (title, artists, album) => ipcRenderer.invoke('lyrics:human-translation', title, artists, album),
   connectListenBrainz: (token) => ipcRenderer.invoke('scrobble:listenbrainz', token),
   beginLastFm: (key, secret) => ipcRenderer.invoke('scrobble:lastfm-begin', key, secret),
   finishLastFm: () => ipcRenderer.invoke('scrobble:lastfm-finish'),

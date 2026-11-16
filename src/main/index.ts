@@ -17,6 +17,7 @@ import { getScanState, localAlbum, localAlbums, localTracks, openLibrary, scan, 
 import { clearMatches } from './lossless';
 import { openAddons, testSource } from './addons';
 import { aboutSong } from './about';
+import { humanTranslation } from './songTranslation';
 import { atmosDecoderAvailable } from './atmos';
 import { accountStatus, cancelCodeSignIn, openAccount, signIn, signInWithCode, signOut } from './account';
 import { beginLastFm, connectListenBrainz, disconnect as disconnectScrobbling, finishLastFm, maybeScrobble, nowPlaying, openScrobbler, scrobbleStatus } from './scrobble';
@@ -592,6 +593,13 @@ function registerIpc() {
   ipcMain.on('scrobble:now-playing', (_event, track: Track) => track?.title && nowPlaying(track));
   handle('scrobble:status', () => scrobbleStatus());
   handle('about:song', (title: string, artist: string) => aboutSong(String(title).slice(0, 200), String(artist).slice(0, 200)));
+  handle('lyrics:human-translation', (title: string, artists: string[], album?: string) =>
+    humanTranslation(
+      String(title).slice(0, 200),
+      (Array.isArray(artists) ? artists : []).slice(0, 8).map((a) => String(a).slice(0, 100)),
+      album ? String(album).slice(0, 200) : undefined,
+    ),
+  );
   handle('scrobble:listenbrainz', (token: string) => connectListenBrainz(String(token)));
   handle('scrobble:lastfm-begin', (key: string, secret: string) => beginLastFm(String(key), String(secret)));
   handle('scrobble:lastfm-finish', () => finishLastFm());

@@ -5,7 +5,8 @@ import { LyricsResync, retime, useLyricsTiming, type TimedLine } from './LyricsR
 import { SyncedByYou, SyncYourself, useUserLyrics } from './LyricsSyncYourself';
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { create } from 'zustand';
-import { pronunciationKind, romanizeLines, translateLines, TRANSLATE_LANGUAGES } from '@/lib/lyricsTools';
+import { alignTranslation, pronunciationKind, romanizeLines, translateLines, TRANSLATE_LANGUAGES } from '@/lib/lyricsTools';
+import { api } from '@/lib/api';
 import { openMenuAt } from '@/state/menu';
 import type { Track } from '@shared/types';
 import { LYRIC_FONTS } from '@/lib/appearance';
@@ -62,6 +63,7 @@ function LyricsTools({ kind, onResync, resynced }: { kind: 'indic' | 'online' | 
   const busy = useLyricsBusy((s) => s.busy);
   const noPronunciation = useLyricsBusy((s) => s.noPronunciation);
   const noTranslation = useLyricsBusy((s) => s.noTranslation);
+  const translatedBy = useLyricsBusy((s) => s.translatedBy);
   const set = useLibrary.getState().updateSettings;
   const name = TRANSLATE_LANGUAGES.find((l) => l.code === to)?.name ?? to;
   const btn = 'group/tool relative flex h-8 items-center gap-1.5 rounded-pill px-3 type-callout-emphasized transition-colors';
@@ -92,7 +94,15 @@ function LyricsTools({ kind, onResync, resynced }: { kind: 'indic' | 'online' | 
         aria-pressed={tr}
         aria-haspopup="menu"
         aria-label={tr ? `Translate: ${name}` : 'Translate'}
-        title={translationHint ? undefined : tr ? `Translating to ${name}: pick another language, or Off` : 'Translate the lyrics'}
+        title={
+          translationHint
+            ? undefined
+            : tr && translatedBy
+              ? `English translation by ${translatedBy}: pick another language, or Off`
+              : tr
+                ? `Translating to ${name}: pick another language, or Off`
+                : 'Translate the lyrics'
+        }
         onClick={(e) =>
           openMenuAt(
             e.currentTarget,
@@ -137,19 +147,50 @@ function Hint({ text }: { text: string }) {
   );
 }
 
-/** Whether the latest pass found nothing to show: no pronunciation, or no translation. */
-const useLyricsBusy = create<{ busy: boolean; noPronunciation: boolean; noTranslation: boolean }>(() => ({ busy: false, noPronunciation: false, noTranslation: false }));
+/**
+ * Whether the latest pass found nothing to show: no pronunciation, or no translation; and the site a
+ * person's translation came from, when it did.
+ */
+const useLyricsBusy = create<{ busy: boolean; noPronunciation: boolean; noTranslation: boolean; translatedBy: string | null }>(() => ({
+  busy: false,
+  noPronunciation: false,
+  noTranslation: false,
+  translatedBy: null,
+}));
+
+/**
+ * Translations for the lines: into English, a person's translation of the song where there's one
+ * (it gets the meaning a machine misses), with machine translation for any lines it doesn't cover.
+ */
+async function translateSong(lines: string[], to: string, track: Track): Promise<{ trans: string[]; by: string | null }> {
+  if (to === 'en') {
+    const human = await api.humanTranslation(track.title, track.artists.map((a) => a.name), track.album?.name).catch(() => null);
+    if (human) {
+      const { text, covered } = alignTranslation(lines, human.pairs);
+      const sung = lines.filter((l) => l.trim()).length;
+      const matched = lines.filter((l, i) => l.trim() && (text[i] || covered[i])).length;
+      // Most lines matched: it's this song's translation (a few lines can differ from the lyrics shown).
+      if (sung && matched >= sung * 0.5) {
+        const missing = lines.map((l, i) => (text[i] || covered[i] || !l.trim() ? -1 : i)).filter((i) => i >= 0);
+        const machine = missing.length ? await translateLines(missing.map((i) => lines[i]!), to).catch(() => [] as string[]) : [];
+        missing.forEach((i, k) => (text[i] = machine[k] ?? ''));
+        return { trans: text, by: human.source };
+      }
+    }
+  }
+  return { trans: await translateLines(lines, to).catch(() => [] as string[]), by: null };
+}
 
 /** Adds pronunciation and translations to lines, as the settings ask. */
-async function withAlternates(lines: string[], wantRoman: boolean, wantTrans: boolean, to: string): Promise<{ roman: string[]; trans: string[] }> {
+async function withAlternates(lines: string[], wantRoman: boolean, wantTrans: boolean, to: string, track: Track): Promise<{ roman: string[]; trans: string[] }> {
   useLyricsBusy.setState({ busy: true });
   try {
-    const [roman, trans] = await Promise.all([
+    const [roman, { trans, by }] = await Promise.all([
       wantRoman ? romanizeLines(lines) : Promise.resolve([] as string[]),
-      wantTrans ? translateLines(lines, to).catch(() => [] as string[]) : Promise.resolve([] as string[]),
+      wantTrans ? translateSong(lines, to, track) : Promise.resolve({ trans: [] as string[], by: null }),
     ]);
     const empty = (list: string[]) => !list.some((line) => line.trim());
-    useLyricsBusy.setState({ noPronunciation: wantRoman && empty(roman), noTranslation: wantTrans && empty(trans) });
+    useLyricsBusy.setState({ noPronunciation: wantRoman && empty(roman), noTranslation: wantTrans && empty(trans), translatedBy: by });
     return { roman, trans };
   } finally {
     useLyricsBusy.setState({ busy: false });
@@ -266,7 +307,7 @@ function SyncedLyrics({ track, full, onMissing }: { track: Track; full: boolean;
     if (!wantTrans) el.showTranslation = false;
     let alive = true;
     const texts = loaded.map((l) => l.text.map((x) => x.text).join(''));
-    void withAlternates(texts, wantRoman && kind !== 'none', wantTrans, to).then(({ roman, trans }) => alive && setAlt({ roman, trans, wantRoman, wantTrans }));
+    void withAlternates(texts, wantRoman && kind !== 'none', wantTrans, to, track).then(({ roman, trans }) => alive && setAlt({ roman, trans, wantRoman, wantTrans }));
     return () => {
       alive = false;
     };
@@ -314,7 +355,7 @@ function PlainLyrics({ track, full }: { track: Track; full: boolean }) {
   useEffect(() => {
     if (!data?.text) return;
     let alive = true;
-    void withAlternates(lines, wantRoman && kind !== 'none', wantTrans, to).then((r) => alive && setAlt(r));
+    void withAlternates(lines, wantRoman && kind !== 'none', wantTrans, to, track).then((r) => alive && setAlt(r));
     return () => {
       alive = false;
     };

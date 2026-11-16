@@ -167,6 +167,7 @@ export function createMockApi(): ObsidianApi {
     recordPlay: () => undefined,
     nowPlaying: () => undefined,
     aboutSong: async (title) => ({ kind: 'song', title, description: 'Song', text: 'A mock article about the song.', url: 'https://en.wikipedia.org' }),
+    humanTranslation: async () => null,
     scrobbleStatus: async () => ({ listenBrainz: null, lastFm: null, lastFmWaiting: false, pending: 0 }),
     connectListenBrainz: async () => ({ listenBrainz: { user: 'mock' }, lastFm: null, lastFmWaiting: false, pending: 0 }),
     beginLastFm: async () => ({ listenBrainz: null, lastFm: null, lastFmWaiting: true, pending: 0 }),

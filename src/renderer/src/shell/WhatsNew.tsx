@@ -10,6 +10,16 @@ type Note = { icon: LucideIcon; title: string; body: string; open?: () => void; 
 /** What each version brought, newest first. Shown once, after Sonara updates to it. */
 const NOTES: { version: string; notes: Note[] }[] = [
   {
+    version: '2.3.7',
+    notes: [
+      {
+        icon: MicVocal,
+        title: 'Lyric translations written by people',
+        body: 'Translating lyrics to English now uses a person’s translation from lyricstranslatezone.com when the song has one, so Tamil, Hindi and other songs read the way they’re meant. Lines it doesn’t cover are still translated automatically.',
+      },
+    ],
+  },
+  {
     version: '2.3.6',
     notes: [
       {

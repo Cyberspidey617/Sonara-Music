@@ -245,6 +245,15 @@ export interface SeekLook {
 }
 
 /** A listen of 30 seconds or more, sent again as it goes on (same id). */
+/** A song's English translation written by a person: each line as the site sets it out. */
+export interface HumanTranslation {
+  /** The original line (in Latin letters) and its meaning. */
+  pairs: { original: string; english: string }[];
+  url: string;
+  /** The site it's from, for the credit. */
+  source: string;
+}
+
 /** A song's story from Wikipedia, or its artist's when the song has no article. */
 export interface SongAbout {
   kind: 'song' | 'artist';
@@ -778,6 +787,8 @@ export interface ObsidianApi {
   nowPlaying(track: Track): void;
   scrobbleStatus(): Promise<ScrobbleStatus>;
   aboutSong(title: string, artist: string): Promise<SongAbout | null>;
+  /** A person's English translation of the song's lyrics, when there's one. */
+  humanTranslation(title: string, artists: string[], album?: string): Promise<HumanTranslation | null>;
   connectListenBrainz(token: string): Promise<ScrobbleStatus>;
   beginLastFm(key: string, secret: string): Promise<ScrobbleStatus>;
   finishLastFm(): Promise<ScrobbleStatus>;
