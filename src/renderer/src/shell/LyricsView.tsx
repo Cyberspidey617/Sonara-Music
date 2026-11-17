@@ -41,6 +41,8 @@ function customStyles(align: 'left' | 'center', controls: boolean): string {
   // Pronunciation and translation come from our own toolbar (better for Indian languages).
   css += '.header-controls { display: none !important; }';
   css += '.lyrics-romanization-container, .lyrics-translation-container { opacity: .78; font-weight: 600; }';
+  // Machine-translated lines among a person's translation: in italics, a little fainter.
+  css += '.lyrics-translation-container.by-machine { font-style: italic; opacity: .55; }';
   return css;
 }
 
@@ -73,6 +75,20 @@ function LyricsTools({ kind, onResync, resynced }: { kind: 'indic' | 'online' | 
   const latinOnly = kind === 'none';
   const pronunciationHint = latinOnly ? 'These lyrics are already in Latin letters, so there’s no pronunciation to add.' : on && noPronunciation ? 'Pronunciation isn’t available for these lyrics.' : null;
   const translationHint = tr && noTranslation ? `No ${name} translation for these lyrics: they may already be in ${name}, or translation can’t be reached right now.` : null;
+  // After you pick a language: a note on where the translation came from, for a few seconds.
+  const announce = useLyricsBusy((s) => s.announce);
+  const sources = useLyricsBusy((s) => s.sources);
+  const [note, setNote] = useState<string | null>(null);
+  useEffect(() => {
+    if (!announce || busy || !sources || !tr) return;
+    useLyricsBusy.setState({ announce: 0 });
+    setNote(sourceNote(sources, translatedBy));
+  }, [announce, busy, sources, tr, translatedBy]);
+  useEffect(() => {
+    if (!note) return;
+    const t = setTimeout(() => setNote(null), 6000);
+    return () => clearTimeout(t);
+  }, [note]);
   return (
     // In a narrow lyrics panel the names go and the icons stay (each keeps its tooltip), so the
     // toolbar fits instead of running off the panel's edge.
@@ -98,7 +114,7 @@ function LyricsTools({ kind, onResync, resynced }: { kind: 'indic' | 'online' | 
           translationHint
             ? undefined
             : tr && translatedBy
-              ? `English translation by ${translatedBy}: pick another language, or Off`
+              ? `English translation by ${translatedBy}, with any lines it lacks machine-translated (in italics): pick another language, or Off`
               : tr
                 ? `Translating to ${name}: pick another language, or Off`
                 : 'Translate the lyrics'
@@ -110,7 +126,15 @@ function LyricsTools({ kind, onResync, resynced }: { kind: 'indic' | 'online' | 
               { header: 'Translate lyrics to' },
               { label: 'Off', hint: tr ? undefined : '✓', onSelect: () => set({ lyricsTranslation: false }) },
               { separator: true },
-              ...TRANSLATE_LANGUAGES.map((l) => ({ label: l.name, hint: tr && l.code === to ? '✓' : undefined, onSelect: () => set({ lyricsTranslateTo: l.code, lyricsTranslation: true }) })),
+              ...TRANSLATE_LANGUAGES.map((l) => ({
+                label: l.name,
+                hint: tr && l.code === to ? '✓' : undefined,
+                onSelect: () => {
+                  // Say where the lines came from once they're translated (at once, if they already are).
+                  useLyricsBusy.setState(tr && l.code === to ? { announce: Date.now() } : { announce: Date.now(), sources: null });
+                  set({ lyricsTranslateTo: l.code, lyricsTranslation: true });
+                },
+              })),
             ],
             'below-end',
           )
@@ -119,6 +143,7 @@ function LyricsTools({ kind, onResync, resynced }: { kind: 'indic' | 'online' | 
         {busy ? <Loader2 size={15} className="animate-spin" /> : <Languages size={15} />} <span className="max-w-[110px] truncate @max-[520px]/lyrics:hidden">{tr ? name : 'Translate'}</span>
         <ChevronDown size={14} className="-mr-1 opacity-70" />
         {translationHint && <Hint text={translationHint} />}
+        {note && <SourceNote text={note} />}
       </button>
       {onResync && (
         <button
@@ -147,22 +172,56 @@ function Hint({ text }: { text: string }) {
   );
 }
 
+/** The song and language whose translation's note was last shown. */
+let announcedFor = '';
+
+/** Where a song's translated lines came from, in a sentence. */
+function sourceNote(sources: { people: number; machine: number }, by: string | null): string {
+  const lines = (n: number) => `${n} line${n === 1 ? '' : 's'}`;
+  if (!sources.people) return `Machine-translated: ${lines(sources.machine)}.`;
+  if (!sources.machine) return `All ${lines(sources.people)} translated by people, from ${by}.`;
+  return `${lines(sources.people)} translated by people, from ${by}. ${lines(sources.machine)} machine-translated, shown in italics.`;
+}
+
+/** The note on where a translation came from: shown for a few seconds after you pick a language. */
+function SourceNote({ text }: { text: string }) {
+  return (
+    <span
+      role="status"
+      className="pointer-events-none absolute top-full right-0 z-20 mt-2 w-max max-w-[280px] animate-rise rounded-[10px] px-3 py-2 text-left type-callout text-primary shadow-[0_8px_24px_rgb(0_0_0/0.45)]"
+      style={{ backgroundColor: 'var(--dialog-fill)' }}
+    >
+      {text}
+    </span>
+  );
+}
+
 /**
- * Whether the latest pass found nothing to show: no pronunciation, or no translation; and the site a
- * person's translation came from, when it did.
+ * Whether the latest pass found nothing to show: no pronunciation, or no translation; the site a
+ * person's translation came from, when it did; how many lines came from people and from the machine;
+ * and when you last picked a language (to say so once the lines are in).
  */
-const useLyricsBusy = create<{ busy: boolean; noPronunciation: boolean; noTranslation: boolean; translatedBy: string | null }>(() => ({
+const useLyricsBusy = create<{
+  busy: boolean;
+  noPronunciation: boolean;
+  noTranslation: boolean;
+  translatedBy: string | null;
+  sources: { people: number; machine: number } | null;
+  announce: number;
+}>(() => ({
   busy: false,
   noPronunciation: false,
   noTranslation: false,
   translatedBy: null,
+  sources: null,
+  announce: 0,
 }));
 
 /**
  * Translations for the lines: into English, a person's translation of the song where there's one
  * (it gets the meaning a machine misses), with machine translation for any lines it doesn't cover.
  */
-async function translateSong(lines: string[], to: string, track: Track): Promise<{ trans: string[]; by: string | null }> {
+async function translateSong(lines: string[], to: string, track: Track): Promise<{ trans: string[]; byMachine: boolean[]; by: string | null }> {
   if (to === 'en') {
     const human = await api.humanTranslation(track.title, track.artists.map((a) => a.name), track.album?.name).catch(() => null);
     if (human) {
@@ -173,28 +232,75 @@ async function translateSong(lines: string[], to: string, track: Track): Promise
         // Every sung line gets a meaning: machine translation where the person's has none for it.
         const missing = lines.map((l, i) => (text[i] || !l.trim() ? -1 : i)).filter((i) => i >= 0);
         const machine = missing.length ? await translateLines(missing.map((i) => lines[i]!), to).catch(() => [] as string[]) : [];
-        missing.forEach((i, k) => (text[i] = machine[k] ?? ''));
-        return { trans: text, by: human.source };
+        const byMachine = lines.map(() => false);
+        missing.forEach((i, k) => {
+          text[i] = machine[k] ?? '';
+          byMachine[i] = !!text[i];
+        });
+        return { trans: text, byMachine, by: human.source };
       }
     }
   }
-  return { trans: await translateLines(lines, to).catch(() => [] as string[]), by: null };
+  const trans = await translateLines(lines, to).catch(() => [] as string[]);
+  return { trans, byMachine: trans.map((t) => !!t), by: null };
 }
 
 /** Adds pronunciation and translations to lines, as the settings ask. */
-async function withAlternates(lines: string[], wantRoman: boolean, wantTrans: boolean, to: string, track: Track): Promise<{ roman: string[]; trans: string[] }> {
+async function withAlternates(lines: string[], wantRoman: boolean, wantTrans: boolean, to: string, track: Track): Promise<{ roman: string[]; trans: string[]; byMachine: boolean[] }> {
   useLyricsBusy.setState({ busy: true });
   try {
-    const [roman, { trans, by }] = await Promise.all([
+    const [roman, { trans, byMachine, by }] = await Promise.all([
       wantRoman ? romanizeLines(lines) : Promise.resolve([] as string[]),
-      wantTrans ? translateSong(lines, to, track) : Promise.resolve({ trans: [] as string[], by: null }),
+      wantTrans ? translateSong(lines, to, track) : Promise.resolve({ trans: [] as string[], byMachine: [] as boolean[], by: null }),
     ]);
     const empty = (list: string[]) => !list.some((line) => line.trim());
-    useLyricsBusy.setState({ noPronunciation: wantRoman && empty(roman), noTranslation: wantTrans && empty(trans), translatedBy: by });
-    return { roman, trans };
+    const machine = byMachine.filter(Boolean).length;
+    const sources = wantTrans && !empty(trans) ? { people: trans.filter((t) => t.trim()).length - machine, machine } : null;
+    useLyricsBusy.setState({ noPronunciation: wantRoman && empty(roman), noTranslation: wantTrans && empty(trans), translatedBy: by, sources });
+    // With translation on, each song's translation says where it came from as it shows up (once per
+    // song and language, not again when pronunciation is turned on or off).
+    const key = `${track.videoId}|${to}`;
+    if (sources && key !== announcedFor) {
+      announcedFor = key;
+      useLyricsBusy.setState({ announce: Date.now() });
+    }
+    return { roman, trans, byMachine };
   } finally {
     useLyricsBusy.setState({ busy: false });
   }
+}
+
+/**
+ * Marks the machine-translated lines am-lyrics shows among a person's translation (styled in
+ * customStyles), by their text: it draws each line's translation as plain text, with nothing to tell
+ * them apart. Kept up as it redraws. Returns the cleanup.
+ */
+function markMachineLines(el: HTMLElement | null, alt: { trans: string[]; byMachine: boolean[] } | null): (() => void) | undefined {
+  const root = el?.shadowRoot;
+  if (!root || !alt) return undefined;
+  const machine = new Set<string>();
+  const people = new Set<string>();
+  alt.trans.forEach((t, i) => t.trim() && (alt.byMachine[i] ? machine : people).add(t.trim()));
+  // All from one source: nothing to tell apart.
+  if (!machine.size || !people.size) {
+    root.querySelectorAll('.lyrics-translation-container.by-machine').forEach((n) => n.classList.remove('by-machine'));
+    return undefined;
+  }
+  const mark = () =>
+    root.querySelectorAll('.lyrics-translation-container').forEach((n) => {
+      const t = n.textContent?.trim() ?? '';
+      n.classList.toggle('by-machine', machine.has(t) && !people.has(t));
+    });
+  mark();
+  let queued = 0;
+  const watch = new MutationObserver(() => {
+    if (!queued) queued = requestAnimationFrame(() => ((queued = 0), mark()));
+  });
+  watch.observe(root, { childList: true, subtree: true });
+  return () => {
+    watch.disconnect();
+    cancelAnimationFrame(queued);
+  };
 }
 
 /**
@@ -298,7 +404,7 @@ function SyncedLyrics({ track, full, onMissing }: { track: Track; full: boolean;
   }, [track.videoId, full, scale, font, align, blur, controls, motion]);
 
   // Pronunciation / translation: worked out for the loaded lines.
-  const [alt, setAlt] = useState<{ roman: string[]; trans: string[]; wantRoman: boolean; wantTrans: boolean } | null>(null);
+  const [alt, setAlt] = useState<{ roman: string[]; trans: string[]; byMachine: boolean[]; wantRoman: boolean; wantTrans: boolean } | null>(null);
   useEffect(() => {
     const el = element.current as unknown as { showRomanization: boolean; showTranslation: boolean } | null;
     if (!el || !loaded) return;
@@ -307,7 +413,7 @@ function SyncedLyrics({ track, full, onMissing }: { track: Track; full: boolean;
     if (!wantTrans) el.showTranslation = false;
     let alive = true;
     const texts = loaded.map((l) => l.text.map((x) => x.text).join(''));
-    void withAlternates(texts, wantRoman && kind !== 'none', wantTrans, to, track).then(({ roman, trans }) => alive && setAlt({ roman, trans, wantRoman, wantTrans }));
+    void withAlternates(texts, wantRoman && kind !== 'none', wantTrans, to, track).then(({ roman, trans, byMachine }) => alive && setAlt({ roman, trans, byMachine, wantRoman, wantTrans }));
     return () => {
       alive = false;
     };
@@ -331,6 +437,7 @@ function SyncedLyrics({ track, full, onMissing }: { track: Track; full: boolean;
       el.showRomanization = alt.wantRoman;
       el.showTranslation = alt.wantTrans;
     }
+    return markMachineLines(element.current, alt);
   }, [loaded, alt, timing]);
 
   return (
@@ -351,7 +458,7 @@ function PlainLyrics({ track, full }: { track: Track; full: boolean }) {
   const to = useLibrary((s) => s.settings.lyricsTranslateTo) || 'en';
   const lines = useMemo(() => (data?.text ?? '').split('\n'), [data?.text]);
   const kind = useMemo(() => (lines.some((l) => l.trim()) ? pronunciationKind(lines) : null), [lines]);
-  const [alt, setAlt] = useState<{ roman: string[]; trans: string[] }>({ roman: [], trans: [] });
+  const [alt, setAlt] = useState<{ roman: string[]; trans: string[]; byMachine: boolean[] }>({ roman: [], trans: [], byMachine: [] });
   useEffect(() => {
     if (!data?.text) return;
     let alive = true;
@@ -360,6 +467,8 @@ function PlainLyrics({ track, full }: { track: Track; full: boolean }) {
       alive = false;
     };
   }, [lines, wantRoman, wantTrans, to, kind, data?.text]);
+  // Machine-translated lines among a person's translation: in italics.
+  const mixed = alt.byMachine.some(Boolean) && alt.byMachine.some((m, i) => !m && !!alt.trans[i]);
   const scale = useLibrary((s) => s.settings.lyricsScale) || 1;
   const font = useLibrary((s) => s.settings.lyricsFont);
   const align = useLibrary((s) => s.settings.lyricsAlign);
@@ -394,7 +503,9 @@ function PlainLyrics({ track, full }: { track: Track; full: boolean }) {
             <div key={i} className="stagger mb-1" style={{ '--i': i } as CSSProperties}>
               <div>{line}</div>
               {wantRoman && alt.roman[i] && <div className="text-[0.62em] leading-snug font-semibold text-secondary">{alt.roman[i]}</div>}
-              {wantTrans && alt.trans[i] && <div className="mb-2 text-[0.62em] leading-snug font-semibold text-tertiary">{alt.trans[i]}</div>}
+              {wantTrans && alt.trans[i] && (
+                <div className={`mb-2 text-[0.62em] leading-snug font-semibold text-tertiary ${mixed && alt.byMachine[i] ? 'italic opacity-70' : ''}`}>{alt.trans[i]}</div>
+              )}
             </div>
           ) : (
             <div key={i} className="h-[0.7em]" />
