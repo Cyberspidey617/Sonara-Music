@@ -10,6 +10,21 @@ type Note = { icon: LucideIcon; title: string; body: string; open?: () => void; 
 /** What each version brought, newest first. Shown once, after Sonara updates to it. */
 const NOTES: { version: string; notes: Note[] }[] = [
   {
+    version: '2.3.9',
+    notes: [
+      {
+        icon: MicVocal,
+        title: 'See where each translated line comes from',
+        body: 'When a song’s English comes from a person’s translation, any lines it doesn’t cover are machine-translated and shown in italics. A short note under Translate says how many lines came from each, when you pick a language and as each song’s translation appears.',
+      },
+      {
+        icon: Download,
+        title: 'Updates that install',
+        body: 'If Sonara is installed for all users (in Program Files), an update now asks Windows for permission once and installs, instead of reopening the old version.',
+      },
+    ],
+  },
+  {
     version: '2.3.8',
     notes: [
       {
