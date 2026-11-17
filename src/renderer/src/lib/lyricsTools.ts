@@ -13,6 +13,7 @@
  * romanization for other non-Latin scripts.
  */
 import { indicScript, isLatin, romanizeIndic, SCRIPT_LANG } from './romanize';
+import { wordSound } from '../../../shared/wordSound';
 
 const API = 'https://translate.googleapis.com/translate_a/single?client=gtx';
 const cache = new Map<string, string>();
@@ -98,27 +99,6 @@ export async function translateLines(lines: string[], target: string): Promise<s
     const t = cache.get(key(l.trim())) ?? '';
     return t && t.toLowerCase() !== l.trim().toLowerCase() ? t : '';
   });
-}
-
-/** One word as its sound: the spellings people vary for the same sound folded together. */
-function wordSound(word: string): string {
-  return (
-    word
-      // Two letters for one sound first: zh (ழ), and the aspirates written with an h.
-      .replace(/zh/g, 'l')
-      .replace(/[cs]h/g, 's')
-      .replace(/([tdkgbp])h/g, '$1')
-      // ச is written ch or s (Chenjudare, Senjudare); a lone h is often a g or k (Arogara, Arohara).
-      .replace(/[cjzs]/g, 's')
-      .replace(/[ghkq]/g, 'k')
-      .replace(/x/g, 'ks')
-      .replace(/w/g, 'v')
-      .replace(/[dt]/g, 't')
-      .replace(/[bpf]/g, 'p')
-      // Vowels are where spellings differ most (love, lav; mein, men; taaron, taro): one sound for all.
-      .replace(/[aeiouy]+/g, 'a')
-      .replace(/(.)\1+/g, '$1')
-  );
 }
 
 /**

@@ -7,7 +7,7 @@
  */
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { linePairs, postIsSong } from '../src/main/translationPage';
+import { linePairs, postIsSong, searchTerms } from '../src/main/translationPage';
 import { alignTranslation } from '../src/renderer/src/lib/lyricsTools';
 
 const pairs = [
@@ -47,6 +47,15 @@ describe('postIsSong', () => {
   test("the song's name first, translated, with one of its artists or its film", () => {
     assert.equal(postIsSong(title, 'Senjudare (From "OM Chapter 1")', ['Sai Abhyankkar']), true);
     assert.equal(postIsSong(title, 'Senjudare (From "OM Chapter 1")', ['Someone Else']), true, 'the film is named');
+  });
+
+  test('the name spelled another way (one m or two, d or t) is still the song', () => {
+    const post = 'Ada Bommale Lyrics English Translation &#8211; Vaazha 2 | Rzee';
+    assert.equal(postIsSong(post, 'Ada Bomale', ['Rzee']), true);
+    assert.equal(postIsSong(post, 'Atta Bommale', ['Rzee']), true);
+    assert.equal(postIsSong(post, 'Ada Bomale', ['Someone Else']), false, 'still needs an artist or its film');
+    assert.equal(postIsSong(post, 'Ada Kolame', ['Rzee']), false, 'another name is another song');
+    assert.equal(postIsSong('Kochu Kunjinte Achanoru (Remix) Lyrics English Translation – Vaazha 2 | Kalabhavan Mani', 'Kochu Kunjintachanoru (Remix)', ['Kalabhavan Mani']), true, 'split into words differently');
   });
 
   test("another song's post, or the right name with no credit, is not the song's", () => {
@@ -131,5 +140,12 @@ describe('alignTranslation', () => {
     const { text, matched } = alignTranslation(['Something else entirely sung here', 'hmm', ''], pairs);
     assert.deepEqual(text, ['', '', '']);
     assert.deepEqual(matched, [false, false, false]);
+  });
+});
+
+describe('searchTerms', () => {
+  test("the song's name first, then its artists and its film, for a name the site spells another way", () => {
+    assert.deepEqual(searchTerms('Ada Bomale', ['Rzee', 'Nila Raj - Topic'], 'Vaazha 2 (Original Motion Picture Soundtrack)'), ['ada bomale', 'rzee', 'nila raj', 'vaazha 2']);
+    assert.deepEqual(searchTerms('Senjudare (From "OM Chapter 1")', ['Sai Abhyankkar'], 'Senjudare (From "OM Chapter 1")'), ['senjudare', 'sai abhyankkar', 'om chapter 1']);
   });
 });
