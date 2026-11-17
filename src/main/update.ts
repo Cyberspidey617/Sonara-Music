@@ -90,9 +90,40 @@ export async function downloadUpdate(): Promise<void> {
   }
 }
 
+/**
+ * Whether Windows lets Sonara write where it's installed. Not in a protected folder (Program Files),
+ * where an install for all users lives: there the installer only works with your permission. Tried
+ * with a file, since Windows' file rights don't show in a read-only check.
+ */
+function installFolderWritable(): boolean {
+  const probe = path.join(path.dirname(process.execPath), `.update-check-${process.pid}`);
+  try {
+    fs.writeFileSync(probe, '');
+    fs.rmSync(probe, { force: true });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Has the downloaded update installed with Windows' permission prompt when the install folder needs
+ * it. Without it the quiet installer can't replace the app there, and the old version just opens
+ * again. The updater takes this from the release's notes on the file; set here for this install.
+ */
+function askPermissionIfNeeded() {
+  if (process.platform !== 'win32' || installFolderWritable()) return;
+  const file = (autoUpdater as unknown as { downloadedUpdateHelper?: { downloadedFileInfo?: { isAdminRightsRequired?: boolean } | null } }).downloadedUpdateHelper?.downloadedFileInfo;
+  if (file && !file.isAdminRightsRequired) {
+    file.isAdminRightsRequired = true;
+    log.info('updater: the install folder needs permission; the installer will ask for it');
+  }
+}
+
 /** Quits, installs the downloaded update quietly, and opens the new version. */
 export function installUpdate() {
   if (state.phase !== 'ready') return;
+  askPermissionIfNeeded();
   autoUpdater.quitAndInstall(true, true);
 }
 
@@ -118,6 +149,8 @@ export function watchForUpdates(options: { enabled: () => boolean; tell: (s: Upd
   autoUpdater.on('update-not-available', (info) => set({ phase: 'none', latest: info.version, canInstall: true }));
   autoUpdater.on('download-progress', (p) => set({ phase: 'downloading', percent: Math.round(p.percent) }));
   autoUpdater.on('update-downloaded', (info) => {
+    // Also for the install when you quit, which doesn't come through installUpdate.
+    askPermissionIfNeeded();
     set({ phase: 'ready', latest: info.version, percent: 100 });
     options.ready();
   });
