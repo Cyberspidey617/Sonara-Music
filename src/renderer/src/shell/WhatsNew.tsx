@@ -10,6 +10,16 @@ type Note = { icon: LucideIcon; title: string; body: string; open?: () => void; 
 /** What each version brought, newest first. Shown once, after Sonara updates to it. */
 const NOTES: { version: string; notes: Note[] }[] = [
   {
+    version: '2.3.8',
+    notes: [
+      {
+        icon: MicVocal,
+        title: 'More songs translated by people',
+        body: 'Songs whose names are spelled a little differently on YouTube Music, like many Malayalam and Tamil songs, now find their person-written English translation too, and each line shows its own part of a sentence sung over two lines.',
+      },
+    ],
+  },
+  {
     version: '2.3.7',
     notes: [
       {
