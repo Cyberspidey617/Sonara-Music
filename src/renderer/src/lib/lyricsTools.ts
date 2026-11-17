@@ -167,24 +167,44 @@ export interface AlignedTranslation {
   matched: boolean[];
 }
 
-/** A meaning split where its sentence pauses (commas, semicolons, dashes). */
-const clauses = (english: string) =>
-  english
-    .split(/(?<=[,;:–—])\s+/)
-    .map((s) => s.trim())
-    .filter(Boolean);
+/** Words a meaning can break before: where a new clause starts. */
+const JOINS = new Set(['and', 'but', 'or', 'so', 'as', 'while', 'when', 'whenever', 'till', 'until', 'because', 'if', 'then', 'yet', 'where', 'before', 'after']);
 
 /**
- * One sentence's meaning shared out over the sung lines it runs over, at its pauses: one part each
- * when it has as many, the parts grouped in order when it has more. With fewer pauses than lines, the
- * first line shows it all and the rest get nothing from it ('').
+ * One sentence's meaning shared out over the sung lines it runs over, each line taking about its share
+ * of the sentence (by how much it sings), broken where the sentence pauses (after a comma, semicolon or
+ * dash) or a clause starts (before "and", "but", "when"…), a pause preferred. Where it can't be broken
+ * near enough, the first line shows it all and the rest get nothing from it ('').
  */
-function shareOut(meaning: string, lines: number): string[] {
-  const parts = clauses(meaning);
-  if (lines === 1 || parts.length < lines) return [meaning];
-  const out: string[] = [];
-  for (let j = 0; j < lines; j++) out.push(parts.slice(Math.round((j * parts.length) / lines), Math.round(((j + 1) * parts.length) / lines)).join(' '));
-  return out;
+function shareOut(meaning: string, sizes: number[]): string[] {
+  const words = meaning.split(/\s+/).filter(Boolean);
+  if (sizes.length === 1) return [meaning];
+  // Where it can break: before word i, with how strongly it pauses there.
+  const breaks: { at: number; pause: boolean }[] = [];
+  for (let i = 1; i < words.length; i++) {
+    const pause = /[,;:–—]$/.test(words[i - 1]!) || /^[–—]$/.test(words[i]!);
+    if (pause || JOINS.has(words[i]!.toLowerCase().replace(/[^a-z]/g, ''))) breaks.push({ at: i, pause });
+  }
+  const total = sizes.reduce((a, b) => a + b, 0) || 1;
+  const targets = sizes.slice(0, -1).map((_, j) => (words.length * sizes.slice(0, j + 1).reduce((a, b) => a + b, 0)) / total);
+  const near = Math.max(3, words.length * 0.3);
+  // The breaks, in order, closest to each line's share (a pause counts as a word nearer).
+  let best: { cost: number; at: number[] } | null = null;
+  const pick = (j: number, from: number, at: number[], cost: number) => {
+    if (j === targets.length) {
+      if (!best || cost < best.cost) best = { cost, at };
+      return;
+    }
+    for (let b = from; b < breaks.length; b++) {
+      const off = Math.abs(breaks[b]!.at - targets[j]!);
+      if (off <= near) pick(j + 1, b + 1, [...at, breaks[b]!.at], cost + off - (breaks[b]!.pause ? 1 : 0));
+    }
+  };
+  pick(0, 0, [], 0);
+  const found = best as { cost: number; at: number[] } | null;
+  if (!found) return [meaning];
+  const edges = [0, ...found.at, words.length];
+  return sizes.map((_, j) => words.slice(edges[j], edges[j + 1]).join(' '));
 }
 
 /** Whether a line only sings words of the line before (a phrase sung again, not the sentence going on). */
@@ -193,6 +213,19 @@ const repeats = (words: string[], before: string[]) => words.length > 0 && words
 /** Whether a word is among others: the same sound, or (long enough to tell) nearly. */
 const among = (word: string, others: string[]) => others.some((x) => x === word || (word.length >= 3 && x.length >= 3 && likeness(word, x) >= 0.75));
 
+/**
+ * How alike a line's letters are to the closest run of a longer line's words, for when the two split
+ * words differently (Vaa Naadhane, Vaanadhane): 0 for lines too short to tell.
+ */
+function partLetters(words: string[], longer: string[]): number {
+  const mine = words.join('');
+  if (mine.length < 10) return 0;
+  let best = 0;
+  for (let from = 0; from < longer.length; from++)
+    for (let to = from + Math.max(1, words.length - 1); to <= Math.min(longer.length, from + words.length + 1); to++) best = Math.max(best, likeness(mine, longer.slice(from, to).join('')));
+  return best >= 0.8 ? best : 0;
+}
+
 /** How many of a line's words are among another's. */
 const wordsAmong = (words: string[], others: string[]) => words.filter((w) => among(w, others)).length;
 
@@ -200,8 +233,8 @@ const wordsAmong = (words: string[], others: string[]) => words.filter((w) => am
  * A person's translation laid onto the lyrics. Each lyric line gets the meaning of the translation's
  * line it sings, judged word by word. The lyrics and the translation break lines differently: a sung
  * line can hold two or three of the translation's lines (their meanings are joined), and one of the
- * translation's sentences can run over several sung lines (its meaning is shared out over them at its
- * pauses). Lines the translation lacks, or that its meaning can't be shared out to, are left for
+ * translation's sentences can run over several sung lines (its meaning is shared out over them, each
+ * taking about its share). Lines the translation lacks, or that its meaning can't be shared out to, are left for
  * machine translation.
  */
 export function alignTranslation(lines: string[], pairs: { original: string; english: string }[]): AlignedTranslation {
@@ -239,7 +272,7 @@ export function alignTranslation(lines: string[], pairs: { original: string; eng
       const whole = Math.max(mine && theirs ? (2 * mine * theirs) / (mine + theirs) : 0, letters >= 0.8 ? letters : 0);
       // …or a part of one longer line (not words found here and there over several): most of its
       // words, two or more and one of them long enough to tell, are in it.
-      const part = k.first === k.last && words.length >= 2 && k.words.length > words.length && words.some((w) => w.length >= 4 && among(w, k.words)) ? mine : 0;
+      const part = k.first === k.last && words.length >= 2 && k.words.length > words.length && words.some((w) => w.length >= 4 && among(w, k.words)) ? Math.max(mine, partLetters(words, k.words)) : 0;
       let score = Math.max(whole >= 0.7 ? whole : 0, part >= 0.7 ? part * 0.9 : 0);
       if (!score) return;
       // One translation line fitting beats a run of them that fits as well.
@@ -263,7 +296,10 @@ export function alignTranslation(lines: string[], pairs: { original: string; eng
     let end = i + 1;
     while (k >= 0 && end < lines.length && owner[end] === k && !repeats(sounds[end]!, sounds[end - 1]!)) end++;
     if (k >= 0) {
-      const shares = shareOut(known[k]!.english, end - i);
+      const shares = shareOut(
+        known[k]!.english,
+        sounds.slice(i, end).map((w) => w.join('').length),
+      );
       for (let j = i; j < end; j++) {
         text[j] = shares[j - i] ?? '';
         matched[j] = true;

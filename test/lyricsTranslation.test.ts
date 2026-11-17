@@ -72,16 +72,22 @@ describe('alignTranslation', () => {
     assert.deepEqual(matched, [true, true]);
   });
 
-  test('a sentence with more pauses than lines is grouped in order', () => {
-    const run = [{ original: 'Neela Aasmaan Hai Jahaan Tak Dekhoon Main', english: 'The sky is blue, as far as I look, as far as I go, always' }, ...pairs];
-    const { text } = alignTranslation(['neela aasmaan hai', 'jahaan tak dekhoon main'], run);
-    assert.deepEqual(text, ['The sky is blue, as far as I look,', 'as far as I go, always']);
+  test('each line takes about its share of the sentence, not just what comes before the first comma', () => {
+    const run = [{ original: 'Kaali Zulfon Wali Teri Aankhen Kahaani Kehti Saahil Tak Le Jaayengi', english: 'O dark-haired one, will your eyes tell me a story and take me to the shore?' }, ...pairs];
+    const { text } = alignTranslation(['kaali zulfon wali teri aankhen kahaani kehti', 'saahil tak le jaayengi'], run);
+    assert.deepEqual(text, ['O dark-haired one, will your eyes tell me a story', 'and take me to the shore?']);
+  });
+
+  test('words the translation joins (Vaa Naadhane, Vaanadhane) still match, so the line keeps its own part', () => {
+    const run = [{ original: 'Vaanadhane Teri Raahon Mein Theekka Dar Pe Khada Hoon', english: 'O lord, on your paths, I stand at your door' }, ...pairs];
+    const { text } = alignTranslation(['vaa naathane teri raahon mein theerkka', 'dar pe khada hoon'], run);
+    assert.deepEqual(text, ['O lord, on your paths,', 'I stand at your door']);
   });
 
   test('a sentence with no pause to share out shows on its first line; the rest go to machine translation', () => {
-    const run = [{ original: 'Neela Aasmaan Hai Jahaan Tak Dekhoon Main', english: 'The sky is blue as far as I can see' }, ...pairs];
+    const run = [{ original: 'Neela Aasmaan Hai Jahaan Tak Dekhoon Main', english: 'The blue sky reaches far beyond my sight' }, ...pairs];
     const { text, matched } = alignTranslation(['neela aasmaan hai', 'jahaan tak dekhoon main'], run);
-    assert.deepEqual(text, ['The sky is blue as far as I can see', '']);
+    assert.deepEqual(text, ['The blue sky reaches far beyond my sight', '']);
     assert.deepEqual(matched, [true, true]);
   });
 
